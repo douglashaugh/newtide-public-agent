@@ -74,6 +74,13 @@ final class NPA_Plugin {
 	public $admin = null;
 
 	/**
+	 * REST proxy.
+	 *
+	 * @var NPA_Rest
+	 */
+	public $rest;
+
+	/**
 	 * Cached gateway client (mock by default; filterable).
 	 *
 	 * @var NPA_Gateway_Client|null
@@ -114,6 +121,8 @@ final class NPA_Plugin {
 		$this->store          = new NPA_Store();
 		$this->store->maybe_upgrade();
 		$this->budget         = new NPA_Budget( $this->settings, $this->store );
+		$this->rest           = new NPA_Rest( $this );
+		$this->rest->register();
 
 		if ( is_admin() ) {
 			$this->admin = new NPA_Admin( $this );
@@ -128,6 +137,7 @@ final class NPA_Plugin {
 		$this->register_settings_tests();
 		$this->register_store_tests();
 		$this->register_budget_tests();
+		$this->register_rest_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -164,6 +174,9 @@ final class NPA_Plugin {
 		// Durable substrate.
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-store.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-budget.php';
+
+		// REST proxy.
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-rest.php';
 
 		// Admin surface (only needed in the dashboard).
 		if ( is_admin() ) {
@@ -577,6 +590,92 @@ final class NPA_Plugin {
 					'label' => __( 'Unset cap (0) is unlimited and never exhausted', 'newtide-public-agent' ),
 					'pass'  => 0 === $unlimited->cap() && ! $unlimited->is_exhausted() && $unlimited->remaining() === PHP_INT_MAX,
 				);
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the REST proxy suite (M6 Verify companion).
+	 *
+	 * Proves the route exists, visitor-facing error copy never leaks gateway
+	 * detail, and a real dispatch relays a reply and records a usage row.
+	 * The dispatch uses a sentinel agent id and cleans up after itself.
+	 *
+	 * @return void
+	 */
+	private function register_rest_tests() {
+		$this->test_runner->register_suite(
+			'rest',
+			__( 'Message proxy', 'newtide-public-agent' ),
+			__( 'Confirms the front end can reach the agent through the site’s own server (so the credential never touches the browser), that visitors only ever see friendly error text, and that every call is recorded.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+				$server = rest_get_server();
+
+				// Route registered.
+				$routes   = $server->get_routes();
+				$checks[] = array(
+					'label' => __( 'POST /npa/v1/message route is registered', 'newtide-public-agent' ),
+					'pass'  => isset( $routes['/npa/v1/message'] ),
+				);
+
+				// Error copy is generic — no raw gateway detail leaks.
+				$leaks = false;
+				foreach ( array( 'unauthorized', 'rate_limited', 'server_error' ) as $code ) {
+					$msg = NPA_Rest::friendly_message( $code );
+					if ( '' === $msg || false !== stripos( $msg, 'mock' ) || false !== stripos( $msg, 'credential' ) ) {
+						$leaks = true;
+					}
+				}
+				$checks[] = array(
+					'label' => __( 'Visitor error messages are generic (no gateway internals)', 'newtide-public-agent' ),
+					'pass'  => ! $leaks,
+				);
+
+				// Real dispatch with a sentinel agent id; assert + clean up.
+				global $wpdb;
+				$prev = get_option( 'npa_options' );
+				update_option( 'npa_options', array( 'agent_id' => '__npa_rest_test__' ) );
+
+				$before  = $this->store->count_today();
+				$request = new WP_REST_Request( 'POST', '/npa/v1/message' );
+				$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$request->set_param( 'message', 'hello from the rest suite' );
+
+				$response = $server->dispatch( $request );
+				$data     = $response->get_data();
+				$after    = $this->store->count_today();
+
+				$checks[] = array(
+					'label' => __( 'A valid message returns a reply envelope (HTTP 200)', 'newtide-public-agent' ),
+					'pass'  => 200 === $response->get_status() && is_array( $data ) && ! empty( $data['reply'] ),
+				);
+				$checks[] = array(
+					'label' => __( 'The call is recorded to the usage table', 'newtide-public-agent' ),
+					'pass'  => $after === $before + 1,
+				);
+
+				// Nonce is required (send a valid message but omit the nonce so
+				// required-param validation passes and permission is what fails).
+				$no_nonce_req = new WP_REST_Request( 'POST', '/npa/v1/message' );
+				$no_nonce_req->set_param( 'message', 'no nonce here' );
+				$no_nonce = $server->dispatch( $no_nonce_req );
+				$checks[] = array(
+					'label' => __( 'A request with a message but no valid nonce is rejected (HTTP 403)', 'newtide-public-agent' ),
+					'pass'  => 403 === $no_nonce->get_status(),
+				);
+
+				// Cleanup — leave no test data behind.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_rest_test__' ), array( '%s' ) );
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+				if ( false === $prev ) {
+					delete_option( 'npa_options' );
+				} else {
+					update_option( 'npa_options', $prev );
+				}
 
 				return $checks;
 			}

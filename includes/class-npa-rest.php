@@ -1,0 +1,298 @@
+<?php
+/**
+ * Same-origin REST proxy: the browser widget POSTs here, PHP relays to the
+ * gateway server-side (credential never leaves the server), and a sanitized
+ * envelope comes back.
+ *
+ * The route has a NON-EMPTY permission_callback (verifies the wp_rest nonce)
+ * — public visitors may chat, but the nonce ties each call to a page load and
+ * enables the courtesy throttle. Raw gateway errors never reach the visitor.
+ *
+ * @package NewTide\PublicAgent
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Class NPA_Rest
+ */
+class NPA_Rest {
+
+	/**
+	 * REST namespace.
+	 *
+	 * @var string
+	 */
+	const NS = 'npa/v1';
+
+	/**
+	 * Max message length accepted (characters).
+	 *
+	 * @var int
+	 */
+	const MAX_MESSAGE = 4000;
+
+	/**
+	 * Courtesy throttle: max requests per IP per window.
+	 *
+	 * @var int
+	 */
+	const RATE_MAX = 30;
+
+	/**
+	 * Courtesy throttle window, seconds.
+	 *
+	 * @var int
+	 */
+	const RATE_WINDOW = 60;
+
+	/**
+	 * Plugin instance.
+	 *
+	 * @var NPA_Plugin
+	 */
+	private $plugin;
+
+	/**
+	 * @param NPA_Plugin $plugin Plugin instance.
+	 */
+	public function __construct( $plugin ) {
+		$this->plugin = $plugin;
+	}
+
+	/**
+	 * Register the REST routes.
+	 *
+	 * @return void
+	 */
+	public function register() {
+		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
+	}
+
+	/**
+	 * Register the /message route.
+	 *
+	 * @return void
+	 */
+	public function register_routes() {
+		register_rest_route(
+			self::NS,
+			'/message',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'handle_message' ),
+				'permission_callback' => array( $this, 'check_permission' ),
+				'args'                => array(
+					'message'         => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_textarea_field',
+					),
+					'conversation_id' => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Permission callback: require a valid wp_rest nonce (works for anonymous
+	 * visitors too — the widget mints one via wp_create_nonce( 'wp_rest' )).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public function check_permission( $request ) {
+		$nonce = $request->get_header( 'X-WP-Nonce' );
+		if ( empty( $nonce ) ) {
+			$nonce = $request->get_param( '_wpnonce' );
+		}
+
+		if ( ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+			return new WP_Error(
+				'npa_forbidden',
+				__( 'Your session token is missing or expired. Please reload the page.', 'newtide-public-agent' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Handle a chat message: throttle, budget-check, relay to the gateway,
+	 * dual-write usage, and return a clean envelope.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public function handle_message( $request ) {
+		$message = trim( (string) $request->get_param( 'message' ) );
+
+		if ( '' === $message ) {
+			return $this->error_response( 'empty_message', __( 'Please enter a message.', 'newtide-public-agent' ), 400 );
+		}
+
+		if ( mb_strlen( $message ) > self::MAX_MESSAGE ) {
+			return $this->error_response( 'message_too_long', __( 'That message is too long. Please shorten it.', 'newtide-public-agent' ), 400 );
+		}
+
+		if ( ! $this->throttle_ok() ) {
+			return $this->error_response( 'rate_limited', self::friendly_message( 'rate_limited' ), 429 );
+		}
+
+		if ( $this->plugin->budget->is_exhausted() ) {
+			return $this->error_response( 'budget_exhausted', __( 'The assistant has reached today’s message limit. Please try again tomorrow.', 'newtide-public-agent' ), 429 );
+		}
+
+		$conversation_id = sanitize_text_field( (string) $request->get_param( 'conversation_id' ) );
+		$context         = $this->sanitize_context( (array) $request->get_param( 'context' ) );
+		$agent_id        = $this->plugin->settings->get_agent_id();
+
+		$start = microtime( true );
+
+		try {
+			$result  = $this->plugin->gateway_client()->send_message( $agent_id, $message, $conversation_id, $context );
+			$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
+
+			$this->plugin->store->record(
+				array(
+					'agent_id'        => $agent_id,
+					'conversation_id' => $result->conversation_id,
+					'status'          => 200,
+					'finish_reason'   => $result->finish_reason,
+					'latency_ms'      => $latency,
+					'input_tokens'    => $result->input_tokens,
+					'output_tokens'   => $result->output_tokens,
+				)
+			);
+			$this->plugin->service_status->record_success( 'gateway' );
+			$this->plugin->logger->log(
+				array(
+					'agent_id'      => $agent_id,
+					'latency_ms'    => $latency,
+					'status'        => 200,
+					'finish_reason' => $result->finish_reason,
+					'note'          => 'message',
+				)
+			);
+
+			return new WP_REST_Response(
+				array(
+					'reply'           => $result->reply_text,
+					'conversation_id' => $result->conversation_id,
+					'finish_reason'   => $result->finish_reason,
+				),
+				200
+			);
+		} catch ( NPA_Gateway_Exception $e ) {
+			$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
+
+			$this->plugin->store->record(
+				array(
+					'agent_id'        => $agent_id,
+					'conversation_id' => $conversation_id,
+					'status'          => $e->get_http_status(),
+					'finish_reason'   => 'error',
+					'latency_ms'      => $latency,
+					'error_code'      => $e->get_error_code(),
+				)
+			);
+			$this->plugin->service_status->record_failure( 'gateway' );
+			$this->plugin->logger->log(
+				array(
+					'agent_id'   => $agent_id,
+					'latency_ms' => $latency,
+					'status'     => $e->get_http_status(),
+					'error_code' => $e->get_error_code(),
+					'note'       => 'message_error',
+				)
+			);
+
+			$http = ( 429 === $e->get_http_status() ) ? 429 : 502;
+			return $this->error_response( $e->get_error_code(), self::friendly_message( $e->get_error_code() ), $http );
+		}
+	}
+
+	/**
+	 * Generic, visitor-safe message for a gateway error code. Never leaks the
+	 * raw gateway message or the fact that a credential was rejected.
+	 *
+	 * @param string $code Stable error code.
+	 * @return string
+	 */
+	public static function friendly_message( $code ) {
+		switch ( $code ) {
+			case 'rate_limited':
+				return __( 'The assistant is busy right now. Please try again in a moment.', 'newtide-public-agent' );
+			case 'unauthorized':
+				return __( 'The assistant is temporarily unavailable. Please try again later.', 'newtide-public-agent' );
+			case 'server_error':
+			default:
+				return __( 'Something went wrong reaching the assistant. Please try again.', 'newtide-public-agent' );
+		}
+	}
+
+	/**
+	 * Build an error envelope response.
+	 *
+	 * @param string $code    Machine code.
+	 * @param string $message Visitor-facing message.
+	 * @param int    $status  HTTP status.
+	 * @return WP_REST_Response
+	 */
+	private function error_response( $code, $message, $status ) {
+		return new WP_REST_Response(
+			array(
+				'error' => array(
+					'code'    => $code,
+					'message' => $message,
+				),
+			),
+			$status
+		);
+	}
+
+	/**
+	 * Sanitize the optional page context.
+	 *
+	 * @param array $ctx Raw context.
+	 * @return array
+	 */
+	private function sanitize_context( array $ctx ) {
+		return array(
+			'page_url'   => isset( $ctx['page_url'] ) ? esc_url_raw( (string) $ctx['page_url'] ) : '',
+			'page_title' => isset( $ctx['page_title'] ) ? sanitize_text_field( (string) $ctx['page_title'] ) : '',
+			'locale'     => isset( $ctx['locale'] ) ? sanitize_text_field( (string) $ctx['locale'] ) : get_locale(),
+		);
+	}
+
+	/**
+	 * Courtesy per-IP throttle (NOT abuse defense — the gateway owns that).
+	 *
+	 * @return bool True if the request is under the limit.
+	 */
+	private function throttle_ok() {
+		$key   = 'npa_rl_' . md5( $this->client_ip() );
+		$count = (int) get_transient( $key );
+
+		if ( $count >= self::RATE_MAX ) {
+			return false;
+		}
+
+		set_transient( $key, $count + 1, self::RATE_WINDOW );
+		return true;
+	}
+
+	/**
+	 * Best-effort client IP for throttling.
+	 *
+	 * @return string
+	 */
+	private function client_ip() {
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		return '' !== $ip ? $ip : 'unknown';
+	}
+}
