@@ -128,57 +128,54 @@ class NPA_Settings {
 		$existing = $this->all();
 		$clean    = self::defaults();
 
-		$clean['enabled']           = ! empty( $input['enabled'] );
-		$clean['log_enabled']       = ! empty( $input['log_enabled'] );
-		$clean['store_transcripts'] = ! empty( $input['store_transcripts'] );
+		/*
+		 * Tabbed forms submit only some fields. An optional `_present` list names
+		 * the keys the submitted form was responsible for; any key not listed
+		 * keeps its stored value (so saving one tab never clears another's
+		 * checkboxes). Absent the marker (programmatic saves/tests), fall back
+		 * to "a key is present if it appears in the input array".
+		 */
+		$present = isset( $input['_present'] ) && is_array( $input['_present'] )
+			? array_map( 'sanitize_key', $input['_present'] )
+			: null;
 
-		if ( isset( $input['agent_id'] ) ) {
-			$clean['agent_id'] = sanitize_text_field( $input['agent_id'] );
-		} else {
-			$clean['agent_id'] = $existing['agent_id'];
-		}
+		$has = static function ( $key ) use ( $input, $present ) {
+			return ( null === $present ) ? array_key_exists( $key, $input ) : in_array( $key, $present, true );
+		};
 
-		if ( isset( $input['gateway_base_url'] ) ) {
-			$clean['gateway_base_url'] = esc_url_raw( trim( $input['gateway_base_url'] ) );
-		} else {
-			$clean['gateway_base_url'] = $existing['gateway_base_url'];
-		}
+		// Booleans.
+		$clean['enabled']           = $has( 'enabled' ) ? ! empty( $input['enabled'] ) : (bool) $existing['enabled'];
+		$clean['log_enabled']       = $has( 'log_enabled' ) ? ! empty( $input['log_enabled'] ) : (bool) $existing['log_enabled'];
+		$clean['store_transcripts'] = $has( 'store_transcripts' ) ? ! empty( $input['store_transcripts'] ) : (bool) $existing['store_transcripts'];
 
-		if ( isset( $input['launcher_label'] ) ) {
-			$clean['launcher_label'] = sanitize_text_field( $input['launcher_label'] );
-		} else {
-			$clean['launcher_label'] = $existing['launcher_label'];
-		}
+		// Text / URL.
+		$clean['agent_id']         = $has( 'agent_id' ) ? sanitize_text_field( $input['agent_id'] ) : $existing['agent_id'];
+		$clean['gateway_base_url'] = $has( 'gateway_base_url' ) ? esc_url_raw( trim( (string) $input['gateway_base_url'] ) ) : $existing['gateway_base_url'];
+		$clean['launcher_label']   = $has( 'launcher_label' ) ? sanitize_text_field( $input['launcher_label'] ) : $existing['launcher_label'];
+		$clean['greeting']         = $has( 'greeting' ) ? sanitize_text_field( $input['greeting'] ) : $existing['greeting'];
 
-		if ( isset( $input['greeting'] ) ) {
-			$clean['greeting'] = sanitize_text_field( $input['greeting'] );
-		} else {
-			$clean['greeting'] = $existing['greeting'];
-		}
-
-		$position          = isset( $input['position'] ) ? sanitize_key( $input['position'] ) : $existing['position'];
+		// Position whitelist.
+		$position          = $has( 'position' ) ? sanitize_key( $input['position'] ) : $existing['position'];
 		$clean['position'] = in_array( $position, self::POSITIONS, true ) ? $position : 'bottom-right';
 
-		$accent          = isset( $input['accent'] ) ? sanitize_hex_color( $input['accent'] ) : $existing['accent'];
+		// Accent hex.
+		$accent          = $has( 'accent' ) ? sanitize_hex_color( (string) $input['accent'] ) : $existing['accent'];
 		$clean['accent'] = $accent ? $accent : self::defaults()['accent'];
 
-		$retention = isset( $input['transcript_retention_days'] ) ? absint( $input['transcript_retention_days'] ) : (int) $existing['transcript_retention_days'];
+		// Integers.
+		$retention                          = $has( 'transcript_retention_days' ) ? absint( $input['transcript_retention_days'] ) : (int) $existing['transcript_retention_days'];
 		$clean['transcript_retention_days'] = min( 3650, max( 1, $retention ) );
-
-		$clean['daily_message_cap'] = isset( $input['daily_message_cap'] ) ? absint( $input['daily_message_cap'] ) : (int) $existing['daily_message_cap'];
+		$clean['daily_message_cap']         = $has( 'daily_message_cap' ) ? absint( $input['daily_message_cap'] ) : (int) $existing['daily_message_cap'];
 
 		// Credential — write-only and constant-aware.
 		if ( defined( 'NPA_GATEWAY_KEY' ) ) {
 			// Constant is authoritative; never persist a key to the database.
 			$clean['gateway_key'] = '';
+		} elseif ( ! $has( 'gateway_key' ) ) {
+			$clean['gateway_key'] = $existing['gateway_key'];
 		} else {
-			$submitted = isset( $input['gateway_key'] ) ? trim( (string) $input['gateway_key'] ) : '';
-			if ( '' === $submitted ) {
-				// Empty submission preserves the stored key (write-only field).
-				$clean['gateway_key'] = $existing['gateway_key'];
-			} else {
-				$clean['gateway_key'] = sanitize_text_field( $submitted );
-			}
+			$submitted            = trim( (string) $input['gateway_key'] );
+			$clean['gateway_key'] = ( '' === $submitted ) ? $existing['gateway_key'] : sanitize_text_field( $submitted );
 		}
 
 		return $clean;

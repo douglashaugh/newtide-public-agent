@@ -67,6 +67,13 @@ final class NPA_Plugin {
 	public $budget;
 
 	/**
+	 * Admin surface (only set in the dashboard).
+	 *
+	 * @var NPA_Admin|null
+	 */
+	public $admin = null;
+
+	/**
 	 * Cached gateway client (mock by default; filterable).
 	 *
 	 * @var NPA_Gateway_Client|null
@@ -107,6 +114,11 @@ final class NPA_Plugin {
 		$this->store          = new NPA_Store();
 		$this->store->maybe_upgrade();
 		$this->budget         = new NPA_Budget( $this->settings, $this->store );
+
+		if ( is_admin() ) {
+			$this->admin = new NPA_Admin( $this );
+			$this->admin->register();
+		}
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );
 
@@ -152,6 +164,11 @@ final class NPA_Plugin {
 		// Durable substrate.
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-store.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-budget.php';
+
+		// Admin surface (only needed in the dashboard).
+		if ( is_admin() ) {
+			require_once NPA_PLUGIN_DIR . 'admin/class-npa-admin.php';
+		}
 	}
 
 	/**

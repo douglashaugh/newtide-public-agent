@@ -1,0 +1,98 @@
+/* NewTide Public Agent — admin styles (scoped to the plugin's pages). */
+
+.npa-wrap .npa-form {
+	max-width: 40rem;
+}
+
+.npa-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	margin: 1rem 0;
+}
+
+.npa-inline {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin-left: 1rem;
+}
+
+.npa-pill {
+	display: inline-block;
+	padding: 0.1rem 0.55rem;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	font-weight: 600;
+	line-height: 1.7;
+	color: #fff;
+	white-space: nowrap;
+}
+
+.npa-pill--ok {
+	background: #1a7f37;
+}
+
+.npa-pill--warn {
+	background: #bb2124;
+}
+
+.npa-test-result {
+	font-weight: 600;
+}
+
+.npa-test-result.is-ok {
+	color: #1a7f37;
+}
+
+.npa-test-result.is-error {
+	color: #bb2124;
+}
+
+.npa-status {
+	max-width: 46rem;
+	margin-bottom: 1.5rem;
+}
+
+.npa-status th {
+	width: 14rem;
+}
+
+.npa-tests-summary {
+	font-size: 1.05rem;
+	font-weight: 600;
+}
+
+.npa-suite {
+	margin: 1rem 0 1.25rem;
+	padding: 0.75rem 1rem;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+}
+
+.npa-suite h3 {
+	margin: 0 0 0.25rem;
+}
+
+.npa-checks {
+	margin: 0.5rem 0 0;
+}
+
+.npa-checks li {
+	margin: 0.15rem 0;
+}
+
+.npa-check-mark {
+	display: inline-block;
+	width: 1.25rem;
+	font-weight: 700;
+}
+
+.npa-check--pass .npa-check-mark {
+	color: #1a7f37;
+}
+
+.npa-check--fail .npa-check-mark {
+	color: #bb2124;
+}
