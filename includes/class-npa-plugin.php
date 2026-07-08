@@ -46,6 +46,13 @@ final class NPA_Plugin {
 	public $test_runner;
 
 	/**
+	 * Cached gateway client (mock by default; filterable).
+	 *
+	 * @var NPA_Gateway_Client|null
+	 */
+	private $gateway_client = null;
+
+	/**
 	 * Get (and lazily create) the singleton instance.
 	 *
 	 * @return NPA_Plugin
@@ -78,6 +85,7 @@ final class NPA_Plugin {
 		add_action( 'init', array( $this, 'load_textdomain' ) );
 
 		$this->register_core_tests();
+		$this->register_gateway_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -99,6 +107,35 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-logger.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-service-status.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-test-runner.php';
+
+		// Gateway contract + implementations (plan P2).
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/interface-npa-gateway-client.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-result.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-agent.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-health.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-exception.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-mock.php';
+	}
+
+	/**
+	 * Get the active gateway client.
+	 *
+	 * Defaults to the mock. The single seam (plan P2) through which the HTTP
+	 * client is swapped in later, and through which tests inject scenarios:
+	 * filter `npa_gateway_client` to return any NPA_Gateway_Client.
+	 *
+	 * @return NPA_Gateway_Client
+	 */
+	public function gateway_client() {
+		if ( null === $this->gateway_client ) {
+			/**
+			 * Filter the gateway client instance.
+			 *
+			 * @param NPA_Gateway_Client $client The default (mock) client.
+			 */
+			$this->gateway_client = apply_filters( 'npa_gateway_client', new NPA_Gateway_Client_Mock() );
+		}
+		return $this->gateway_client;
 	}
 
 	/**
@@ -143,6 +180,76 @@ final class NPA_Plugin {
 				$checks[] = array(
 					'label' => __( 'WordPress 6.4 or newer', 'newtide-public-agent' ),
 					'pass'  => version_compare( get_bloginfo( 'version' ), '6.4', '>=' ),
+				);
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the gateway mock contract suite (M2 Verify companion).
+	 *
+	 * Exercises the mock's happy path and each simulated error scenario so the
+	 * contract's branches are proven before anything depends on them. No live
+	 * HTTP — the mock is the whole point.
+	 *
+	 * @return void
+	 */
+	private function register_gateway_tests() {
+		$this->test_runner->register_suite(
+			'gateway_mock',
+			__( 'Gateway (mock)', 'newtide-public-agent' ),
+			__( 'Proves the plugin can talk to a gateway and correctly handles success, bad credentials, rate limiting, and outages — verified against a deterministic stand-in so the real service is never required to build or test.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+				$agent  = NPA_Gateway_Client_Mock::DEFAULT_AGENT_ID;
+
+				// Happy path: a reply and an assigned conversation id.
+				$mock   = new NPA_Gateway_Client_Mock( 'ok' );
+				$result = $mock->send_message( $agent, 'hello', '', array() );
+				$checks[] = array(
+					'label' => __( 'Successful message returns a reply and a conversation id', 'newtide-public-agent' ),
+					'pass'  => ( $result instanceof NPA_Gateway_Result ) && '' !== $result->reply_text && '' !== $result->conversation_id,
+				);
+
+				// Error scenarios throw with the correct HTTP status.
+				$expectations = array(
+					'unauthorized' => 401,
+					'rate_limited' => 429,
+					'server_error' => 500,
+				);
+				foreach ( $expectations as $scenario => $status ) {
+					$got  = 0;
+					$mock = new NPA_Gateway_Client_Mock( $scenario );
+					try {
+						$mock->send_message( $agent, 'hello', '', array() );
+					} catch ( NPA_Gateway_Exception $e ) {
+						$got = $e->get_http_status();
+					}
+					$checks[] = array(
+						/* translators: 1: scenario name, 2: expected HTTP status. */
+						'label' => sprintf( __( 'Scenario "%1$s" throws HTTP %2$d', 'newtide-public-agent' ), $scenario, $status ),
+						'pass'  => $got === $status,
+					);
+				}
+
+				// list_agents returns the known target agent.
+				$mock     = new NPA_Gateway_Client_Mock( 'ok' );
+				$agents   = $mock->list_agents();
+				$checks[] = array(
+					'label' => __( 'Agent list includes the target agent id', 'newtide-public-agent' ),
+					'pass'  => ! empty( $agents ) && $agents[0] instanceof NPA_Gateway_Agent && $agent === $agents[0]->id,
+				);
+
+				// health_check reports healthy on ok and never throws on error.
+				$checks[] = array(
+					'label' => __( 'Health check reports connected on success', 'newtide-public-agent' ),
+					'pass'  => ( new NPA_Gateway_Client_Mock( 'ok' ) )->health_check()->ok === true,
+				);
+				$checks[] = array(
+					'label' => __( 'Health check reports unhealthy (not an exception) on bad credential', 'newtide-public-agent' ),
+					'pass'  => ( new NPA_Gateway_Client_Mock( 'unauthorized' ) )->health_check()->ok === false,
 				);
 
 				return $checks;
