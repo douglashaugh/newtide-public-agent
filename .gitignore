@@ -1,0 +1,25 @@
+# ADR-019 — never git add -A on a release. Keep planning/scratch/local out.
+
+# Planning & scratch docs (the source specs live outside the repo).
+/scratch/
+*.local.md
+NOTES.md
+TODO.local.md
+
+# Dependencies (vendored PUC is the exception — see below).
+/vendor/
+/node_modules/
+
+# Build output (committed per team norm; ignore local build junk).
+/build/*.map
+
+# Tooling / OS / editor.
+composer.lock
+.phpcs.cache
+.phpunit.result.cache
+Thumbs.db
+.DS_Store
+*.log
+
+# Do NOT ignore the vendored update checker — it must ship with the plugin.
+!/lib/plugin-update-checker/

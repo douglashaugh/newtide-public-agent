@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<ruleset name="NewTide Public Agent">
+	<description>WordPress coding standards for the NewTide Public Agent plugin.</description>
+
+	<!-- Scan the plugin, skip vendored / build / dependency trees. -->
+	<file>.</file>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/build/*</exclude-pattern>
+	<exclude-pattern>*/lib/plugin-update-checker/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="colors"/>
+	<arg value="ps"/>
+
+	<!-- WordPress standard. -->
+	<rule ref="WordPress"/>
+
+	<!-- Enforce our prefixes and text domain. -->
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="npa"/>
+				<element value="NPA"/>
+			</property>
+		</properties>
+	</rule>
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="newtide-public-agent"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Minimum supported versions. -->
+	<config name="minimum_wp_version" value="6.4"/>
+	<config name="testVersion" value="8.1-"/>
+</ruleset>
