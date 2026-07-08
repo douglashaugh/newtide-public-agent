@@ -143,6 +143,7 @@ final class NPA_Plugin {
 		$this->register_service_status();
 		$this->register_core_tests();
 		$this->register_gateway_tests();
+		$this->register_gateway_http_tests();
 		$this->register_settings_tests();
 		$this->register_store_tests();
 		$this->register_budget_tests();
@@ -177,6 +178,7 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-health.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-exception.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-mock.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-http.php';
 
 		// Configuration (depends on the mock for the default agent id).
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-settings.php';
@@ -245,22 +247,45 @@ final class NPA_Plugin {
 	/**
 	 * Get the active gateway client.
 	 *
-	 * Defaults to the mock. The single seam (plan P2) through which the HTTP
-	 * client is swapped in later, and through which tests inject scenarios:
-	 * filter `npa_gateway_client` to return any NPA_Gateway_Client.
+	 * Uses the real HTTP client when the plugin is configured (base URL +
+	 * credential + agent), otherwise the deterministic mock — so local/dev and
+	 * the test battery stay hermetic until a gateway is actually set up. The
+	 * `npa_gateway_client` filter overrides the choice (used by tests and for
+	 * forcing the mock via NPA_FORCE_MOCK).
 	 *
 	 * @return NPA_Gateway_Client
 	 */
 	public function gateway_client() {
 		if ( null === $this->gateway_client ) {
+			$force_mock = defined( 'NPA_FORCE_MOCK' ) && NPA_FORCE_MOCK;
+
+			if ( ! $force_mock && $this->settings->is_configured() ) {
+				$default = new NPA_Gateway_Client_Http(
+					$this->settings->get_gateway_base_url(),
+					$this->settings->get_gateway_key()
+				);
+			} else {
+				$default = new NPA_Gateway_Client_Mock();
+			}
+
 			/**
 			 * Filter the gateway client instance.
 			 *
-			 * @param NPA_Gateway_Client $client The default (mock) client.
+			 * @param NPA_Gateway_Client $default The selected client.
+			 * @param NPA_Plugin         $plugin  The plugin instance.
 			 */
-			$this->gateway_client = apply_filters( 'npa_gateway_client', new NPA_Gateway_Client_Mock() );
+			$this->gateway_client = apply_filters( 'npa_gateway_client', $default, $this );
 		}
 		return $this->gateway_client;
+	}
+
+	/**
+	 * Reset the cached gateway client (used by tests that swap the client).
+	 *
+	 * @return void
+	 */
+	public function reset_gateway_client() {
+		$this->gateway_client = null;
 	}
 
 	/**
@@ -376,6 +401,127 @@ final class NPA_Plugin {
 					'label' => __( 'Health check reports unhealthy (not an exception) on bad credential', 'newtide-public-agent' ),
 					'pass'  => ( new NPA_Gateway_Client_Mock( 'unauthorized' ) )->health_check()->ok === false,
 				);
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the HTTP gateway client suite (M8 Verify companion).
+	 *
+	 * Exercises the real client against a mocked WordPress HTTP layer
+	 * (pre_http_request) — no live network — proving request success mapping and
+	 * each error branch (401/429/5xx/transport), health, and agent listing.
+	 *
+	 * @return void
+	 */
+	private function register_gateway_http_tests() {
+		$this->test_runner->register_suite(
+			'gateway_http',
+			__( 'Gateway (HTTP)', 'newtide-public-agent' ),
+			__( 'Confirms the real gateway client — used once a gateway URL and credential are configured — correctly reads a reply and maps bad credentials, rate limits, outages, and network failures, all against a simulated server so no live call is made.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+				$mode   = 'ok';
+
+				$responder = static function ( $pre, $args, $url ) use ( &$mode ) {
+					switch ( $mode ) {
+						case 'ok':
+							return array(
+								'response' => array( 'code' => 200 ),
+								'body'     => wp_json_encode(
+									array(
+										'reply'           => 'Hi from HTTP',
+										'conversation_id' => 'conv-http-1',
+										'finish_reason'   => 'stop',
+										'usage'           => array(
+											'input_tokens'  => 2,
+											'output_tokens' => 4,
+										),
+									)
+								),
+							);
+						case 'agents':
+							return array(
+								'response' => array( 'code' => 200 ),
+								'body'     => wp_json_encode( array( 'agents' => array( array( 'id' => 'a-1', 'name' => 'Agent One' ) ) ) ),
+							);
+						case 'wperr':
+							return new WP_Error( 'http_request_failed', 'connection refused' );
+						default:
+							return array(
+								'response' => array( 'code' => (int) $mode ),
+								'body'     => wp_json_encode( array( 'error' => array( 'message' => 'nope' ) ) ),
+							);
+					}
+				};
+
+				add_filter( 'pre_http_request', $responder, 10, 3 );
+				$http = new NPA_Gateway_Client_Http( 'https://gateway.example', 'sk-test-key' );
+
+				// Success mapping.
+				$mode   = 'ok';
+				$result = $http->send_message( 'agent-x', 'hello', '', array() );
+				$checks[] = array(
+					'label' => __( 'A 200 response maps to a result (reply, conversation id, tokens)', 'newtide-public-agent' ),
+					'pass'  => ( $result instanceof NPA_Gateway_Result )
+						&& 'Hi from HTTP' === $result->reply_text
+						&& 'conv-http-1' === $result->conversation_id
+						&& 2 === $result->input_tokens,
+				);
+
+				// Error-status mapping.
+				$expectations = array(
+					'401' => 'unauthorized',
+					'403' => 'unauthorized',
+					'429' => 'rate_limited',
+					'500' => 'server_error',
+				);
+				foreach ( $expectations as $status => $code ) {
+					$mode   = $status;
+					$got    = '';
+					$got_st = 0;
+					try {
+						$http->send_message( 'agent-x', 'hello', '', array() );
+					} catch ( NPA_Gateway_Exception $e ) {
+						$got    = $e->get_error_code();
+						$got_st = $e->get_http_status();
+					}
+					$checks[] = array(
+						/* translators: 1: HTTP status, 2: error code. */
+						'label' => sprintf( __( 'HTTP %1$s maps to "%2$s"', 'newtide-public-agent' ), $status, $code ),
+						'pass'  => $got === $code && $got_st === (int) $status,
+					);
+				}
+
+				// Transport failure.
+				$mode = 'wperr';
+				$got  = '';
+				try {
+					$http->send_message( 'agent-x', 'hello', '', array() );
+				} catch ( NPA_Gateway_Exception $e ) {
+					$got = $e->get_error_code();
+				}
+				$checks[] = array(
+					'label' => __( 'A network failure maps to "transport"', 'newtide-public-agent' ),
+					'pass'  => 'transport' === $got,
+				);
+
+				// Health + agent list.
+				$mode     = 'ok';
+				$checks[] = array(
+					'label' => __( 'Health check reports connected on 200', 'newtide-public-agent' ),
+					'pass'  => $http->health_check()->ok === true,
+				);
+				$mode     = 'agents';
+				$agents   = $http->list_agents();
+				$checks[] = array(
+					'label' => __( 'Agent list parses into agent objects', 'newtide-public-agent' ),
+					'pass'  => ! empty( $agents ) && $agents[0] instanceof NPA_Gateway_Agent && 'a-1' === $agents[0]->id,
+				);
+
+				remove_filter( 'pre_http_request', $responder, 10 );
 
 				return $checks;
 			}
