@@ -1,0 +1,24 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newtide/agent",
+	"title": "NewTide Agent",
+	"category": "widgets",
+	"icon": "format-chat",
+	"description": "Embed the NewTide public agent chat widget.",
+	"textdomain": "newtide-public-agent",
+	"keywords": [ "chat", "agent", "ai", "support" ],
+	"supports": {
+		"html": false,
+		"multiple": false,
+		"reusable": true
+	},
+	"attributes": {
+		"agent": { "type": "string", "default": "" },
+		"greeting": { "type": "string", "default": "" },
+		"label": { "type": "string", "default": "" },
+		"position": { "type": "string", "default": "" },
+		"accent": { "type": "string", "default": "" }
+	},
+	"editorScript": "file:./index.js"
+}

@@ -81,6 +81,13 @@ final class NPA_Plugin {
 	public $rest;
 
 	/**
+	 * Front-end surface (shortcode + block + widget).
+	 *
+	 * @var NPA_Public
+	 */
+	public $public;
+
+	/**
 	 * Cached gateway client (mock by default; filterable).
 	 *
 	 * @var NPA_Gateway_Client|null
@@ -123,6 +130,8 @@ final class NPA_Plugin {
 		$this->budget         = new NPA_Budget( $this->settings, $this->store );
 		$this->rest           = new NPA_Rest( $this );
 		$this->rest->register();
+		$this->public         = new NPA_Public( $this );
+		$this->public->register();
 
 		if ( is_admin() ) {
 			$this->admin = new NPA_Admin( $this );
@@ -138,6 +147,7 @@ final class NPA_Plugin {
 		$this->register_store_tests();
 		$this->register_budget_tests();
 		$this->register_rest_tests();
+		$this->register_widget_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -177,6 +187,9 @@ final class NPA_Plugin {
 
 		// REST proxy.
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-rest.php';
+
+		// Front-end surface.
+		require_once NPA_PLUGIN_DIR . 'public/class-npa-public.php';
 
 		// Admin surface (only needed in the dashboard).
 		if ( is_admin() ) {
@@ -676,6 +689,59 @@ final class NPA_Plugin {
 				} else {
 					update_option( 'npa_options', $prev );
 				}
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the front-end widget suite (M7 Verify companion).
+	 *
+	 * Proves the shortcode and block are registered, the shortcode renders a
+	 * mount node with the agent id, and — the security-critical check — the
+	 * gateway credential never appears in front-end output.
+	 *
+	 * @return void
+	 */
+	private function register_widget_tests() {
+		$this->test_runner->register_suite(
+			'widget',
+			__( 'Front-end widget', 'newtide-public-agent' ),
+			__( 'Confirms the chat widget can be placed via shortcode or block and that the private gateway credential is never written into the page a visitor can view — the core promise of the server-side proxy.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+
+				$checks[] = array(
+					'label' => __( 'The [newtide_agent] shortcode is registered', 'newtide-public-agent' ),
+					'pass'  => shortcode_exists( 'newtide_agent' ),
+				);
+
+				$checks[] = array(
+					'label' => __( 'The NewTide Agent block is registered', 'newtide-public-agent' ),
+					'pass'  => WP_Block_Type_Registry::get_instance()->is_registered( 'newtide/agent' ),
+				);
+
+				// Render the shortcode with a sentinel credential injected, and
+				// assert it appears nowhere in the output.
+				$sentinel = 'sk-SECRET-should-never-render';
+				$inject   = static function () use ( $sentinel ) {
+					return $sentinel;
+				};
+				add_filter( 'npa_gateway_key', $inject );
+				$html = do_shortcode( '[newtide_agent]' );
+				remove_filter( 'npa_gateway_key', $inject );
+
+				$checks[] = array(
+					'label' => __( 'Shortcode renders a widget mount node with the agent id', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $html, 'data-npa-widget' )
+						&& false !== strpos( $html, $this->settings->get_agent_id() ),
+				);
+
+				$checks[] = array(
+					'label' => __( 'The gateway credential never appears in front-end output', 'newtide-public-agent' ),
+					'pass'  => '' !== $sentinel && false === strpos( $html, $sentinel ),
+				);
 
 				return $checks;
 			}
