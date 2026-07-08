@@ -53,6 +53,20 @@ final class NPA_Plugin {
 	public $settings;
 
 	/**
+	 * Durable usage store (custom table + dual-write).
+	 *
+	 * @var NPA_Store
+	 */
+	public $store;
+
+	/**
+	 * Per-day budget meter.
+	 *
+	 * @var NPA_Budget
+	 */
+	public $budget;
+
+	/**
 	 * Cached gateway client (mock by default; filterable).
 	 *
 	 * @var NPA_Gateway_Client|null
@@ -90,12 +104,18 @@ final class NPA_Plugin {
 		$this->test_runner    = new NPA_Test_Runner();
 		$this->settings       = new NPA_Settings();
 		$this->settings->register();
+		$this->store          = new NPA_Store();
+		$this->store->maybe_upgrade();
+		$this->budget         = new NPA_Budget( $this->settings, $this->store );
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );
 
+		$this->register_service_status();
 		$this->register_core_tests();
 		$this->register_gateway_tests();
 		$this->register_settings_tests();
+		$this->register_store_tests();
+		$this->register_budget_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -128,6 +148,55 @@ final class NPA_Plugin {
 
 		// Configuration (depends on the mock for the default agent id).
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-settings.php';
+
+		// Durable substrate.
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-store.php';
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-budget.php';
+	}
+
+	/**
+	 * Create the schema on activation. (Git-as-deploy updates rely on the
+	 * version-gated maybe_upgrade() in boot(), since activation does not fire
+	 * on update.)
+	 *
+	 * @return void
+	 */
+	public static function activate() {
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-store.php';
+		( new NPA_Store() )->install();
+	}
+
+	/**
+	 * Register the durable subsystems into the Service Status roll-up.
+	 *
+	 * @return void
+	 */
+	private function register_service_status() {
+		$this->service_status->register(
+			'usage',
+			__( 'Usage history', 'newtide-public-agent' ),
+			function () {
+				$agg = $this->store->aggregates( 50 );
+				return array(
+					'ok'      => $agg['error_rate'] <= 0.10,
+					/* translators: 1: recent call count, 2: error rate percent, 3: average latency ms. */
+					'message' => sprintf(
+						__( '%1$d recent calls, %2$s%% errors, %3$d ms avg.', 'newtide-public-agent' ),
+						$agg['count'],
+						number_format_i18n( $agg['error_rate'] * 100, 1 ),
+						$agg['avg_latency_ms']
+					),
+				);
+			}
+		);
+
+		$this->service_status->register(
+			'budget',
+			__( 'Daily budget', 'newtide-public-agent' ),
+			function () {
+				return $this->budget->status();
+			}
+		);
 	}
 
 	/**
@@ -354,6 +423,142 @@ final class NPA_Plugin {
 				$checks[] = array(
 					'label' => __( 'Gateway key resolves via the injection filter', 'newtide-public-agent' ),
 					'pass'  => $saw_filter && 'sk-from-filter' === $resolved,
+				);
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the durable store suite (M4 Verify companion).
+	 *
+	 * Writes and removes a sentinel row so the table and dual-write are proven
+	 * without leaving test data behind.
+	 *
+	 * @return void
+	 */
+	private function register_store_tests() {
+		$this->test_runner->register_suite(
+			'store',
+			__( 'Usage store', 'newtide-public-agent' ),
+			__( 'Confirms the durable usage table exists and that each recorded call is written and countable — the substrate behind the status panel, the daily budget, and every historical metric.', 'newtide-public-agent' ),
+			function () {
+				global $wpdb;
+				$store  = $this->store;
+				$checks = array();
+				$table  = $store->table_name();
+
+				// Table exists.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$found    = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+				$checks[] = array(
+					'label' => __( 'Usage table exists', 'newtide-public-agent' ),
+					'pass'  => $found === $table,
+				);
+
+				// Dual-write a sentinel row, assert, then clean up.
+				$sentinel = '__npa_test__';
+				$before   = $store->count_today();
+				$id       = $store->record(
+					array(
+						'agent_id'      => $sentinel,
+						'status'        => 200,
+						'finish_reason' => 'stop',
+						'latency_ms'    => 42,
+						'input_tokens'  => 3,
+						'output_tokens' => 9,
+					)
+				);
+				$after = $store->count_today();
+
+				$checks[] = array(
+					'label' => __( 'Recording a call inserts a row and increments today\'s count', 'newtide-public-agent' ),
+					'pass'  => is_int( $id ) && $id > 0 && ( $after === $before + 1 ),
+				);
+
+				$last     = get_transient( NPA_Store::LAST_TRANSIENT );
+				$checks[] = array(
+					'label' => __( 'Fast-path transient mirrors the last call', 'newtide-public-agent' ),
+					'pass'  => is_array( $last ) && isset( $last['agent_id'] ) && $sentinel === $last['agent_id'],
+				);
+
+				$agg      = $store->aggregates( 50 );
+				$checks[] = array(
+					'label' => __( 'Aggregates return count, error rate, and average latency', 'newtide-public-agent' ),
+					'pass'  => isset( $agg['count'], $agg['error_rate'], $agg['avg_latency_ms'] ) && $agg['count'] >= 1,
+				);
+
+				// Cleanup — never leave test rows behind.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->delete( $table, array( 'agent_id' => $sentinel ), array( '%s' ) );
+				delete_transient( NPA_Store::LAST_TRANSIENT );
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the budget suite (M4 Verify companion).
+	 *
+	 * Pure arithmetic against stubbed dependencies — no database writes.
+	 *
+	 * @return void
+	 */
+	private function register_budget_tests() {
+		$this->test_runner->register_suite(
+			'budget',
+			__( 'Daily budget', 'newtide-public-agent' ),
+			__( 'Confirms the courtesy daily cap counts correctly and reports "exhausted" only when it should — so a runaway page cannot quietly rack up gateway calls, while an unset cap stays unlimited.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+
+				$stub_settings = new class() {
+					/**
+					 * Stubbed setting getter.
+					 *
+					 * @param string $key      Key.
+					 * @param mixed  $fallback Default.
+					 * @return mixed
+					 */
+					public function get( $key, $fallback = null ) {
+						return 'daily_message_cap' === $key ? 3 : $fallback;
+					}
+				};
+				$stub_store = new class() {
+					/**
+					 * Stubbed count.
+					 *
+					 * @return int
+					 */
+					public function count_today() {
+						return 5;
+					}
+				};
+
+				$capped   = new NPA_Budget( $stub_settings, $stub_store );
+				$checks[] = array(
+					'label' => __( 'Reports exhausted when usage meets or exceeds the cap', 'newtide-public-agent' ),
+					'pass'  => 3 === $capped->cap() && $capped->is_exhausted() && 0 === $capped->remaining(),
+				);
+
+				$unlimited_settings = new class() {
+					/**
+					 * Stubbed setting getter (unlimited).
+					 *
+					 * @param string $key      Key.
+					 * @param mixed  $fallback Default.
+					 * @return mixed
+					 */
+					public function get( $key, $fallback = null ) {
+						return 'daily_message_cap' === $key ? 0 : $fallback;
+					}
+				};
+				$unlimited = new NPA_Budget( $unlimited_settings, $stub_store );
+				$checks[]  = array(
+					'label' => __( 'Unset cap (0) is unlimited and never exhausted', 'newtide-public-agent' ),
+					'pass'  => 0 === $unlimited->cap() && ! $unlimited->is_exhausted() && $unlimited->remaining() === PHP_INT_MAX,
 				);
 
 				return $checks;

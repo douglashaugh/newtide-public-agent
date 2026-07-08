@@ -54,6 +54,9 @@ if ( is_readable( $npa_puc ) ) {
 }
 unset( $npa_puc );
 
+// Create the schema on activation (updates are handled by maybe_upgrade()).
+register_activation_hook( __FILE__, array( 'NPA_Plugin', 'activate' ) );
+
 /**
  * Boot the plugin once WordPress and all plugins are loaded.
  */

@@ -87,6 +87,7 @@ class NPA_Settings {
 			'log_enabled'               => false,
 			'store_transcripts'         => false,
 			'transcript_retention_days' => 30,
+			'daily_message_cap'         => 0, // 0 = unlimited.
 		);
 	}
 
@@ -163,6 +164,8 @@ class NPA_Settings {
 
 		$retention = isset( $input['transcript_retention_days'] ) ? absint( $input['transcript_retention_days'] ) : (int) $existing['transcript_retention_days'];
 		$clean['transcript_retention_days'] = min( 3650, max( 1, $retention ) );
+
+		$clean['daily_message_cap'] = isset( $input['daily_message_cap'] ) ? absint( $input['daily_message_cap'] ) : (int) $existing['daily_message_cap'];
 
 		// Credential — write-only and constant-aware.
 		if ( defined( 'NPA_GATEWAY_KEY' ) ) {
