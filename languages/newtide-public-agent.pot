@@ -1,0 +1,662 @@
+# Copyright (C) 2026 NewTide
+# This file is distributed under the GPL-2.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: NewTide Public Agent 0.1.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newtide-public-agent\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-07-08T18:03:42+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: newtide-public-agent\n"
+
+#. Plugin Name of the plugin
+#: newtide-public-agent.php
+#: admin/class-npa-admin.php:73
+#: admin/class-npa-admin.php:182
+msgid "NewTide Public Agent"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: newtide-public-agent.php
+msgid "https://github.com/asamarie/Public-Agent-Plugin"
+msgstr ""
+
+#. Description of the plugin
+#: newtide-public-agent.php
+msgid "Embed a published NewTide / Agent Harbor public agent on your WordPress site. Thin client over the Public Agent Gateway; the gateway owns identity, safety, rate-limiting, and cost control."
+msgstr ""
+
+#. Author of the plugin
+#: newtide-public-agent.php
+msgid "NewTide"
+msgstr ""
+
+#: admin/class-npa-admin.php:74
+msgid "NewTide Agent"
+msgstr ""
+
+#: admin/class-npa-admin.php:115
+msgid "Testing…"
+msgstr ""
+
+#: admin/class-npa-admin.php:116
+msgid "Running…"
+msgstr ""
+
+#: admin/class-npa-admin.php:117
+msgid "Request failed. Please try again."
+msgstr ""
+
+#: admin/class-npa-admin.php:144
+msgid "General"
+msgstr ""
+
+#: admin/class-npa-admin.php:145
+#: admin/views/tab-agent.php:59
+msgid "Agent"
+msgstr ""
+
+#: admin/class-npa-admin.php:146
+msgid "Service Status"
+msgstr ""
+
+#: admin/class-npa-admin.php:147
+#: admin/views/tab-tests.php:16
+msgid "Tests"
+msgstr ""
+
+#: admin/class-npa-admin.php:174
+msgid "You do not have permission to access this page."
+msgstr ""
+
+#: admin/class-npa-admin.php:245
+msgid "OK"
+msgstr ""
+
+#: admin/class-npa-admin.php:245
+msgid "Attention"
+msgstr ""
+
+#: admin/class-npa-admin.php:264
+msgid "No test results yet. Click “Run tests”."
+msgstr ""
+
+#. translators: 1: passed checks, 2: total checks.
+#: admin/class-npa-admin.php:272
+#, php-format
+msgid "Passed %1$d of %2$d checks."
+msgstr ""
+
+#: admin/class-npa-admin.php:312
+#: admin/class-npa-admin.php:349
+msgid "Permission denied."
+msgstr ""
+
+#: admin/views/tab-agent.php:31
+msgid "Gateway base URL"
+msgstr ""
+
+#: admin/views/tab-agent.php:35
+msgid "Defined via the NPA_GATEWAY_BASE_URL constant."
+msgstr ""
+
+#: admin/views/tab-agent.php:43
+msgid "Gateway credential"
+msgstr ""
+
+#: admin/views/tab-agent.php:46
+msgid "Configured via wp-config.php"
+msgstr ""
+
+#: admin/views/tab-agent.php:47
+msgid "The credential is defined by the NPA_GATEWAY_KEY constant and never stored in the database. This is the recommended setup."
+msgstr ""
+
+#: admin/views/tab-agent.php:49
+msgid "Not set"
+msgstr ""
+
+#: admin/views/tab-agent.php:49
+msgid "••••••••  (leave blank to keep)"
+msgstr ""
+
+#: admin/views/tab-agent.php:51
+msgid "A credential is set"
+msgstr ""
+
+#: admin/views/tab-agent.php:53
+msgid "Stored write-only; the saved value is never shown. Prefer defining NPA_GATEWAY_KEY in wp-config.php instead."
+msgstr ""
+
+#: admin/views/tab-agent.php:76
+msgid "Published agents available to this credential."
+msgstr ""
+
+#: admin/views/tab-agent.php:79
+msgid "Enter the published agent ID. (A list will appear here once the gateway can be reached.)"
+msgstr ""
+
+#: admin/views/tab-agent.php:85
+msgid "Daily message cap"
+msgstr ""
+
+#: admin/views/tab-agent.php:88
+msgid "Courtesy limiter. 0 = unlimited. (Abuse prevention is enforced by the gateway.)"
+msgstr ""
+
+#: admin/views/tab-agent.php:93
+msgid "Logging"
+msgstr ""
+
+#: admin/views/tab-agent.php:97
+msgid "Record call metadata (no message content) for the status panel."
+msgstr ""
+
+#: admin/views/tab-agent.php:103
+msgid "Store transcripts"
+msgstr ""
+
+#: admin/views/tab-agent.php:107
+msgid "Persist message content (off by default; introduces PII/retention obligations)."
+msgstr ""
+
+#: admin/views/tab-agent.php:110
+msgid "Retention (days):"
+msgstr ""
+
+#: admin/views/tab-agent.php:118
+msgid "Test connection"
+msgstr ""
+
+#: admin/views/tab-general.php:19
+msgid "Enable widget"
+msgstr ""
+
+#: admin/views/tab-general.php:23
+msgid "Show the agent widget on the front end."
+msgstr ""
+
+#: admin/views/tab-general.php:28
+#: src/block/index.js:39
+msgid "Launcher label"
+msgstr ""
+
+#: admin/views/tab-general.php:34
+#: src/block/index.js:42
+msgid "Greeting"
+msgstr ""
+
+#: admin/views/tab-general.php:40
+#: src/block/index.js:46
+msgid "Position"
+msgstr ""
+
+#: admin/views/tab-general.php:43
+#: src/block/index.js:50
+msgid "Bottom right"
+msgstr ""
+
+#: admin/views/tab-general.php:44
+#: src/block/index.js:51
+msgid "Bottom left"
+msgstr ""
+
+#: admin/views/tab-general.php:49
+msgid "Accent colour"
+msgstr ""
+
+#: admin/views/tab-status.php:16
+msgid "Service status"
+msgstr ""
+
+#: admin/views/tab-status.php:22
+msgid "Recent activity"
+msgstr ""
+
+#: admin/views/tab-status.php:26
+msgid "Configured"
+msgstr ""
+
+#: admin/views/tab-status.php:27
+msgid "Yes"
+msgstr ""
+
+#: admin/views/tab-status.php:27
+msgid "No — set the gateway URL, credential, and agent"
+msgstr ""
+
+#: admin/views/tab-status.php:30
+msgid "Recent calls (last 50)"
+msgstr ""
+
+#: admin/views/tab-status.php:34
+msgid "Error rate"
+msgstr ""
+
+#: admin/views/tab-status.php:38
+msgid "Average latency"
+msgstr ""
+
+#: admin/views/tab-tests.php:18
+msgid "A fast, deterministic battery that runs against fixtures and the mock gateway — never live traffic. It is both quality control and a plain-language record of what the plugin guarantees."
+msgstr ""
+
+#: admin/views/tab-tests.php:22
+msgid "Run tests"
+msgstr ""
+
+#: includes/class-npa-budget.php:93
+msgid "No daily cap set (unlimited)."
+msgstr ""
+
+#. translators: 1: messages used today, 2: daily cap.
+#: includes/class-npa-budget.php:101
+#, php-format
+msgid "%1$d of %2$d messages used today."
+msgstr ""
+
+#: includes/class-npa-plugin.php:222
+msgid "Usage history"
+msgstr ""
+
+#: includes/class-npa-plugin.php:229
+#, php-format
+msgid "%1$d recent calls, %2$s%% errors, %3$d ms avg."
+msgstr ""
+
+#: includes/class-npa-plugin.php:240
+#: includes/class-npa-plugin.php:701
+msgid "Daily budget"
+msgstr ""
+
+#: includes/class-npa-plugin.php:315
+msgid "Environment"
+msgstr ""
+
+#: includes/class-npa-plugin.php:316
+msgid "Confirms the plugin loaded correctly and the server meets the minimum PHP and WordPress versions it needs to run safely."
+msgstr ""
+
+#: includes/class-npa-plugin.php:321
+msgid "Plugin version constant is defined"
+msgstr ""
+
+#: includes/class-npa-plugin.php:326
+msgid "PHP 8.1 or newer"
+msgstr ""
+
+#: includes/class-npa-plugin.php:331
+msgid "WordPress 6.4 or newer"
+msgstr ""
+
+#: includes/class-npa-plugin.php:352
+msgid "Gateway (mock)"
+msgstr ""
+
+#: includes/class-npa-plugin.php:353
+msgid "Proves the plugin can talk to a gateway and correctly handles success, bad credentials, rate limiting, and outages — verified against a deterministic stand-in so the real service is never required to build or test."
+msgstr ""
+
+#: includes/class-npa-plugin.php:362
+msgid "Successful message returns a reply and a conversation id"
+msgstr ""
+
+#. translators: 1: scenario name, 2: expected HTTP status.
+#: includes/class-npa-plugin.php:382
+#, php-format
+msgid "Scenario \"%1$s\" throws HTTP %2$d"
+msgstr ""
+
+#: includes/class-npa-plugin.php:391
+msgid "Agent list includes the target agent id"
+msgstr ""
+
+#: includes/class-npa-plugin.php:397
+msgid "Health check reports connected on success"
+msgstr ""
+
+#: includes/class-npa-plugin.php:401
+msgid "Health check reports unhealthy (not an exception) on bad credential"
+msgstr ""
+
+#: includes/class-npa-plugin.php:422
+msgid "Gateway (HTTP)"
+msgstr ""
+
+#: includes/class-npa-plugin.php:423
+msgid "Confirms the real gateway client — used once a gateway URL and credential are configured — correctly reads a reply and maps bad credentials, rate limits, outages, and network failures, all against a simulated server so no live call is made."
+msgstr ""
+
+#: includes/class-npa-plugin.php:467
+msgid "A 200 response maps to a result (reply, conversation id, tokens)"
+msgstr ""
+
+#. translators: 1: HTTP status, 2: error code.
+#: includes/class-npa-plugin.php:493
+#, php-format
+msgid "HTTP %1$s maps to \"%2$s\""
+msgstr ""
+
+#: includes/class-npa-plugin.php:507
+msgid "A network failure maps to \"transport\""
+msgstr ""
+
+#: includes/class-npa-plugin.php:514
+msgid "Health check reports connected on 200"
+msgstr ""
+
+#: includes/class-npa-plugin.php:520
+msgid "Agent list parses into agent objects"
+msgstr ""
+
+#: includes/class-npa-plugin.php:542
+msgid "Settings"
+msgstr ""
+
+#: includes/class-npa-plugin.php:543
+msgid "Confirms that saved configuration is cleaned before storage: bad values are corrected, unexpected fields are discarded, and the gateway credential is never wiped by an empty form or exposed — so a misconfigured or malicious save cannot break or leak the plugin."
+msgstr ""
+
+#: includes/class-npa-plugin.php:551
+msgid "Defaults include the target agent id and a valid accent colour"
+msgstr ""
+
+#: includes/class-npa-plugin.php:564
+msgid "Unknown keys are dropped; known keys are kept"
+msgstr ""
+
+#: includes/class-npa-plugin.php:578
+msgid "Script tags stripped from greeting"
+msgstr ""
+
+#: includes/class-npa-plugin.php:582
+msgid "Disallowed URL scheme rejected on base URL"
+msgstr ""
+
+#: includes/class-npa-plugin.php:586
+msgid "Invalid position falls back to a whitelisted value"
+msgstr ""
+
+#: includes/class-npa-plugin.php:590
+msgid "Invalid accent colour falls back to the default"
+msgstr ""
+
+#: includes/class-npa-plugin.php:598
+msgid "Transcript retention is clamped to 1–3650 days"
+msgstr ""
+
+#: includes/class-npa-plugin.php:613
+msgid "Gateway key resolves via the injection filter"
+msgstr ""
+
+#: includes/class-npa-plugin.php:633
+msgid "Usage store"
+msgstr ""
+
+#: includes/class-npa-plugin.php:634
+msgid "Confirms the durable usage table exists and that each recorded call is written and countable — the substrate behind the status panel, the daily budget, and every historical metric."
+msgstr ""
+
+#: includes/class-npa-plugin.php:645
+msgid "Usage table exists"
+msgstr ""
+
+#: includes/class-npa-plugin.php:665
+msgid "Recording a call inserts a row and increments today's count"
+msgstr ""
+
+#: includes/class-npa-plugin.php:671
+msgid "Fast-path transient mirrors the last call"
+msgstr ""
+
+#: includes/class-npa-plugin.php:677
+msgid "Aggregates return count, error rate, and average latency"
+msgstr ""
+
+#: includes/class-npa-plugin.php:702
+msgid "Confirms the courtesy daily cap counts correctly and reports \"exhausted\" only when it should — so a runaway page cannot quietly rack up gateway calls, while an unset cap stays unlimited."
+msgstr ""
+
+#: includes/class-npa-plugin.php:731
+msgid "Reports exhausted when usage meets or exceeds the cap"
+msgstr ""
+
+#: includes/class-npa-plugin.php:749
+msgid "Unset cap (0) is unlimited and never exhausted"
+msgstr ""
+
+#: includes/class-npa-plugin.php:770
+msgid "Message proxy"
+msgstr ""
+
+#: includes/class-npa-plugin.php:771
+msgid "Confirms the front end can reach the agent through the site’s own server (so the credential never touches the browser), that visitors only ever see friendly error text, and that every call is recorded."
+msgstr ""
+
+#: includes/class-npa-plugin.php:779
+msgid "POST /npa/v1/message route is registered"
+msgstr ""
+
+#: includes/class-npa-plugin.php:792
+msgid "Visitor error messages are generic (no gateway internals)"
+msgstr ""
+
+#: includes/class-npa-plugin.php:811
+msgid "A valid message returns a reply envelope (HTTP 200)"
+msgstr ""
+
+#: includes/class-npa-plugin.php:815
+msgid "The call is recorded to the usage table"
+msgstr ""
+
+#: includes/class-npa-plugin.php:825
+msgid "A request with a message but no valid nonce is rejected (HTTP 403)"
+msgstr ""
+
+#: includes/class-npa-plugin.php:856
+msgid "Front-end widget"
+msgstr ""
+
+#: includes/class-npa-plugin.php:857
+msgid "Confirms the chat widget can be placed via shortcode or block and that the private gateway credential is never written into the page a visitor can view — the core promise of the server-side proxy."
+msgstr ""
+
+#: includes/class-npa-plugin.php:862
+msgid "The [newtide_agent] shortcode is registered"
+msgstr ""
+
+#: includes/class-npa-plugin.php:867
+msgid "The NewTide Agent block is registered"
+msgstr ""
+
+#: includes/class-npa-plugin.php:882
+msgid "Shortcode renders a widget mount node with the agent id"
+msgstr ""
+
+#: includes/class-npa-plugin.php:888
+msgid "The gateway credential never appears in front-end output"
+msgstr ""
+
+#: includes/class-npa-rest.php:116
+msgid "Your session token is missing or expired. Please reload the page."
+msgstr ""
+
+#: includes/class-npa-rest.php:135
+msgid "Please enter a message."
+msgstr ""
+
+#: includes/class-npa-rest.php:139
+msgid "That message is too long. Please shorten it."
+msgstr ""
+
+#: includes/class-npa-rest.php:147
+msgid "The assistant has reached today’s message limit. Please try again tomorrow."
+msgstr ""
+
+#: includes/class-npa-rest.php:229
+msgid "The assistant is busy right now. Please try again in a moment."
+msgstr ""
+
+#: includes/class-npa-rest.php:231
+msgid "The assistant is temporarily unavailable. Please try again later."
+msgstr ""
+
+#: includes/class-npa-rest.php:234
+msgid "Something went wrong reaching the assistant. Please try again."
+msgstr ""
+
+#: includes/class-npa-service-status.php:74
+msgid "Status provider returned no data."
+msgstr ""
+
+#: includes/class-npa-settings.php:83
+#: src/block/index.js:78
+msgid "Chat with us"
+msgstr ""
+
+#: includes/class-npa-settings.php:84
+msgid "Hi! How can I help you today?"
+msgstr ""
+
+#: includes/gateway/class-npa-gateway-client-http.php:195
+msgid "Connected."
+msgstr ""
+
+#: includes/gateway/class-npa-gateway-client-http.php:199
+msgid "Credential rejected."
+msgstr ""
+
+#. translators: %d: HTTP status code.
+#: includes/gateway/class-npa-gateway-client-http.php:203
+#, php-format
+msgid "Gateway returned HTTP %d."
+msgstr ""
+
+#. translators: %s: the visitor's message, echoed by the mock.
+#: includes/gateway/class-npa-gateway-client-mock.php:80
+#, php-format
+msgid "Mock agent reply. You said: \"%s\". (This is a canned response from the mock gateway.)"
+msgstr ""
+
+#: includes/gateway/class-npa-gateway-client-mock.php:113
+msgid "RisingTide Public Agent (mock)"
+msgstr ""
+
+#: includes/gateway/class-npa-gateway-client-mock.php:114
+msgid "Canned agent served by the mock gateway for local development."
+msgstr ""
+
+#: includes/gateway/class-npa-gateway-client-mock.php:129
+msgid "Credential rejected (mock)."
+msgstr ""
+
+#: includes/gateway/class-npa-gateway-client-mock.php:131
+msgid "Rate limited (mock)."
+msgstr ""
+
+#: includes/gateway/class-npa-gateway-client-mock.php:133
+msgid "Gateway error (mock)."
+msgstr ""
+
+#: includes/gateway/class-npa-gateway-client-mock.php:135
+msgid "Connected but slow (mock)."
+msgstr ""
+
+#: includes/gateway/class-npa-gateway-client-mock.php:137
+msgid "Connected (mock)."
+msgstr ""
+
+#: public/class-npa-public.php:80
+msgid "Send"
+msgstr ""
+
+#: public/class-npa-public.php:81
+msgid "Close chat"
+msgstr ""
+
+#: public/class-npa-public.php:82
+msgid "Type your message"
+msgstr ""
+
+#: public/class-npa-public.php:83
+msgid "Assistant is typing…"
+msgstr ""
+
+#: public/class-npa-public.php:84
+msgid "Sorry, something went wrong. Please try again."
+msgstr ""
+
+#: public/class-npa-public.php:85
+msgid "Chat with our agent"
+msgstr ""
+
+#: public/class-npa-public.php:86
+msgid "You said"
+msgstr ""
+
+#: public/class-npa-public.php:87
+msgid "Assistant replied"
+msgstr ""
+
+#: src/block/index.js:35
+msgid "Agent settings"
+msgstr ""
+
+#: src/block/index.js:36
+msgid "Agent ID (override)"
+msgstr ""
+
+#: src/block/index.js:38
+msgid "Leave blank to use the global default."
+msgstr ""
+
+#: src/block/index.js:49
+msgid "Default"
+msgstr ""
+
+#: src/block/index.js:57
+msgid "Accent colour (hex)"
+msgstr ""
+
+#: src/block/index.js:59
+msgid "e.g. #2563eb. Leave blank for the global default."
+msgstr ""
+
+#: src/block/index.js:83
+msgid "NewTide Agent widget (shown on the front end)."
+msgstr ""
+
+#: src/block/block.json
+msgctxt "block title"
+msgid "NewTide Agent"
+msgstr ""
+
+#: src/block/block.json
+msgctxt "block description"
+msgid "Embed the NewTide public agent chat widget."
+msgstr ""
+
+#: src/block/block.json
+msgctxt "block keyword"
+msgid "chat"
+msgstr ""
+
+#: src/block/block.json
+msgctxt "block keyword"
+msgid "agent"
+msgstr ""
+
+#: src/block/block.json
+msgctxt "block keyword"
+msgid "ai"
+msgstr ""
+
+#: src/block/block.json
+msgctxt "block keyword"
+msgid "support"
+msgstr ""

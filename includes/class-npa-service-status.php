@@ -100,9 +100,9 @@ class NPA_Service_Status {
 	 * @return int New consecutive failure count.
 	 */
 	public function record_failure( $id ) {
-		$id               = sanitize_key( $id );
-		$counters         = $this->counters();
-		$counters[ $id ]  = isset( $counters[ $id ] ) ? (int) $counters[ $id ] + 1 : 1;
+		$id              = sanitize_key( $id );
+		$counters        = $this->counters();
+		$counters[ $id ] = isset( $counters[ $id ] ) ? (int) $counters[ $id ] + 1 : 1;
 		update_option( self::COUNTERS_OPTION, $counters, false );
 		return $counters[ $id ];
 	}

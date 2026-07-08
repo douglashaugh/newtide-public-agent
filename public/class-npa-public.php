@@ -31,6 +31,8 @@ class NPA_Public {
 	private $plugin;
 
 	/**
+	 * Constructor.
+	 *
 	 * @param NPA_Plugin $plugin Plugin instance.
 	 */
 	public function __construct( $plugin ) {

@@ -8,6 +8,8 @@
 	<exclude-pattern>*/node_modules/*</exclude-pattern>
 	<exclude-pattern>*/build/*</exclude-pattern>
 	<exclude-pattern>*/lib/plugin-update-checker/*</exclude-pattern>
+	<!-- WordPress block-asset manifests must use this exact name. -->
+	<exclude-pattern>*/src/block/index.asset.php</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="colors"/>
@@ -16,7 +18,8 @@
 	<!-- WordPress standard. -->
 	<rule ref="WordPress"/>
 
-	<!-- Enforce our prefixes and text domain. -->
+	<!-- Enforce our prefixes and text domain. The npa/NPA prefix is an
+	     intentional project-wide choice; allow the sub-4-char length. -->
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
 		<properties>
 			<property name="prefixes" type="array">
@@ -24,6 +27,7 @@
 				<element value="NPA"/>
 			</property>
 		</properties>
+		<exclude name="WordPress.NamingConventions.PrefixAllGlobals.ShortPrefixPassed"/>
 	</rule>
 	<rule ref="WordPress.WP.I18n">
 		<properties>

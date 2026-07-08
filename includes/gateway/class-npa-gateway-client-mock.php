@@ -40,6 +40,8 @@ class NPA_Gateway_Client_Mock implements NPA_Gateway_Client {
 	private $latency_ms;
 
 	/**
+	 * Constructor.
+	 *
 	 * @param string $scenario   Initial scenario.
 	 * @param int    $latency_ms Simulated latency for health/slow scenarios.
 	 */
@@ -142,7 +144,7 @@ class NPA_Gateway_Client_Mock implements NPA_Gateway_Client {
 	 * Throw the exception mapped to the active error scenario, if any.
 	 *
 	 * @return void
-	 * @throws NPA_Gateway_Exception
+	 * @throws NPA_Gateway_Exception When the active scenario is an error scenario.
 	 */
 	private function maybe_throw() {
 		switch ( $this->scenario ) {

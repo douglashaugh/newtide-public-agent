@@ -125,12 +125,12 @@ final class NPA_Plugin {
 		$this->test_runner    = new NPA_Test_Runner();
 		$this->settings       = new NPA_Settings();
 		$this->settings->register();
-		$this->store          = new NPA_Store();
+		$this->store = new NPA_Store();
 		$this->store->maybe_upgrade();
-		$this->budget         = new NPA_Budget( $this->settings, $this->store );
-		$this->rest           = new NPA_Rest( $this );
+		$this->budget = new NPA_Budget( $this->settings, $this->store );
+		$this->rest   = new NPA_Rest( $this );
 		$this->rest->register();
-		$this->public         = new NPA_Public( $this );
+		$this->public = new NPA_Public( $this );
 		$this->public->register();
 
 		if ( is_admin() ) {
@@ -224,8 +224,8 @@ final class NPA_Plugin {
 				$agg = $this->store->aggregates( 50 );
 				return array(
 					'ok'      => $agg['error_rate'] <= 0.10,
-					/* translators: 1: recent call count, 2: error rate percent, 3: average latency ms. */
 					'message' => sprintf(
+						/* translators: 1: recent call count, 2: error rate percent, 3: average latency ms. */
 						__( '%1$d recent calls, %2$s%% errors, %3$d ms avg.', 'newtide-public-agent' ),
 						$agg['count'],
 						number_format_i18n( $agg['error_rate'] * 100, 1 ),
@@ -356,8 +356,8 @@ final class NPA_Plugin {
 				$agent  = NPA_Gateway_Client_Mock::DEFAULT_AGENT_ID;
 
 				// Happy path: a reply and an assigned conversation id.
-				$mock   = new NPA_Gateway_Client_Mock( 'ok' );
-				$result = $mock->send_message( $agent, 'hello', '', array() );
+				$mock     = new NPA_Gateway_Client_Mock( 'ok' );
+				$result   = $mock->send_message( $agent, 'hello', '', array() );
 				$checks[] = array(
 					'label' => __( 'Successful message returns a reply and a conversation id', 'newtide-public-agent' ),
 					'pass'  => ( $result instanceof NPA_Gateway_Result ) && '' !== $result->reply_text && '' !== $result->conversation_id,
@@ -425,7 +425,8 @@ final class NPA_Plugin {
 				$checks = array();
 				$mode   = 'ok';
 
-				$responder = static function ( $pre, $args, $url ) use ( &$mode ) {
+				// $pre/$args/$url are required by the pre_http_request signature.
+				$responder = static function ( $pre, $args, $url ) use ( &$mode ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
 					switch ( $mode ) {
 						case 'ok':
 							return array(
@@ -436,7 +437,7 @@ final class NPA_Plugin {
 										'conversation_id' => 'conv-http-1',
 										'finish_reason'   => 'stop',
 										'usage'           => array(
-											'input_tokens'  => 2,
+											'input_tokens' => 2,
 											'output_tokens' => 4,
 										),
 									)
@@ -445,7 +446,16 @@ final class NPA_Plugin {
 						case 'agents':
 							return array(
 								'response' => array( 'code' => 200 ),
-								'body'     => wp_json_encode( array( 'agents' => array( array( 'id' => 'a-1', 'name' => 'Agent One' ) ) ) ),
+								'body'     => wp_json_encode(
+									array(
+										'agents' => array(
+											array(
+												'id'   => 'a-1',
+												'name' => 'Agent One',
+											),
+										),
+									)
+								),
 							);
 						case 'wperr':
 							return new WP_Error( 'http_request_failed', 'connection refused' );
@@ -461,8 +471,8 @@ final class NPA_Plugin {
 				$http = new NPA_Gateway_Client_Http( 'https://gateway.example', 'sk-test-key' );
 
 				// Success mapping.
-				$mode   = 'ok';
-				$result = $http->send_message( 'agent-x', 'hello', '', array() );
+				$mode     = 'ok';
+				$result   = $http->send_message( 'agent-x', 'hello', '', array() );
 				$checks[] = array(
 					'label' => __( 'A 200 response maps to a result (reply, conversation id, tokens)', 'newtide-public-agent' ),
 					'pass'  => ( $result instanceof NPA_Gateway_Result )
@@ -554,7 +564,7 @@ final class NPA_Plugin {
 				);
 
 				// Unknown keys are dropped; known keys survive.
-				$clean = $settings->sanitize(
+				$clean    = $settings->sanitize(
 					array(
 						'launcher_label' => 'Talk to us',
 						'evil_key'       => 'DROP TABLE',
@@ -566,7 +576,7 @@ final class NPA_Plugin {
 				);
 
 				// Malicious input is neutralized.
-				$clean = $settings->sanitize(
+				$clean    = $settings->sanitize(
 					array(
 						'greeting'         => '<script>alert(1)</script>Hello',
 						'gateway_base_url' => 'javascript:alert(1)',
@@ -659,7 +669,7 @@ final class NPA_Plugin {
 						'output_tokens' => 9,
 					)
 				);
-				$after = $store->count_today();
+				$after    = $store->count_today();
 
 				$checks[] = array(
 					'label' => __( 'Recording a call inserts a row and increments today\'s count', 'newtide-public-agent' ),
@@ -715,7 +725,7 @@ final class NPA_Plugin {
 						return 'daily_message_cap' === $key ? 3 : $fallback;
 					}
 				};
-				$stub_store = new class() {
+				$stub_store    = new class() {
 					/**
 					 * Stubbed count.
 					 *
@@ -744,8 +754,8 @@ final class NPA_Plugin {
 						return 'daily_message_cap' === $key ? 0 : $fallback;
 					}
 				};
-				$unlimited = new NPA_Budget( $unlimited_settings, $stub_store );
-				$checks[]  = array(
+				$unlimited          = new NPA_Budget( $unlimited_settings, $stub_store );
+				$checks[]           = array(
 					'label' => __( 'Unset cap (0) is unlimited and never exhausted', 'newtide-public-agent' ),
 					'pass'  => 0 === $unlimited->cap() && ! $unlimited->is_exhausted() && $unlimited->remaining() === PHP_INT_MAX,
 				);

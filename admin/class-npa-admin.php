@@ -45,6 +45,8 @@ class NPA_Admin {
 	private $hook = '';
 
 	/**
+	 * Constructor.
+	 *
 	 * @param NPA_Plugin $plugin Plugin instance.
 	 */
 	public function __construct( $plugin ) {
@@ -119,9 +121,7 @@ class NPA_Admin {
 		);
 	}
 
-	/* --------------------------------------------------------------------- *
-	 * Page rendering
-	 * --------------------------------------------------------------------- */
+	// Page rendering.
 
 	/**
 	 * The active tab slug.
@@ -297,9 +297,7 @@ class NPA_Admin {
 		return $out;
 	}
 
-	/* --------------------------------------------------------------------- *
-	 * AJAX actions (capability + nonce on both)
-	 * --------------------------------------------------------------------- */
+	// AJAX actions (capability + nonce on both).
 
 	/**
 	 * Run a gateway health check and report the result.

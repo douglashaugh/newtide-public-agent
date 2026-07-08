@@ -181,9 +181,7 @@ class NPA_Settings {
 		return $clean;
 	}
 
-	/* --------------------------------------------------------------------- *
-	 * Secret handling
-	 * --------------------------------------------------------------------- */
+	// Secret handling.
 
 	/**
 	 * Resolve the gateway credential: constant first, then filter, then the

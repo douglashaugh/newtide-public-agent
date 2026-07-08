@@ -8,27 +8,78 @@ Stable tag: 0.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Embed a published NewTide / Agent Harbor public agent on your WordPress site.
+Embed a published NewTide / Agent Harbor public agent on your WordPress site via a shortcode or block. A thin, secure client for the Public Agent Gateway.
 
 == Description ==
 
-NewTide Public Agent embeds one published agent (support chat, guided browsing,
-sales-inquiry response) via a shortcode or block. It is a thin client: the
-Public Agent Gateway owns identity, safety, rate-limiting, and cost control.
-The plugin renders the UI and relays messages through a same-origin,
-nonce-authenticated proxy so the gateway credential never reaches the browser.
+NewTide Public Agent puts one published agent (support chat, guided browsing, sales-inquiry response) on your site. Add it with the `[newtide_agent]` shortcode or the **NewTide Agent** block.
 
-This is an early scaffold (v0.1.0). Functionality lands milestone by milestone.
+It is a **thin client**. The Public Agent Gateway owns identity, safety, rate-limiting, prompt-injection defense, and cost control. The plugin renders the chat UI and relays messages through a **same-origin, nonce-authenticated proxy**, so the gateway credential is used server-side only and **never reaches the browser**.
+
+**Features**
+
+* Shortcode and Gutenberg block, with per-placement overrides (agent, greeting, label, position, accent).
+* Server-side REST proxy (`/wp-json/npa/v1/message`) — the credential never leaves your server.
+* Admin screen with tabs: General, Agent, Service Status, Tests.
+* Durable usage history (metadata only — no message content), powering a status panel and a courtesy daily budget cap.
+* Accessible widget: keyboard-operable, focus management, screen-reader announcements, respects reduced motion.
+* Built to run fully against a deterministic mock, so it works before your gateway is live.
+
+== Installation ==
+
+1. Upload the plugin to `wp-content/plugins/newtide-public-agent` and activate it.
+2. Preferred: add your gateway credential to `wp-config.php`:
+   `define( 'NPA_GATEWAY_KEY', 'your-key' );`
+3. In **NewTide Agent → Agent**, set the gateway base URL and choose (or enter) your published agent ID. Click **Test connection**.
+4. Place the widget with the `[newtide_agent]` shortcode or the **NewTide Agent** block.
+
+Until a gateway URL and credential are configured, the plugin runs against a built-in mock so you can preview the experience.
+
+== Configuration constants ==
+
+Define these in `wp-config.php`:
+
+* `NPA_GATEWAY_KEY` — gateway credential (preferred; never stored in the database).
+* `NPA_GATEWAY_BASE_URL` — overrides the base URL set in the admin.
+* `NPA_HTTP_TIMEOUT` — request timeout in seconds (default 15).
+* `NPA_LOG_ENABLED` — force call logging on or off.
+* `NPA_FORCE_MOCK` — force the mock client (useful on staging).
 
 == External services ==
 
-This plugin sends end-user chat messages and minimal page context (URL, title,
-locale) to the NewTide Public Agent Gateway to obtain agent replies. Full
-external-service disclosure, the data sent, and links to the privacy policy and
-terms will be completed before public release.
+This plugin connects to the **NewTide Public Agent Gateway** to obtain agent replies. When a visitor sends a message, the plugin transmits, from your server:
+
+* the visitor's message text;
+* an opaque conversation ID used to thread the exchange;
+* page context: the page URL, page title, and locale;
+* metadata: a source tag, the plugin version, and your site host.
+
+Data is sent only when a visitor interacts with the widget. The gateway credential is sent as an authorization header from your server and is never exposed to the browser. By default the plugin stores only call **metadata** (timestamps, latency, status, token counts) — never message content. Storing transcript content is an explicit, off-by-default option.
+
+Confirm the gateway's provider, terms, and privacy policy before enabling on a production or EU-facing site.
+
+== Frequently Asked Questions ==
+
+= Is my gateway key exposed to visitors? =
+No. The browser talks only to your site's own REST proxy; the credential is added server-side. Prefer defining `NPA_GATEWAY_KEY` in `wp-config.php` so it never touches the database.
+
+= Does it store conversations? =
+By default it stores only call metadata (no message content). Transcript storage is an explicit opt-in with a retention window and is off by default.
+
+= Can I use it before the gateway is ready? =
+Yes. Without a configured URL and credential the plugin runs against a deterministic mock, so you can build and preview the widget.
+
+= Does the plugin prevent abuse or control cost? =
+Those are enforced by the gateway. The plugin offers an optional courtesy daily cap and a per-request throttle, but the authoritative controls live gateway-side.
 
 == Changelog ==
 
 = 0.1.0 =
-* Scaffold: plugin bootstrap, structured logger, Service Status registry,
-  deterministic test runner, coding-standards + deployment tooling.
+Initial build (feature-complete against the mock gateway):
+* Plugin scaffold, coding standards, and git-as-deploy tooling.
+* Gateway client contract with mock and HTTP implementations.
+* Settings storage with whitelisting sanitization and wp-config-first secret handling.
+* Durable usage table (dual-write), courtesy budget meter, and Service Status.
+* Admin page: General / Agent / Service Status / Tests.
+* REST proxy with nonce-protected permission callback and friendly error mapping.
+* Accessible front-end widget, `[newtide_agent]` shortcode, and Gutenberg block.

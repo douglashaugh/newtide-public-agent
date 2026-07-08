@@ -31,6 +31,8 @@ class NPA_Budget {
 	private $store;
 
 	/**
+	 * Constructor.
+	 *
 	 * @param NPA_Settings $settings Config provider.
 	 * @param NPA_Store    $store    Usage store.
 	 */

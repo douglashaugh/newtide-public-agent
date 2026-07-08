@@ -54,11 +54,13 @@ class NPA_Gateway_Client_Http implements NPA_Gateway_Client {
 	private $site;
 
 	/**
-	 * @param string   $base_url Gateway base URL.
-	 * @param string   $key      Credential.
-	 * @param int|null $timeout  Seconds; defaults to NPA_HTTP_TIMEOUT or 15.
-	 * @param string|null $version Plugin version.
-	 * @param string|null $site    Site host.
+	 * Constructor.
+	 *
+	 * @param string      $base_url Gateway base URL.
+	 * @param string      $key      Credential.
+	 * @param int|null    $timeout  Seconds; defaults to NPA_HTTP_TIMEOUT or 15.
+	 * @param string|null $version  Plugin version.
+	 * @param string|null $site     Site host.
 	 */
 	public function __construct( $base_url, $key, $timeout = null, $version = null, $site = null ) {
 		$this->base_url = untrailingslashit( (string) $base_url );
@@ -137,7 +139,8 @@ class NPA_Gateway_Client_Http implements NPA_Gateway_Client {
 		);
 
 		if ( is_wp_error( $response ) ) {
-			throw new NPA_Gateway_Exception( $response->get_error_message(), 'transport', 0 );
+			// Internal, log-facing message — not browser output.
+			throw new NPA_Gateway_Exception( $response->get_error_message(), 'transport', 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		}
 
 		$code = (int) wp_remote_retrieve_response_code( $response );
@@ -232,7 +235,8 @@ class NPA_Gateway_Client_Http implements NPA_Gateway_Client {
 	 */
 	private function parse_or_throw( $response ) {
 		if ( is_wp_error( $response ) ) {
-			throw new NPA_Gateway_Exception( $response->get_error_message(), 'transport', 0 );
+			// Internal, log-facing message — not browser output.
+			throw new NPA_Gateway_Exception( $response->get_error_message(), 'transport', 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		}
 
 		$code = (int) wp_remote_retrieve_response_code( $response );
@@ -247,7 +251,8 @@ class NPA_Gateway_Client_Http implements NPA_Gateway_Client {
 		}
 
 		$message = isset( $data['error']['message'] ) ? (string) $data['error']['message'] : ( 'Gateway error (HTTP ' . $code . ').' );
-		throw new NPA_Gateway_Exception( $message, self::code_for_status( $code ), $code );
+		// Internal, log-facing message — not browser output.
+		throw new NPA_Gateway_Exception( $message, self::code_for_status( $code ), $code ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
 
 	/**
