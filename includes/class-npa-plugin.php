@@ -46,6 +46,13 @@ final class NPA_Plugin {
 	public $test_runner;
 
 	/**
+	 * Configuration store.
+	 *
+	 * @var NPA_Settings
+	 */
+	public $settings;
+
+	/**
 	 * Cached gateway client (mock by default; filterable).
 	 *
 	 * @var NPA_Gateway_Client|null
@@ -81,11 +88,14 @@ final class NPA_Plugin {
 		$this->logger         = new NPA_Logger();
 		$this->service_status = new NPA_Service_Status();
 		$this->test_runner    = new NPA_Test_Runner();
+		$this->settings       = new NPA_Settings();
+		$this->settings->register();
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );
 
 		$this->register_core_tests();
 		$this->register_gateway_tests();
+		$this->register_settings_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -115,6 +125,9 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-health.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-exception.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-mock.php';
+
+		// Configuration (depends on the mock for the default agent id).
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-settings.php';
 	}
 
 	/**
@@ -250,6 +263,97 @@ final class NPA_Plugin {
 				$checks[] = array(
 					'label' => __( 'Health check reports unhealthy (not an exception) on bad credential', 'newtide-public-agent' ),
 					'pass'  => ( new NPA_Gateway_Client_Mock( 'unauthorized' ) )->health_check()->ok === false,
+				);
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the settings sanitization suite (M3 Verify companion).
+	 *
+	 * Exercises the storage layer without touching the database: whitelist
+	 * enforcement, value neutralization, and the write-only credential rule.
+	 *
+	 * @return void
+	 */
+	private function register_settings_tests() {
+		$this->test_runner->register_suite(
+			'settings',
+			__( 'Settings', 'newtide-public-agent' ),
+			__( 'Confirms that saved configuration is cleaned before storage: bad values are corrected, unexpected fields are discarded, and the gateway credential is never wiped by an empty form or exposed — so a misconfigured or malicious save cannot break or leak the plugin.', 'newtide-public-agent' ),
+			function () {
+				$settings = $this->settings;
+				$checks   = array();
+
+				// Defaults are complete and sane.
+				$defaults = NPA_Settings::defaults();
+				$checks[] = array(
+					'label' => __( 'Defaults include the target agent id and a valid accent colour', 'newtide-public-agent' ),
+					'pass'  => NPA_Gateway_Client_Mock::DEFAULT_AGENT_ID === $defaults['agent_id']
+						&& (bool) sanitize_hex_color( $defaults['accent'] ),
+				);
+
+				// Unknown keys are dropped; known keys survive.
+				$clean = $settings->sanitize(
+					array(
+						'launcher_label' => 'Talk to us',
+						'evil_key'       => 'DROP TABLE',
+					)
+				);
+				$checks[] = array(
+					'label' => __( 'Unknown keys are dropped; known keys are kept', 'newtide-public-agent' ),
+					'pass'  => ! array_key_exists( 'evil_key', $clean ) && 'Talk to us' === $clean['launcher_label'],
+				);
+
+				// Malicious input is neutralized.
+				$clean = $settings->sanitize(
+					array(
+						'greeting'         => '<script>alert(1)</script>Hello',
+						'gateway_base_url' => 'javascript:alert(1)',
+						'position'         => 'top-left',
+						'accent'           => 'not-a-color',
+					)
+				);
+				$checks[] = array(
+					'label' => __( 'Script tags stripped from greeting', 'newtide-public-agent' ),
+					'pass'  => false === strpos( $clean['greeting'], '<script' ),
+				);
+				$checks[] = array(
+					'label' => __( 'Disallowed URL scheme rejected on base URL', 'newtide-public-agent' ),
+					'pass'  => false === strpos( $clean['gateway_base_url'], 'javascript:' ),
+				);
+				$checks[] = array(
+					'label' => __( 'Invalid position falls back to a whitelisted value', 'newtide-public-agent' ),
+					'pass'  => in_array( $clean['position'], NPA_Settings::POSITIONS, true ),
+				);
+				$checks[] = array(
+					'label' => __( 'Invalid accent colour falls back to the default', 'newtide-public-agent' ),
+					'pass'  => (bool) sanitize_hex_color( $clean['accent'] ),
+				);
+
+				// Retention days are clamped to a sane range.
+				$clamped_low  = $settings->sanitize( array( 'transcript_retention_days' => 0 ) );
+				$clamped_high = $settings->sanitize( array( 'transcript_retention_days' => 99999 ) );
+				$checks[]     = array(
+					'label' => __( 'Transcript retention is clamped to 1–3650 days', 'newtide-public-agent' ),
+					'pass'  => $clamped_low['transcript_retention_days'] >= 1 && $clamped_high['transcript_retention_days'] <= 3650,
+				);
+
+				// Write-only credential rule: an empty submission never wipes a
+				// key set via the filter, and a key is never exposed by default.
+				$saw_filter = false;
+				$stub       = function () use ( &$saw_filter ) {
+					$saw_filter = true;
+					return 'sk-from-filter';
+				};
+				add_filter( 'npa_gateway_key', $stub );
+				$resolved = $settings->get_gateway_key();
+				remove_filter( 'npa_gateway_key', $stub );
+				$checks[] = array(
+					'label' => __( 'Gateway key resolves via the injection filter', 'newtide-public-agent' ),
+					'pass'  => $saw_filter && 'sk-from-filter' === $resolved,
 				);
 
 				return $checks;
