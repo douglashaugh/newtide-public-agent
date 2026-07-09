@@ -58,14 +58,14 @@ $npa_current      = $settings->get_agent_id();
 		</tr>
 
 		<tr>
-			<th scope="row"><label for="npa-platform-url"><?php esc_html_e( 'Platform URL', 'newtide-public-agent' ); ?></label></th>
+			<th scope="row"><label for="npa-platform-url"><?php esc_html_e( 'Platform URL (advanced)', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<?php if ( defined( 'NPA_PLATFORM_URL' ) ) : ?>
 					<input type="url" id="npa-platform-url" class="regular-text" value="<?php echo esc_attr( $settings->get_platform_url() ); ?>" disabled />
 					<p class="description"><?php esc_html_e( 'Defined via the NPA_PLATFORM_URL constant.', 'newtide-public-agent' ); ?></p>
 				<?php else : ?>
-					<input type="url" id="npa-platform-url" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[platform_url]" value="<?php echo esc_attr( $settings->get( 'platform_url' ) ); ?>" placeholder="https://uat-ai.newtide.ai" />
-					<p class="description"><?php esc_html_e( 'RisingTide host that serves agent-embed.js. UAT: https://uat-ai.newtide.ai — PROD: https://ai.newtide.ai', 'newtide-public-agent' ); ?></p>
+					<input type="url" id="npa-platform-url" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[platform_url]" value="<?php echo esc_attr( $settings->get( 'platform_url' ) ); ?>" placeholder="https://ai.newtide.ai" />
+					<p class="description"><?php esc_html_e( 'Advanced — leave as the production default (https://ai.newtide.ai) unless NewTide tells you otherwise. (Internal UAT testing uses https://uat-ai.newtide.ai.)', 'newtide-public-agent' ); ?></p>
 				<?php endif; ?>
 			</td>
 		</tr>

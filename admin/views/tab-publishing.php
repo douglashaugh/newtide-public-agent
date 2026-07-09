@@ -50,7 +50,7 @@ $npa_agent_id = $settings->get_agent_id();
 			<strong><?php esc_html_e( 'Copy the key right away', 'newtide-public-agent' ); ?></strong>
 			<?php echo wp_kses_post( __( 'RisingTide shows your API key and a ready-to-paste embed snippet. <strong>Copy the key immediately — the full key is shown only once.</strong> If you lose it, you will have to create a new key. The snippet looks like this:', 'newtide-public-agent' ) ); ?>
 			<code class="npa-code">&lt;script
-	src="https://uat-ai.newtide.ai/agent-embed.js"
+	src="https://ai.newtide.ai/agent-embed.js"
 	data-api-key="pk_••••••••••••••••••••••••••••"&gt;
 &lt;/script&gt;</code>
 		</li>

@@ -125,7 +125,7 @@ class NPA_Settings {
 			// Connection (M11): transport + embed-mode config.
 			'mode'                      => 'proxy',
 			'public_key'                => '', // pk_ publishable key for embed mode (not secret).
-			'platform_url'              => 'https://uat-ai.newtide.ai',
+			'platform_url'              => 'https://ai.newtide.ai', // PROD; override with NPA_PLATFORM_URL for internal UAT testing.
 			'placement'                 => 'floating',
 			// Appearance.
 			'header_title'              => __( 'Chat with our agent', 'newtide-public-agent' ),

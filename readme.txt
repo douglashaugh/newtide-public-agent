@@ -39,8 +39,10 @@ Until a gateway URL and credential are configured, the plugin runs against a bui
 
 Define these in `wp-config.php`:
 
-* `NPA_GATEWAY_KEY` — gateway credential (preferred; never stored in the database).
-* `NPA_GATEWAY_BASE_URL` — overrides the base URL set in the admin.
+* `NPA_GATEWAY_KEY` — gateway credential for Proxy mode (preferred; never stored in the database).
+* `NPA_GATEWAY_BASE_URL` — overrides the Proxy-mode base URL set in the admin.
+* `NPA_PUBLIC_KEY` — publishable `pk_` key for Embed mode (overrides the admin field).
+* `NPA_PLATFORM_URL` — RisingTide host for Embed mode; defaults to production (`https://ai.newtide.ai`). Set to `https://uat-ai.newtide.ai` only for internal NewTide testing.
 * `NPA_HTTP_TIMEOUT` — request timeout in seconds (default 15).
 * `NPA_LOG_ENABLED` — force call logging on or off.
 * `NPA_FORCE_MOCK` — force the mock client (useful on staging).

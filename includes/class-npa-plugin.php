@@ -938,6 +938,21 @@ final class NPA_Plugin {
 					'pass'  => WP_Block_Type_Registry::get_instance()->is_registered( 'newtide/agent' ),
 				);
 
+				// Pin proxy mode + enabled so the render check is deterministic
+				// regardless of the site's live connection mode.
+				$prev = get_option( 'npa_options' );
+				update_option(
+					'npa_options',
+					array_merge(
+						NPA_Settings::defaults(),
+						is_array( $prev ) ? $prev : array(),
+						array(
+							'mode'    => 'proxy',
+							'enabled' => true,
+						)
+					)
+				);
+
 				// Render the shortcode with a sentinel credential injected, and
 				// assert it appears nowhere in the output.
 				$sentinel = 'sk-SECRET-should-never-render';
@@ -958,6 +973,12 @@ final class NPA_Plugin {
 					'label' => __( 'The gateway credential never appears in front-end output', 'newtide-public-agent' ),
 					'pass'  => '' !== $sentinel && false === strpos( $html, $sentinel ),
 				);
+
+				if ( false !== $prev ) {
+					update_option( 'npa_options', $prev );
+				} else {
+					delete_option( 'npa_options' );
+				}
 
 				return $checks;
 			}
