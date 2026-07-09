@@ -10,6 +10,8 @@
 	<exclude-pattern>*/lib/plugin-update-checker/*</exclude-pattern>
 	<!-- WordPress block-asset manifests must use this exact name. -->
 	<exclude-pattern>*/src/block/index.asset.php</exclude-pattern>
+	<!-- Inline SVG brand asset (generated markup, not hand-authored code). -->
+	<exclude-pattern>*/admin/views/brand-logo.php</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="colors"/>

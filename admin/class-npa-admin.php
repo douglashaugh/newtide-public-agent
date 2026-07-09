@@ -97,14 +97,14 @@ class NPA_Admin {
 			'npa-admin',
 			NPA_PLUGIN_URL . 'assets/css/newtide-public-agent-admin.css',
 			array(),
-			NPA_VERSION
+			$this->asset_version( 'assets/css/newtide-public-agent-admin.css' )
 		);
 
 		wp_enqueue_script(
 			'npa-admin',
 			NPA_PLUGIN_URL . 'assets/js/newtide-public-agent-admin.js',
 			array(),
-			NPA_VERSION,
+			$this->asset_version( 'assets/js/newtide-public-agent-admin.js' ),
 			true
 		);
 
@@ -119,6 +119,20 @@ class NPA_Admin {
 				'errorText'   => __( 'Request failed. Please try again.', 'newtide-public-agent' ),
 			)
 		);
+	}
+
+	/**
+	 * Cache-busting version for a bundled asset: the file's modification time
+	 * when it can be read, else the plugin version. Keeps the browser from
+	 * serving a stale stylesheet after an in-place update.
+	 *
+	 * @param string $relative_path Path relative to the plugin directory.
+	 * @return string
+	 */
+	private function asset_version( $relative_path ) {
+		$path  = NPA_PLUGIN_DIR . $relative_path;
+		$mtime = is_readable( $path ) ? filemtime( $path ) : false;
+		return false !== $mtime ? (string) $mtime : NPA_VERSION;
 	}
 
 	// Page rendering.
@@ -182,7 +196,16 @@ class NPA_Admin {
 		$settings  = $this->plugin->settings;
 
 		echo '<div class="wrap npa-wrap">';
-		echo '<h1>' . esc_html__( 'NewTide Public Agent', 'newtide-public-agent' ) . '</h1>';
+
+		// Branded header — the NewTide wordmark (inline, recolorable) + product name.
+		echo '<div class="npa-brand-header">';
+		echo '<span class="npa-brand-logo-wrap">';
+		require NPA_PLUGIN_DIR . 'admin/views/brand-logo.php';
+		echo '</span>';
+		echo '<span class="npa-brand-sep" aria-hidden="true"></span>';
+		echo '<h1 class="npa-brand-title">' . esc_html__( 'Public Agent', 'newtide-public-agent' ) . '</h1>';
+		echo '<span class="npa-brand-tagline">' . esc_html__( 'The Tide that Lifts All Boats', 'newtide-public-agent' ) . '</span>';
+		echo '</div>';
 
 		echo '<h2 class="nav-tab-wrapper">';
 		foreach ( $this->tabs() as $slug => $label ) {
@@ -200,6 +223,51 @@ class NPA_Admin {
 			require $view;
 		}
 
+		echo '</div>';
+	}
+
+	/**
+	 * Render a tab's intro "hero" — a brand-tinted icon, the page title, and a
+	 * one-line description of what the tab is for. Gives each page an identity
+	 * beyond the stock WordPress form.
+	 *
+	 * @param string $icon  Dashicon slug (e.g. "dashicons-format-chat").
+	 * @param string $title Tab title.
+	 * @param string $desc  One-line description.
+	 * @return void
+	 */
+	public function tab_intro( $icon, $title, $desc ) {
+		printf(
+			'<div class="npa-tab-intro"><span class="npa-tab-intro__icon dashicons %s" aria-hidden="true"></span><div><h2 class="npa-tab-intro__title">%s</h2><p class="npa-tab-intro__desc">%s</p></div></div>',
+			esc_attr( $icon ),
+			esc_html( $title ),
+			esc_html( $desc )
+		);
+	}
+
+	/**
+	 * Open a settings "card" — a white panel with a brand-accent header. Pair
+	 * with card_close(). Keeps related fields visually grouped.
+	 *
+	 * @param string $title Card title.
+	 * @param string $desc  Optional sub-line.
+	 * @return void
+	 */
+	public function card_open( $title, $desc = '' ) {
+		echo '<div class="npa-card"><div class="npa-card__head">';
+		echo '<h3 class="npa-card__title">' . esc_html( $title ) . '</h3>';
+		if ( '' !== $desc ) {
+			echo '<p class="npa-card__desc">' . esc_html( $desc ) . '</p>';
+		}
+		echo '</div>';
+	}
+
+	/**
+	 * Close a card opened with card_open().
+	 *
+	 * @return void
+	 */
+	public function card_close() {
 		echo '</div>';
 	}
 

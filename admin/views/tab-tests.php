@@ -13,9 +13,11 @@ defined( 'ABSPATH' ) || exit;
 
 $npa_snapshot = NPA_Plugin::instance()->test_runner->last_snapshot();
 ?>
-<h2><?php esc_html_e( 'Tests', 'newtide-public-agent' ); ?></h2>
+<?php $npa_admin->tab_intro( 'dashicons-yes-alt', __( 'Tests', 'newtide-public-agent' ), __( 'A fast, deterministic battery — quality control you can run any time.', 'newtide-public-agent' ) ); ?>
+
+<?php $npa_admin->card_open( __( 'Test battery', 'newtide-public-agent' ), __( 'Runs against fixtures and the mock gateway — never live traffic.', 'newtide-public-agent' ) ); ?>
 <p class="description">
-	<?php esc_html_e( 'A fast, deterministic battery that runs against fixtures and the mock gateway — never live traffic. It is both quality control and a plain-language record of what the plugin guarantees.', 'newtide-public-agent' ); ?>
+	<?php esc_html_e( 'Both quality control and a plain-language record of what the plugin guarantees.', 'newtide-public-agent' ); ?>
 </p>
 
 <p class="npa-actions">
@@ -29,3 +31,4 @@ $npa_snapshot = NPA_Plugin::instance()->test_runner->last_snapshot();
 	echo $npa_admin->results_html( $npa_snapshot ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	?>
 </div>
+<?php $npa_admin->card_close(); ?>

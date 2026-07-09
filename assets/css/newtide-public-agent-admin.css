@@ -1,7 +1,310 @@
 /* NewTide Public Agent — admin styles (scoped to the plugin's pages). */
 
+/* NewTide brand palette — taken from the official logo. */
+.npa-wrap {
+	--npa-navy: #0a348b;
+	--npa-azure: #0090fc;
+	--npa-brand-grad: linear-gradient( 120deg, #0a348b 0%, #0090fc 100% );
+	--npa-tint: #eef5ff;
+}
+
+/* Light NewTide tint filling the whole admin canvas for our page. */
+body.toplevel_page_newtide-public-agent,
+body.toplevel_page_newtide-public-agent #wpcontent,
+body.toplevel_page_newtide-public-agent #wpbody-content {
+	background: #eaf2fc;
+}
+
+/* Use the full admin canvas — trim WordPress's default gutters so the
+   three-column layout runs edge to edge. */
+body.toplevel_page_newtide-public-agent #wpcontent {
+	padding-left: 24px;
+}
+
+body.toplevel_page_newtide-public-agent #wpbody-content {
+	padding-right: 44px;
+}
+
+body.toplevel_page_newtide-public-agent .npa-wrap {
+	margin: 0.5rem 0 0;
+	max-width: none;
+}
+
+/* Branded header banner. */
+.npa-brand-header {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	margin: 2rem 0 1.5rem;
+	padding: 1.15rem 1.5rem;
+	background: var( --npa-brand-grad );
+	border-radius: 14px;
+	box-shadow: 0 8px 24px rgba( 10, 52, 139, 0.28 );
+	color: #fff;
+	position: relative;
+	overflow: hidden;
+}
+
+/* Faint tide/wave highlight in the corner. */
+.npa-brand-header::after {
+	content: "";
+	position: absolute;
+	right: -60px;
+	top: -80px;
+	width: 260px;
+	height: 260px;
+	background: radial-gradient( circle, rgba( 255, 255, 255, 0.18 ), transparent 70% );
+	pointer-events: none;
+}
+
+.npa-brand-logo-wrap {
+	display: inline-flex;
+	align-items: center;
+}
+
+.npa-brand-logo {
+	height: 30px;
+	width: auto;
+	color: #fff; /* Drives the currentColor logo fill. */
+	display: block;
+}
+
+.npa-brand-sep {
+	width: 1px;
+	height: 30px;
+	background: rgba( 255, 255, 255, 0.4 );
+}
+
+.npa-wrap h1.npa-brand-title {
+	margin: 0;
+	padding: 0;
+	color: #fff;
+	font-size: 1.15rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+
+.npa-brand-tagline {
+	margin-left: auto;
+	font-size: 0.85rem;
+	font-style: italic;
+	opacity: 0.85;
+	white-space: nowrap;
+}
+
+@media ( max-width: 782px ) {
+	.npa-brand-tagline {
+		display: none;
+	}
+}
+
+/* Per-tab intro "hero" — brand-tinted icon + title + purpose line. */
+.npa-tab-intro {
+	display: flex;
+	align-items: center;
+	gap: 0.9rem;
+	margin: 0 0 1.4rem;
+}
+
+.npa-tab-intro__icon {
+	flex: 0 0 auto;
+	width: 46px;
+	height: 46px;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 12px;
+	background: var( --npa-tint );
+	border: 1px solid rgba( 0, 144, 252, 0.18 );
+	color: var( --npa-navy );
+}
+
+.npa-tab-intro__icon.dashicons {
+	font-size: 24px;
+	width: 46px;
+	height: 46px;
+	line-height: 46px;
+}
+
+.npa-tab-intro__title {
+	margin: 0;
+	padding: 0;
+	font-size: 1.3rem;
+	line-height: 1.2;
+	color: var( --npa-navy );
+	font-weight: 600;
+}
+
+.npa-tab-intro__desc {
+	margin: 0.2rem 0 0;
+	color: #50575e;
+	font-size: 0.9rem;
+	max-width: 44rem;
+}
+
+/* Settings "cards" — group related fields with a brand-accent header. */
+.npa-card {
+	position: relative;
+	background: #fff;
+	border: 1px solid #e2e4e7;
+	border-radius: 12px;
+	margin: 0 0 1.25rem;
+	padding: 0 1.5rem 0.75rem;
+	overflow: hidden;
+	box-shadow: 0 1px 2px rgba( 16, 24, 40, 0.05 );
+}
+
+/* Brand accent bar across the top of every card. */
+.npa-card::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 3px;
+	background: var( --npa-brand-grad );
+}
+
+.npa-card__head {
+	padding: 1.15rem 0 0.35rem;
+	border-bottom: 1px solid #f0f0f1;
+	margin-bottom: 0.25rem;
+}
+
+.npa-card__title {
+	margin: 0;
+	padding: 0;
+	font-size: 1rem;
+	font-weight: 600;
+	color: var( --npa-navy );
+}
+
+.npa-card__desc {
+	margin: 0.2rem 0 0;
+	color: #646970;
+	font-size: 0.85rem;
+}
+
+/* Tighten the stock form-table when it lives inside a card. */
+.npa-card .form-table {
+	margin-top: 0.25rem;
+}
+
+.npa-card .form-table th {
+	color: var( --npa-navy );
+	font-weight: 600;
+}
+
+.npa-card .npa-status {
+	margin: 0.75rem 0 0.25rem;
+}
+
+/* Three-column customization layout — fills a laptop screen, with a thin
+   NewTide-blue rule down the gaps between columns. Each settings tab supplies
+   exactly three cards, so every column is filled. */
+.npa-columns {
+	column-count: 3;
+	column-gap: 2.5rem;
+	column-rule: 1px solid #c6dbf3;
+	margin: 0 0 0.5rem;
+}
+
+.npa-columns .npa-card {
+	break-inside: avoid;
+	margin: 0 0 1.25rem;
+}
+
+/* Let the customization forms use the full width now that they're columned. */
 .npa-wrap .npa-form {
-	max-width: 40rem;
+	max-width: none;
+}
+
+/* Inside a narrow column, stack each field (label above its control) instead
+   of the stock side-by-side form-table cells. */
+.npa-columns .form-table,
+.npa-columns .form-table tbody,
+.npa-columns .form-table tr,
+.npa-columns .form-table th,
+.npa-columns .form-table td {
+	display: block;
+	width: auto;
+}
+
+.npa-columns .form-table th {
+	padding: 1rem 0 0.2rem;
+}
+
+.npa-columns .form-table td {
+	padding: 0 0 0.5rem;
+}
+
+/* Full-width text controls so nothing overflows the column. */
+.npa-columns .npa-card .regular-text,
+.npa-columns .npa-card input[type="url"],
+.npa-columns .npa-card input[type="text"],
+.npa-columns .npa-card .large-text,
+.npa-columns .npa-card select {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+/* Custom "pill" tabs — replaces the stock WP nav-tab look. */
+.npa-wrap .nav-tab-wrapper {
+	border-bottom: none;
+	margin: 0 0 1.5rem;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.4rem;
+}
+
+.npa-wrap .nav-tab {
+	margin: 0;
+	border: 1px solid #dcdcde;
+	border-radius: 999px;
+	background: #fff;
+	color: var( --npa-navy );
+	padding: 0.4rem 0.95rem;
+	font-weight: 600;
+	font-size: 0.85rem;
+	line-height: 1.6;
+	box-shadow: none;
+	transition: all 0.15s ease;
+}
+
+.npa-wrap .nav-tab:hover {
+	background: var( --npa-tint );
+	border-color: var( --npa-azure );
+	color: var( --npa-navy );
+}
+
+.npa-wrap .nav-tab-active,
+.npa-wrap .nav-tab-active:hover,
+.npa-wrap .nav-tab-active:focus {
+	background: var( --npa-brand-grad );
+	border-color: transparent;
+	color: #fff;
+	box-shadow: 0 3px 10px rgba( 10, 52, 139, 0.25 );
+}
+
+/* Brand the primary actions + links inside our pages. */
+.npa-wrap .button-primary {
+	background: var( --npa-navy );
+	border-color: var( --npa-navy );
+}
+
+.npa-wrap .button-primary:hover,
+.npa-wrap .button-primary:focus {
+	background: var( --npa-azure );
+	border-color: var( --npa-azure );
+	box-shadow: none;
+}
+
+.npa-wrap a:not( .nav-tab ):not( .button ) {
+	color: var( --npa-azure );
 }
 
 .npa-actions {
@@ -97,13 +400,73 @@
 	color: #bb2124;
 }
 
+/* Page-targeting checkbox list (Agent tab). */
+.npa-page-list {
+	margin: 0.5rem 0 0 1.75rem;
+	padding: 0.5rem 0.75rem;
+	max-height: 14rem;
+	overflow-y: auto;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	background: #fff;
+}
+
+.npa-page-list li {
+	margin: 0.1rem 0;
+}
+
+/* A two-column variant of the card layout (used by the Publishing guide). */
+.npa-columns--2 {
+	column-count: 2;
+}
+
 /* Publishing guide tab. */
 .npa-guide {
-	max-width: 46rem;
+	max-width: none;
+}
+
+.npa-guide__lead {
+	max-width: 52rem;
+	font-size: 0.98rem;
 }
 
 .npa-guide h2 {
-	margin-top: 1.75rem;
+	margin-top: 2rem;
+	color: var( --npa-navy );
+}
+
+/* Prerequisites as a three-across checklist rather than a plain bullet list. */
+.npa-guide .npa-checklist {
+	list-style: none;
+	margin: 0.5rem 0 0.25rem;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 15rem, 1fr ) );
+	gap: 1rem 1.75rem;
+}
+
+.npa-guide .npa-checklist li {
+	position: relative;
+	margin: 0;
+	padding-left: 1.9rem;
+	font-size: 0.9rem;
+	line-height: 1.5;
+}
+
+.npa-guide .npa-checklist li::before {
+	content: "✓";
+	position: absolute;
+	left: 0;
+	top: 0.05rem;
+	width: 1.3rem;
+	height: 1.3rem;
+	line-height: 1.3rem;
+	text-align: center;
+	border-radius: 50%;
+	background: var( --npa-tint );
+	color: var( --npa-navy );
+	font-weight: 700;
+	font-size: 0.75rem;
 }
 
 .npa-guide ol.npa-steps {
@@ -129,7 +492,7 @@
 	width: 1.75rem;
 	height: 1.75rem;
 	border-radius: 50%;
-	background: #2271b1;
+	background: var( --npa-brand-grad, #0a348b );
 	color: #fff;
 	font-weight: 700;
 	text-align: center;
@@ -159,7 +522,7 @@
 	margin: 1rem 0;
 	padding: 0.75rem 1rem;
 	background: #fff;
-	border-left: 4px solid #2271b1;
+	border-left: 4px solid var( --npa-azure, #0090fc );
 	border-radius: 0 4px 4px 0;
 }
 

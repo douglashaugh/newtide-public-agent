@@ -257,6 +257,16 @@ class NPA_Public {
 			return false;
 		}
 
+		// Page allowlist (Agent tab): when scoped to selected pages, show only on
+		// those. Empty selection means nowhere.
+		if ( 'selected' === (string) $s->get( 'page_scope', 'all' ) ) {
+			$allowed = array_filter( array_map( 'absint', (array) $s->get( 'page_ids', array() ) ) );
+			$current = (int) get_queried_object_id();
+			if ( ! $current || ! in_array( $current, $allowed, true ) ) {
+				return false;
+			}
+		}
+
 		// Per-page exclusion list.
 		$raw = (string) $s->get( 'exclude_ids', '' );
 		if ( '' !== $raw ) {

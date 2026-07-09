@@ -79,6 +79,13 @@ class NPA_Settings {
 	const PLACEMENTS = array( 'floating', 'inline' );
 
 	/**
+	 * Page-targeting scope: 'all' pages, or only a 'selected' set.
+	 *
+	 * @var string[]
+	 */
+	const PAGE_SCOPES = array( 'all', 'selected' );
+
+	/**
 	 * Register the setting with WordPress (sanitize callback lives here).
 	 *
 	 * The admin page fields are added later (M5); registering the setting now
@@ -138,6 +145,8 @@ class NPA_Settings {
 			'remember_state'            => false,
 			'audience'                  => 'everyone',
 			'exclude_ids'               => '', // Comma-separated post/page IDs to suppress on.
+			'page_scope'                => 'all', // 'all' pages or only the 'selected' ones.
+			'page_ids'                  => array(), // Selected page IDs when page_scope = 'selected'.
 			// Content / messaging.
 			'input_placeholder'         => __( 'Type your message', 'newtide-public-agent' ),
 			'suggested_prompts'         => '', // One prompt per line.
@@ -236,6 +245,17 @@ class NPA_Settings {
 			$clean['exclude_ids'] = implode( ',', array_unique( $ids ) );
 		} else {
 			$clean['exclude_ids'] = $existing['exclude_ids'];
+		}
+
+		// Page-targeting scope + the selected page ids (checkbox list).
+		$scope               = $has( 'page_scope' ) ? sanitize_key( $input['page_scope'] ) : $existing['page_scope'];
+		$clean['page_scope'] = in_array( $scope, self::PAGE_SCOPES, true ) ? $scope : 'all';
+
+		if ( $has( 'page_ids' ) ) {
+			$raw_pages         = ( isset( $input['page_ids'] ) && is_array( $input['page_ids'] ) ) ? $input['page_ids'] : array();
+			$clean['page_ids'] = array_values( array_unique( array_filter( array_map( 'absint', $raw_pages ) ) ) );
+		} else {
+			$clean['page_ids'] = is_array( $existing['page_ids'] ) ? array_values( array_filter( array_map( 'absint', $existing['page_ids'] ) ) ) : array();
 		}
 
 		// Position whitelist.

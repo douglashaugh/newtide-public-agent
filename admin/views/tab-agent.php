@@ -15,11 +15,20 @@ $npa_key_source   = $settings->key_source();
 $npa_key_constant = defined( 'NPA_GATEWAY_KEY' );
 $npa_agents       = $npa_admin->available_agents();
 $npa_current      = $settings->get_agent_id();
+$npa_pages        = get_pages(
+	array(
+		'post_status' => 'publish',
+		'sort_column' => 'menu_order,post_title',
+	)
+);
+$npa_page_scope   = (string) $settings->get( 'page_scope', 'all' );
+$npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', array() ) );
 ?>
+<?php $npa_admin->tab_intro( 'dashicons-admin-links', __( 'Agent connection', 'newtide-public-agent' ), __( 'Link this site to your published NewTide agent and choose where it appears.', 'newtide-public-agent' ) ); ?>
 <form method="post" action="options.php" class="npa-form">
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
 	<?php
-	$npa_present = array( 'mode', 'placement', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days' );
+	$npa_present = array( 'mode', 'placement', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days' );
 	if ( ! $npa_key_constant ) {
 		$npa_present[] = 'gateway_key';
 	}
@@ -32,6 +41,8 @@ $npa_current      = $settings->get_agent_id();
 	$npa_admin->present_fields( $npa_present );
 	?>
 
+	<div class="npa-columns">
+	<?php $npa_admin->card_open( __( 'Connection', 'newtide-public-agent' ), __( 'How this site talks to your NewTide agent.', 'newtide-public-agent' ) ); ?>
 	<table class="form-table" role="presentation">
 		<tr>
 			<th scope="row"><label for="npa-mode"><?php esc_html_e( 'Connection mode', 'newtide-public-agent' ); ?></label></th>
@@ -80,13 +91,48 @@ $npa_current      = $settings->get_agent_id();
 				<p class="description"><?php esc_html_e( 'Floating shows RisingTide’s bottom-right bubble on every allowed page. Inline mounts the chat where you place the shortcode/block (one per page). Applies to Embed mode; Appearance/Behavior options do not affect the embedded widget — those are set in RisingTide.', 'newtide-public-agent' ); ?></p>
 			</td>
 		</tr>
+	</table>
+	<?php $npa_admin->card_close(); ?>
 
+	<?php $npa_admin->card_open( __( 'Pages', 'newtide-public-agent' ), __( 'Where the chat is allowed to appear across your site.', 'newtide-public-agent' ) ); ?>
+	<table class="form-table" role="presentation">
 		<tr>
-			<td colspan="2">
-				<hr />
-				<p style="margin:0;"><strong><?php esc_html_e( 'Proxy-mode settings', 'newtide-public-agent' ); ?></strong> <span class="description"><?php esc_html_e( '(used only when Connection mode is Proxy)', 'newtide-public-agent' ); ?></span></p>
+			<th scope="row"><?php esc_html_e( 'Show on pages', 'newtide-public-agent' ); ?></th>
+			<td>
+				<fieldset>
+					<label>
+						<input type="radio" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[page_scope]" value="all" <?php checked( $npa_page_scope, 'all' ); ?> />
+						<?php esc_html_e( 'All pages', 'newtide-public-agent' ); ?>
+					</label><br />
+					<label>
+						<input type="radio" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[page_scope]" value="selected" <?php checked( $npa_page_scope, 'selected' ); ?> />
+						<?php esc_html_e( 'Only the pages I select below', 'newtide-public-agent' ); ?>
+					</label>
+					<?php if ( ! empty( $npa_pages ) ) : ?>
+						<ul class="npa-page-list">
+							<?php foreach ( $npa_pages as $npa_page ) : ?>
+								<li>
+									<label>
+										<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[page_ids][]" value="<?php echo esc_attr( (string) $npa_page->ID ); ?>" <?php checked( in_array( (int) $npa_page->ID, $npa_page_ids, true ) ); ?> />
+										<?php echo esc_html( '' !== $npa_page->post_title ? $npa_page->post_title : __( '(no title)', 'newtide-public-agent' ) ); ?>
+										<span class="description">#<?php echo (int) $npa_page->ID; ?></span>
+									</label>
+								</li>
+							<?php endforeach; ?>
+						</ul>
+					<?php else : ?>
+						<p class="description"><?php esc_html_e( 'No published pages found.', 'newtide-public-agent' ); ?></p>
+					<?php endif; ?>
+				</fieldset>
+				<p class="description"><?php esc_html_e( 'Where the chat may appear. “All pages” shows it site-wide; “Only the pages I select” limits it to the checked pages. Still subject to the Enable toggle and the audience / hide-list rules on the Behavior tab.', 'newtide-public-agent' ); ?></p>
 			</td>
 		</tr>
+
+	</table>
+	<?php $npa_admin->card_close(); ?>
+
+	<?php $npa_admin->card_open( __( 'Proxy-mode settings', 'newtide-public-agent' ), __( 'Used only when Connection mode is Proxy — the server-side gateway path.', 'newtide-public-agent' ) ); ?>
+	<table class="form-table" role="presentation">
 		<tr>
 			<th scope="row"><label for="npa-base-url"><?php esc_html_e( 'Gateway base URL', 'newtide-public-agent' ); ?></label></th>
 			<td>
@@ -173,6 +219,8 @@ $npa_current      = $settings->get_agent_id();
 			</td>
 		</tr>
 	</table>
+	<?php $npa_admin->card_close(); ?>
+	</div>
 
 	<p class="npa-actions">
 		<button type="button" class="button" id="npa-test-connection"><?php esc_html_e( 'Test connection', 'newtide-public-agent' ); ?></button>

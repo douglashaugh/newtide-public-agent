@@ -638,6 +638,21 @@ final class NPA_Plugin {
 						&& in_array( $bad_conn['placement'], NPA_Settings::PLACEMENTS, true ),
 				);
 
+				// Page targeting: invalid scope falls back; page ids are cleaned to
+				// a unique list of positive integers.
+				$pages    = $settings->sanitize(
+					array(
+						'page_scope' => 'sometimes',
+						'page_ids'   => array( '12', 'x', 0, 40, 40, '-3' ),
+					)
+				);
+				$checks[] = array(
+					'label' => __( 'Page scope falls back and selected page ids are normalized', 'newtide-public-agent' ),
+					'pass'  => in_array( $pages['page_scope'], NPA_Settings::PAGE_SCOPES, true )
+						&& is_array( $pages['page_ids'] )
+						&& array( 12, 40, 3 ) === $pages['page_ids'],
+				);
+
 				// A valid new position (top-left) is accepted, not rejected.
 				$top_left = $settings->sanitize( array( 'position' => 'top-left' ) );
 				$checks[] = array(
@@ -972,6 +987,26 @@ final class NPA_Plugin {
 				$checks[] = array(
 					'label' => __( 'The gateway credential never appears in front-end output', 'newtide-public-agent' ),
 					'pass'  => '' !== $sentinel && false === strpos( $html, $sentinel ),
+				);
+
+				// Page allowlist: scoped to a non-matching page id, the widget is
+				// suppressed (the test request has no queried object).
+				update_option(
+					'npa_options',
+					array_merge(
+						NPA_Settings::defaults(),
+						array(
+							'mode'       => 'proxy',
+							'enabled'    => true,
+							'page_scope' => 'selected',
+							'page_ids'   => array( 999999 ),
+						)
+					)
+				);
+				$scoped_html = do_shortcode( '[newtide_agent]' );
+				$checks[]    = array(
+					'label' => __( 'A page allowlist hides the widget on non-selected pages', 'newtide-public-agent' ),
+					'pass'  => '' === trim( $scoped_html ),
 				);
 
 				if ( false !== $prev ) {
