@@ -580,7 +580,7 @@ final class NPA_Plugin {
 					array(
 						'greeting'         => '<script>alert(1)</script>Hello',
 						'gateway_base_url' => 'javascript:alert(1)',
-						'position'         => 'top-left',
+						'position'         => 'sideways-up',
 						'accent'           => 'not-a-color',
 					)
 				);
@@ -607,6 +607,52 @@ final class NPA_Plugin {
 				$checks[]     = array(
 					'label' => __( 'Transcript retention is clamped to 1–3650 days', 'newtide-public-agent' ),
 					'pass'  => $clamped_low['transcript_retention_days'] >= 1 && $clamped_high['transcript_retention_days'] <= 3650,
+				);
+
+				// New customization whitelists fall back to safe values.
+				$bad_enums = $settings->sanitize(
+					array(
+						'theme'          => 'ultraviolet',
+						'launcher_shape' => 'triangle',
+						'audience'       => 'robots',
+					)
+				);
+				$checks[]  = array(
+					'label' => __( 'Invalid theme, launcher shape, and audience fall back to whitelisted values', 'newtide-public-agent' ),
+					'pass'  => in_array( $bad_enums['theme'], NPA_Settings::THEMES, true )
+						&& in_array( $bad_enums['launcher_shape'], NPA_Settings::SHAPES, true )
+						&& in_array( $bad_enums['audience'], NPA_Settings::AUDIENCES, true ),
+				);
+
+				// A valid new position (top-left) is accepted, not rejected.
+				$top_left = $settings->sanitize( array( 'position' => 'top-left' ) );
+				$checks[] = array(
+					'label' => __( 'Top-anchored positions are accepted', 'newtide-public-agent' ),
+					'pass'  => 'top-left' === $top_left['position'],
+				);
+
+				// Auto-open delay is clamped to 0–600 seconds.
+				$delay    = $settings->sanitize( array( 'auto_open_delay' => 99999 ) );
+				$checks[] = array(
+					'label' => __( 'Auto-open delay is clamped to at most 600 seconds', 'newtide-public-agent' ),
+					'pass'  => $delay['auto_open_delay'] <= 600,
+				);
+
+				// Exclude-IDs are normalized: non-numeric dropped, duplicates removed.
+				$ids      = $settings->sanitize( array( 'exclude_ids' => '12, abc, 40, 40' ) );
+				$checks[] = array(
+					'label' => __( 'Exclude-page IDs are normalized to a clean integer list', 'newtide-public-agent' ),
+					'pass'  => '12,40' === $ids['exclude_ids'],
+				);
+
+				// Suggested prompts are capped and blank lines dropped.
+				$prompts  = $settings->sanitize(
+					array( 'suggested_prompts' => "One\n\nTwo\nThree\nFour\nFive\nSix\nSeven\nEight" )
+				);
+				$lines    = array_filter( explode( "\n", $prompts['suggested_prompts'] ), 'strlen' );
+				$checks[] = array(
+					'label' => __( 'Suggested prompts drop blank lines and cap at six', 'newtide-public-agent' ),
+					'pass'  => count( $lines ) <= 6 && ! in_array( '', $lines, true ),
 				);
 
 				// Write-only credential rule: an empty submission never wipes a

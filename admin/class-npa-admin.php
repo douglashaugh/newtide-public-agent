@@ -141,10 +141,12 @@ class NPA_Admin {
 	 */
 	public function tabs() {
 		return array(
-			'general' => __( 'General', 'newtide-public-agent' ),
-			'agent'   => __( 'Agent', 'newtide-public-agent' ),
-			'status'  => __( 'Service Status', 'newtide-public-agent' ),
-			'tests'   => __( 'Tests', 'newtide-public-agent' ),
+			'general'    => __( 'General', 'newtide-public-agent' ),
+			'appearance' => __( 'Appearance', 'newtide-public-agent' ),
+			'behavior'   => __( 'Behavior', 'newtide-public-agent' ),
+			'agent'      => __( 'Agent', 'newtide-public-agent' ),
+			'status'     => __( 'Service Status', 'newtide-public-agent' ),
+			'tests'      => __( 'Tests', 'newtide-public-agent' ),
 		);
 	}
 

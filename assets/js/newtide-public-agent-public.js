@@ -27,6 +27,19 @@
 		this.agent = mount.getAttribute( 'data-agent' ) || '';
 		this.greeting = mount.getAttribute( 'data-greeting' ) || '';
 		this.label = mount.getAttribute( 'data-label' ) || 'Chat';
+		this.header = mount.getAttribute( 'data-header' ) || this.label;
+		this.placeholder = mount.getAttribute( 'data-placeholder' ) || t( 'input', 'Type your message' );
+		this.errorText = mount.getAttribute( 'data-error' ) || t( 'error', 'Something went wrong.' );
+		this.powered = '1' === mount.getAttribute( 'data-powered' );
+		this.remember = '1' === mount.getAttribute( 'data-remember' );
+		this.autoOpen = parseInt( mount.getAttribute( 'data-auto-open' ), 10 ) || 0;
+
+		var promptsRaw = mount.getAttribute( 'data-prompts' ) || '';
+		this.prompts = promptsRaw
+			? promptsRaw.split( '\n' ).map( function ( s ) { return s.trim(); } ).filter( function ( s ) { return s; } )
+			: [];
+
+		this.storageKey = 'npa_open_' + this.agent;
 		this.conversationId = '';
 		this.open = false;
 		this.panel = null;
@@ -36,7 +49,43 @@
 		if ( this.launcher ) {
 			this.launcher.addEventListener( 'click', this.toggle.bind( this ) );
 		}
+
+		this.maybeAutoOpen();
 	}
+
+	Widget.prototype.readStored = function () {
+		try {
+			return '1' === window.localStorage.getItem( this.storageKey );
+		} catch ( e ) {
+			return false;
+		}
+	};
+
+	Widget.prototype.writeStored = function ( isOpen ) {
+		if ( ! this.remember ) {
+			return;
+		}
+		try {
+			window.localStorage.setItem( this.storageKey, isOpen ? '1' : '0' );
+		} catch ( e ) {
+			/* Storage unavailable (private mode) — non-fatal. */
+		}
+	};
+
+	Widget.prototype.maybeAutoOpen = function () {
+		var self = this;
+		if ( this.remember && this.readStored() ) {
+			this.openPanel();
+			return;
+		}
+		if ( this.autoOpen > 0 ) {
+			window.setTimeout( function () {
+				if ( ! self.open ) {
+					self.openPanel();
+				}
+			}, this.autoOpen * 1000 );
+		}
+	};
 
 	Widget.prototype.toggle = function () {
 		if ( this.open ) {
@@ -53,10 +102,14 @@
 		this.open = true;
 		this.panel.hidden = false;
 		this.launcher.setAttribute( 'aria-expanded', 'true' );
-		if ( ! this.greeted && this.greeting ) {
-			this.addMessage( 'agent', this.greeting, false );
+		if ( ! this.greeted ) {
+			if ( this.greeting ) {
+				this.addMessage( 'agent', this.greeting, false );
+			}
+			this.renderPrompts();
 			this.greeted = true;
 		}
+		this.writeStored( true );
 		var input = this.input;
 		window.setTimeout( function () {
 			input.focus();
@@ -68,8 +121,35 @@
 		if ( this.panel ) {
 			this.panel.hidden = true;
 		}
+		this.writeStored( false );
 		this.launcher.setAttribute( 'aria-expanded', 'false' );
 		this.launcher.focus();
+	};
+
+	Widget.prototype.renderPrompts = function () {
+		if ( ! this.prompts.length ) {
+			return;
+		}
+		var wrap = el( 'div', 'newtide-public-agent__prompts' );
+		var self = this;
+		this.prompts.forEach( function ( text ) {
+			var chip = el( 'button', 'newtide-public-agent__prompt', { type: 'button' } );
+			chip.textContent = text;
+			chip.addEventListener( 'click', function () {
+				self.sendMessage( text );
+			} );
+			wrap.appendChild( chip );
+		} );
+		this.promptsEl = wrap;
+		this.log.appendChild( wrap );
+		this.log.scrollTop = this.log.scrollHeight;
+	};
+
+	Widget.prototype.clearPrompts = function () {
+		if ( this.promptsEl && this.promptsEl.parentNode ) {
+			this.promptsEl.parentNode.removeChild( this.promptsEl );
+		}
+		this.promptsEl = null;
 	};
 
 	Widget.prototype.build = function () {
@@ -81,7 +161,7 @@
 
 		var header = el( 'div', 'newtide-public-agent__header' );
 		var title = el( 'span', 'newtide-public-agent__title' );
-		title.textContent = this.label;
+		title.textContent = this.header;
 		var closeBtn = el( 'button', 'newtide-public-agent__close', {
 			type: 'button',
 			'aria-label': t( 'close', 'Close chat' )
@@ -100,8 +180,8 @@
 		var form = el( 'form', 'newtide-public-agent__form' );
 		var input = el( 'input', 'newtide-public-agent__input', {
 			type: 'text',
-			'aria-label': t( 'input', 'Type your message' ),
-			placeholder: t( 'input', 'Type your message' ),
+			'aria-label': this.placeholder,
+			placeholder: this.placeholder,
 			autocomplete: 'off'
 		} );
 		var send = el( 'button', 'newtide-public-agent__send', { type: 'submit' } );
@@ -113,6 +193,12 @@
 		panel.appendChild( header );
 		panel.appendChild( log );
 		panel.appendChild( form );
+
+		if ( this.powered ) {
+			var powered = el( 'div', 'newtide-public-agent__powered' );
+			powered.textContent = t( 'poweredBy', 'Powered by NewTide' );
+			panel.appendChild( powered );
+		}
 
 		panel.addEventListener( 'keydown', function ( e ) {
 			if ( 'Escape' === e.key ) {
@@ -168,9 +254,18 @@
 		if ( ! text ) {
 			return;
 		}
-
-		this.addMessage( 'user', text, true );
 		this.input.value = '';
+		this.sendMessage( text );
+	};
+
+	Widget.prototype.sendMessage = function ( text ) {
+		text = ( text || '' ).trim();
+		if ( ! text ) {
+			return;
+		}
+
+		this.clearPrompts();
+		this.addMessage( 'user', text, true );
 		this.setBusy( true );
 		this.showTyping();
 
@@ -205,14 +300,14 @@
 				}
 				this.addMessage( 'agent', res.data.reply, true );
 			} else {
-				var msg = ( res.data && res.data.error && res.data.error.message ) || t( 'error', 'Something went wrong.' );
+				var msg = ( res.data && res.data.error && res.data.error.message ) || this.errorText;
 				this.addMessage( 'agent', msg, true );
 			}
 			this.input.focus();
 		}.bind( this ) ).catch( function () {
 			this.hideTyping();
 			this.setBusy( false );
-			this.addMessage( 'agent', t( 'error', 'Something went wrong.' ), true );
+			this.addMessage( 'agent', this.errorText, true );
 			this.input.focus();
 		}.bind( this ) );
 	};

@@ -193,13 +193,138 @@
 	40% { opacity: 0.9; }
 }
 
-/* Dark scheme: colours only, never sizes. */
+/* Forced dark theme (admin: Colour scheme = Dark). */
+.newtide-public-agent--theme-dark {
+	--npa-surface: #1e1e1e;
+	--npa-text: #f0f0f1;
+	--npa-muted: #2f2f2f;
+	--npa-border: #3a3a3a;
+}
+
+/* Forced light theme (admin: Colour scheme = Light) — pins the light tokens
+   even when the visitor's OS is in dark mode. */
+.newtide-public-agent--theme-light {
+	--npa-surface: #ffffff;
+	--npa-text: #1e1e1e;
+	--npa-muted: #f0f0f1;
+	--npa-border: #dcdcde;
+}
+
+/* Auto scheme: follow the device, but never override a forced theme. */
 @media ( prefers-color-scheme: dark ) {
-	.newtide-public-agent {
+	.newtide-public-agent:not( .newtide-public-agent--theme-light ):not( .newtide-public-agent--theme-dark ) {
 		--npa-surface: #1e1e1e;
 		--npa-text: #f0f0f1;
 		--npa-muted: #2f2f2f;
 		--npa-border: #3a3a3a;
+	}
+}
+
+/* Top-anchored positions flip the vertical origin of the widget and panel. */
+.newtide-public-agent--top-right,
+.newtide-public-agent--top-left {
+	top: 1.25rem;
+	bottom: auto;
+}
+
+.newtide-public-agent--top-right {
+	right: 1.25rem;
+}
+
+.newtide-public-agent--top-left {
+	left: 1.25rem;
+}
+
+.newtide-public-agent--top-right .newtide-public-agent__panel,
+.newtide-public-agent--top-left .newtide-public-agent__panel {
+	top: 3.5rem;
+	bottom: auto;
+}
+
+.newtide-public-agent--top-right .newtide-public-agent__panel {
+	right: 0;
+}
+
+.newtide-public-agent--top-left .newtide-public-agent__panel {
+	left: 0;
+}
+
+/* Launcher shapes. Pill (default) shows the label; bubble shows a round icon
+   with the label kept for assistive tech only. */
+.newtide-public-agent__launcher-icon {
+	display: none;
+	width: 1.6rem;
+	height: 1.6rem;
+}
+
+.newtide-public-agent--shape-bubble .newtide-public-agent__launcher {
+	width: 3.5rem;
+	height: 3.5rem;
+	padding: 0;
+	border-radius: 50%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.newtide-public-agent--shape-bubble .newtide-public-agent__launcher-icon {
+	display: block;
+}
+
+.newtide-public-agent--shape-bubble .newtide-public-agent__launcher-text {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect( 0 0 0 0 );
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Suggested-prompt chips shown under the greeting. */
+.newtide-public-agent__prompts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+}
+
+.newtide-public-agent__prompt {
+	background: var( --npa-muted );
+	color: var( --npa-text );
+	border: 1px solid var( --npa-border );
+	border-radius: 999px;
+	padding: 0.35rem 0.7rem;
+	font: inherit;
+	font-size: 0.85em;
+	cursor: pointer;
+}
+
+.newtide-public-agent__prompt:hover {
+	border-color: var( --npa-accent );
+}
+
+.newtide-public-agent__prompt:focus-visible {
+	outline: 2px solid var( --npa-accent );
+	outline-offset: 2px;
+}
+
+/* "Powered by" footer. */
+.newtide-public-agent__powered {
+	padding: 0.35rem;
+	text-align: center;
+	font-size: 0.72em;
+	opacity: 0.6;
+	color: var( --npa-text );
+	background: var( --npa-surface );
+	border-top: 1px solid var( --npa-border );
+}
+
+/* Hide on small screens (admin: Behavior → Mobile). */
+@media ( max-width: 600px ) {
+	.newtide-public-agent--hide-mobile {
+		display: none;
 	}
 }
 

@@ -38,7 +38,28 @@ class NPA_Settings {
 	 *
 	 * @var string[]
 	 */
-	const POSITIONS = array( 'bottom-right', 'bottom-left' );
+	const POSITIONS = array( 'bottom-right', 'bottom-left', 'top-right', 'top-left' );
+
+	/**
+	 * Allowed colour-scheme themes ('auto' follows the visitor's OS setting).
+	 *
+	 * @var string[]
+	 */
+	const THEMES = array( 'auto', 'light', 'dark' );
+
+	/**
+	 * Allowed launcher shapes.
+	 *
+	 * @var string[]
+	 */
+	const SHAPES = array( 'pill', 'bubble' );
+
+	/**
+	 * Allowed audience gates for widget visibility.
+	 *
+	 * @var string[]
+	 */
+	const AUDIENCES = array( 'everyone', 'logged_in', 'anonymous' );
 
 	/**
 	 * Register the setting with WordPress (sanitize callback lives here).
@@ -84,6 +105,22 @@ class NPA_Settings {
 			'greeting'                  => __( 'Hi! How can I help you today?', 'newtide-public-agent' ),
 			'position'                  => 'bottom-right',
 			'accent'                    => '#2563eb',
+			// Appearance.
+			'header_title'              => __( 'Chat with our agent', 'newtide-public-agent' ),
+			'theme'                     => 'auto',
+			'launcher_shape'            => 'pill',
+			'powered_by'                => true,
+			// Behaviour.
+			'auto_open_delay'           => 0, // Seconds; 0 = do not auto-open.
+			'hide_on_mobile'            => false,
+			'remember_state'            => false,
+			'audience'                  => 'everyone',
+			'exclude_ids'               => '', // Comma-separated post/page IDs to suppress on.
+			// Content / messaging.
+			'input_placeholder'         => __( 'Type your message', 'newtide-public-agent' ),
+			'suggested_prompts'         => '', // One prompt per line.
+			'error_message'             => __( 'Sorry, something went wrong. Please try again.', 'newtide-public-agent' ),
+			// Privacy / limits.
 			'log_enabled'               => false,
 			'store_transcripts'         => false,
 			'transcript_retention_days' => 30,
@@ -145,18 +182,53 @@ class NPA_Settings {
 
 		// Booleans.
 		$clean['enabled']           = $has( 'enabled' ) ? ! empty( $input['enabled'] ) : (bool) $existing['enabled'];
+		$clean['powered_by']        = $has( 'powered_by' ) ? ! empty( $input['powered_by'] ) : (bool) $existing['powered_by'];
+		$clean['hide_on_mobile']    = $has( 'hide_on_mobile' ) ? ! empty( $input['hide_on_mobile'] ) : (bool) $existing['hide_on_mobile'];
+		$clean['remember_state']    = $has( 'remember_state' ) ? ! empty( $input['remember_state'] ) : (bool) $existing['remember_state'];
 		$clean['log_enabled']       = $has( 'log_enabled' ) ? ! empty( $input['log_enabled'] ) : (bool) $existing['log_enabled'];
 		$clean['store_transcripts'] = $has( 'store_transcripts' ) ? ! empty( $input['store_transcripts'] ) : (bool) $existing['store_transcripts'];
 
 		// Text / URL.
-		$clean['agent_id']         = $has( 'agent_id' ) ? sanitize_text_field( $input['agent_id'] ) : $existing['agent_id'];
-		$clean['gateway_base_url'] = $has( 'gateway_base_url' ) ? esc_url_raw( trim( (string) $input['gateway_base_url'] ) ) : $existing['gateway_base_url'];
-		$clean['launcher_label']   = $has( 'launcher_label' ) ? sanitize_text_field( $input['launcher_label'] ) : $existing['launcher_label'];
-		$clean['greeting']         = $has( 'greeting' ) ? sanitize_text_field( $input['greeting'] ) : $existing['greeting'];
+		$clean['agent_id']          = $has( 'agent_id' ) ? sanitize_text_field( $input['agent_id'] ) : $existing['agent_id'];
+		$clean['gateway_base_url']  = $has( 'gateway_base_url' ) ? esc_url_raw( trim( (string) $input['gateway_base_url'] ) ) : $existing['gateway_base_url'];
+		$clean['launcher_label']    = $has( 'launcher_label' ) ? sanitize_text_field( $input['launcher_label'] ) : $existing['launcher_label'];
+		$clean['greeting']          = $has( 'greeting' ) ? sanitize_text_field( $input['greeting'] ) : $existing['greeting'];
+		$clean['header_title']      = $has( 'header_title' ) ? sanitize_text_field( $input['header_title'] ) : $existing['header_title'];
+		$clean['input_placeholder'] = $has( 'input_placeholder' ) ? sanitize_text_field( $input['input_placeholder'] ) : $existing['input_placeholder'];
+		$clean['error_message']     = $has( 'error_message' ) ? sanitize_text_field( $input['error_message'] ) : $existing['error_message'];
+
+		// Suggested prompts: newline-separated, sanitized per line, blanks dropped.
+		if ( $has( 'suggested_prompts' ) ) {
+			$lines                      = preg_split( '/\r\n|\r|\n/', (string) $input['suggested_prompts'] );
+			$lines                      = array_filter( array_map( 'sanitize_text_field', $lines ), 'strlen' );
+			$clean['suggested_prompts'] = implode( "\n", array_slice( array_values( $lines ), 0, 6 ) );
+		} else {
+			$clean['suggested_prompts'] = $existing['suggested_prompts'];
+		}
+
+		// Exclude IDs: comma-separated positive integers, normalized.
+		if ( $has( 'exclude_ids' ) ) {
+			$ids                  = array_filter( array_map( 'absint', explode( ',', (string) $input['exclude_ids'] ) ) );
+			$clean['exclude_ids'] = implode( ',', array_unique( $ids ) );
+		} else {
+			$clean['exclude_ids'] = $existing['exclude_ids'];
+		}
 
 		// Position whitelist.
 		$position          = $has( 'position' ) ? sanitize_key( $input['position'] ) : $existing['position'];
 		$clean['position'] = in_array( $position, self::POSITIONS, true ) ? $position : 'bottom-right';
+
+		// Theme whitelist.
+		$theme          = $has( 'theme' ) ? sanitize_key( $input['theme'] ) : $existing['theme'];
+		$clean['theme'] = in_array( $theme, self::THEMES, true ) ? $theme : 'auto';
+
+		// Launcher-shape whitelist.
+		$shape                   = $has( 'launcher_shape' ) ? sanitize_key( $input['launcher_shape'] ) : $existing['launcher_shape'];
+		$clean['launcher_shape'] = in_array( $shape, self::SHAPES, true ) ? $shape : 'pill';
+
+		// Audience whitelist.
+		$audience          = $has( 'audience' ) ? sanitize_key( $input['audience'] ) : $existing['audience'];
+		$clean['audience'] = in_array( $audience, self::AUDIENCES, true ) ? $audience : 'everyone';
 
 		// Accent hex.
 		$accent          = $has( 'accent' ) ? sanitize_hex_color( (string) $input['accent'] ) : $existing['accent'];
@@ -166,6 +238,10 @@ class NPA_Settings {
 		$retention                          = $has( 'transcript_retention_days' ) ? absint( $input['transcript_retention_days'] ) : (int) $existing['transcript_retention_days'];
 		$clean['transcript_retention_days'] = min( 3650, max( 1, $retention ) );
 		$clean['daily_message_cap']         = $has( 'daily_message_cap' ) ? absint( $input['daily_message_cap'] ) : (int) $existing['daily_message_cap'];
+
+		// Auto-open delay: 0–600 seconds.
+		$delay                    = $has( 'auto_open_delay' ) ? absint( $input['auto_open_delay'] ) : (int) $existing['auto_open_delay'];
+		$clean['auto_open_delay'] = min( 600, $delay );
 
 		// Credential — write-only and constant-aware.
 		if ( defined( 'NPA_GATEWAY_KEY' ) ) {
