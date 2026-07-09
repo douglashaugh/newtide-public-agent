@@ -62,6 +62,23 @@ class NPA_Settings {
 	const AUDIENCES = array( 'everyone', 'logged_in', 'anonymous' );
 
 	/**
+	 * Connection modes. 'proxy' = the plugin's own widget through the server-side
+	 * gateway; 'embed' = inject RisingTide's official agent-embed.js widget with a
+	 * publishable key (M11).
+	 *
+	 * @var string[]
+	 */
+	const MODES = array( 'proxy', 'embed' );
+
+	/**
+	 * Embed-mode placement: floating site-wide bubble, or inline via the
+	 * shortcode/block.
+	 *
+	 * @var string[]
+	 */
+	const PLACEMENTS = array( 'floating', 'inline' );
+
+	/**
 	 * Register the setting with WordPress (sanitize callback lives here).
 	 *
 	 * The admin page fields are added later (M5); registering the setting now
@@ -105,6 +122,11 @@ class NPA_Settings {
 			'greeting'                  => __( 'Hi! How can I help you today?', 'newtide-public-agent' ),
 			'position'                  => 'bottom-right',
 			'accent'                    => '#2563eb',
+			// Connection (M11): transport + embed-mode config.
+			'mode'                      => 'proxy',
+			'public_key'                => '', // pk_ publishable key for embed mode (not secret).
+			'platform_url'              => 'https://uat-ai.newtide.ai',
+			'placement'                 => 'floating',
 			// Appearance.
 			'header_title'              => __( 'Chat with our agent', 'newtide-public-agent' ),
 			'theme'                     => 'auto',
@@ -196,6 +218,8 @@ class NPA_Settings {
 		$clean['header_title']      = $has( 'header_title' ) ? sanitize_text_field( $input['header_title'] ) : $existing['header_title'];
 		$clean['input_placeholder'] = $has( 'input_placeholder' ) ? sanitize_text_field( $input['input_placeholder'] ) : $existing['input_placeholder'];
 		$clean['error_message']     = $has( 'error_message' ) ? sanitize_text_field( $input['error_message'] ) : $existing['error_message'];
+		$clean['public_key']        = $has( 'public_key' ) ? sanitize_text_field( $input['public_key'] ) : $existing['public_key'];
+		$clean['platform_url']      = $has( 'platform_url' ) ? esc_url_raw( trim( (string) $input['platform_url'] ) ) : $existing['platform_url'];
 
 		// Suggested prompts: newline-separated, sanitized per line, blanks dropped.
 		if ( $has( 'suggested_prompts' ) ) {
@@ -229,6 +253,14 @@ class NPA_Settings {
 		// Audience whitelist.
 		$audience          = $has( 'audience' ) ? sanitize_key( $input['audience'] ) : $existing['audience'];
 		$clean['audience'] = in_array( $audience, self::AUDIENCES, true ) ? $audience : 'everyone';
+
+		// Connection mode whitelist.
+		$mode          = $has( 'mode' ) ? sanitize_key( $input['mode'] ) : $existing['mode'];
+		$clean['mode'] = in_array( $mode, self::MODES, true ) ? $mode : 'proxy';
+
+		// Embed placement whitelist.
+		$placement          = $has( 'placement' ) ? sanitize_key( $input['placement'] ) : $existing['placement'];
+		$clean['placement'] = in_array( $placement, self::PLACEMENTS, true ) ? $placement : 'floating';
 
 		// Accent hex.
 		$accent          = $has( 'accent' ) ? sanitize_hex_color( (string) $input['accent'] ) : $existing['accent'];
@@ -326,6 +358,53 @@ class NPA_Settings {
 	 */
 	public function get_agent_id() {
 		return (string) $this->get( 'agent_id', '' );
+	}
+
+	/**
+	 * The connection mode ('proxy' | 'embed').
+	 *
+	 * @return string
+	 */
+	public function get_mode() {
+		$mode = (string) $this->get( 'mode', 'proxy' );
+		return in_array( $mode, self::MODES, true ) ? $mode : 'proxy';
+	}
+
+	/**
+	 * The publishable embed key (pk_…). Not a secret: a constant override is
+	 * offered only for parity/convenience, and the value may appear in page HTML.
+	 *
+	 * @return string
+	 */
+	public function get_public_key() {
+		if ( defined( 'NPA_PUBLIC_KEY' ) && '' !== (string) NPA_PUBLIC_KEY ) {
+			return (string) NPA_PUBLIC_KEY;
+		}
+		return (string) $this->get( 'public_key', '' );
+	}
+
+	/**
+	 * The RisingTide platform URL that serves agent-embed.js. A
+	 * NPA_PLATFORM_URL constant overrides the stored option.
+	 *
+	 * @return string
+	 */
+	public function get_platform_url() {
+		if ( defined( 'NPA_PLATFORM_URL' ) && '' !== (string) NPA_PLATFORM_URL ) {
+			return (string) NPA_PLATFORM_URL;
+		}
+		return (string) $this->get( 'platform_url', '' );
+	}
+
+	/**
+	 * Whether embed mode has what it needs to render (mode + key + platform URL).
+	 *
+	 * @return bool
+	 */
+	public function is_embed_configured() {
+		return 'embed' === $this->get_mode()
+			&& '' !== $this->get_public_key()
+			&& '' !== $this->get_platform_url();
 	}
 
 	/**

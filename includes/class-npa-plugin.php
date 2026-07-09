@@ -149,6 +149,7 @@ final class NPA_Plugin {
 		$this->register_budget_tests();
 		$this->register_rest_tests();
 		$this->register_widget_tests();
+		$this->register_embed_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -624,6 +625,19 @@ final class NPA_Plugin {
 						&& in_array( $bad_enums['audience'], NPA_Settings::AUDIENCES, true ),
 				);
 
+				// Connection mode and embed placement fall back to safe values.
+				$bad_conn = $settings->sanitize(
+					array(
+						'mode'      => 'telepathy',
+						'placement' => 'sideways',
+					)
+				);
+				$checks[] = array(
+					'label' => __( 'Invalid connection mode and placement fall back to whitelisted values', 'newtide-public-agent' ),
+					'pass'  => in_array( $bad_conn['mode'], NPA_Settings::MODES, true )
+						&& in_array( $bad_conn['placement'], NPA_Settings::PLACEMENTS, true ),
+				);
+
 				// A valid new position (top-left) is accepted, not rejected.
 				$top_left = $settings->sanitize( array( 'position' => 'top-left' ) );
 				$checks[] = array(
@@ -944,6 +958,95 @@ final class NPA_Plugin {
 					'label' => __( 'The gateway credential never appears in front-end output', 'newtide-public-agent' ),
 					'pass'  => '' !== $sentinel && false === strpos( $html, $sentinel ),
 				);
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the embed-transport suite (M11 Verify companion).
+	 *
+	 * Proves the publishable-key embed path: inline placement renders a mount
+	 * node, floating placement defers to the site-wide loader, the loader's
+	 * <script> tag carries the pk_ key, and the secret gateway credential is
+	 * never emitted by the embed path.
+	 *
+	 * @return void
+	 */
+	private function register_embed_tests() {
+		$this->test_runner->register_suite(
+			'embed',
+			__( 'Embed transport', 'newtide-public-agent' ),
+			__( 'Confirms the RisingTide embed mode wires up correctly — inline placements get a mount node, the injected loader carries the publishable key, and the private gateway credential is never written into the embed output.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+				$prev   = get_option( 'npa_options' );
+
+				$base = array_merge(
+					NPA_Settings::defaults(),
+					array(
+						'mode'         => 'embed',
+						'public_key'   => 'pk_embed_test_123',
+						'platform_url' => 'https://uat-ai.newtide.ai',
+						'placement'    => 'inline',
+						'enabled'      => true,
+					)
+				);
+
+				// Inline placement renders a mount node.
+				update_option( 'npa_options', $base );
+				$inline   = do_shortcode( '[newtide_agent]' );
+				$checks[] = array(
+					'label' => __( 'Inline embed placement renders a mount node', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $inline, 'newtide-public-agent-embed' )
+						&& false !== strpos( $inline, 'npa-embed-mount-' ),
+				);
+
+				// Floating placement defers to the site-wide loader (no inline markup).
+				$base['placement'] = 'floating';
+				update_option( 'npa_options', $base );
+				$floating = do_shortcode( '[newtide_agent]' );
+				$checks[] = array(
+					'label' => __( 'Floating embed placement emits no inline markup', 'newtide-public-agent' ),
+					'pass'  => '' === trim( $floating ),
+				);
+
+				// The injected <script> tag carries the publishable key. The sample
+				// is a filter fixture, not a real enqueue.
+				$sample   = "<script src='https://uat-ai.newtide.ai/agent-embed.js' id='npa-embed-js'></script>"; // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- test fixture passed through the script_loader_tag filter.
+				$tagged   = apply_filters( 'script_loader_tag', $sample, NPA_Public::EMBED_HANDLE );
+				$checks[] = array(
+					'label' => __( 'The embed loader tag carries the publishable key', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $tagged, 'data-api-key="pk_embed_test_123"' ),
+				);
+
+				// Non-embed script tags are untouched.
+				$other    = apply_filters( 'script_loader_tag', $sample, 'jquery-core' );
+				$checks[] = array(
+					'label' => __( 'Other scripts’ tags are left unchanged', 'newtide-public-agent' ),
+					'pass'  => $other === $sample,
+				);
+
+				// The secret gateway credential never appears in the embed tag.
+				$sentinel = 'sk-SECRET-embed-should-never-render';
+				$inject   = static function () use ( $sentinel ) {
+					return $sentinel;
+				};
+				add_filter( 'npa_gateway_key', $inject );
+				$guard_tag = apply_filters( 'script_loader_tag', $sample, NPA_Public::EMBED_HANDLE );
+				remove_filter( 'npa_gateway_key', $inject );
+				$checks[] = array(
+					'label' => __( 'The secret gateway credential never appears in the embed tag', 'newtide-public-agent' ),
+					'pass'  => false === strpos( $guard_tag, $sentinel ),
+				);
+
+				// Restore prior options.
+				if ( false !== $prev ) {
+					update_option( 'npa_options', $prev );
+				} else {
+					delete_option( 'npa_options' );
+				}
 
 				return $checks;
 			}

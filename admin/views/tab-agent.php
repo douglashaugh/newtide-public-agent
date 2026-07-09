@@ -19,14 +19,74 @@ $npa_current      = $settings->get_agent_id();
 <form method="post" action="options.php" class="npa-form">
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
 	<?php
-	$npa_present = array( 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days' );
+	$npa_present = array( 'mode', 'placement', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days' );
 	if ( ! $npa_key_constant ) {
 		$npa_present[] = 'gateway_key';
+	}
+	if ( ! defined( 'NPA_PUBLIC_KEY' ) ) {
+		$npa_present[] = 'public_key';
+	}
+	if ( ! defined( 'NPA_PLATFORM_URL' ) ) {
+		$npa_present[] = 'platform_url';
 	}
 	$npa_admin->present_fields( $npa_present );
 	?>
 
 	<table class="form-table" role="presentation">
+		<tr>
+			<th scope="row"><label for="npa-mode"><?php esc_html_e( 'Connection mode', 'newtide-public-agent' ); ?></label></th>
+			<td>
+				<select id="npa-mode" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[mode]">
+					<option value="proxy" <?php selected( $settings->get_mode(), 'proxy' ); ?>><?php esc_html_e( 'Proxy — the plugin’s own widget via the server-side gateway', 'newtide-public-agent' ); ?></option>
+					<option value="embed" <?php selected( $settings->get_mode(), 'embed' ); ?>><?php esc_html_e( 'Embed — RisingTide’s public widget via a publishable key', 'newtide-public-agent' ); ?></option>
+				</select>
+				<p class="description"><?php echo wp_kses_post( __( '<strong>Embed</strong> injects RisingTide’s official <code>agent-embed.js</code> using a publishable <code>pk_</code> key — recommended for published public agents. <strong>Proxy</strong> uses the plugin’s own chat widget through a server-side gateway credential. See the <em>Publishing</em> tab for how to get a key.', 'newtide-public-agent' ) ); ?></p>
+			</td>
+		</tr>
+
+		<tr>
+			<th scope="row"><label for="npa-public-key"><?php esc_html_e( 'Publishable key', 'newtide-public-agent' ); ?></label></th>
+			<td>
+				<?php if ( defined( 'NPA_PUBLIC_KEY' ) ) : ?>
+					<p><span class="npa-pill npa-pill--ok"><?php esc_html_e( 'Defined in wp-config.php', 'newtide-public-agent' ); ?></span></p>
+					<p class="description"><?php esc_html_e( 'Set via the NPA_PUBLIC_KEY constant.', 'newtide-public-agent' ); ?></p>
+				<?php else : ?>
+					<input type="text" id="npa-public-key" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[public_key]" value="<?php echo esc_attr( $settings->get( 'public_key' ) ); ?>" placeholder="pk_…" />
+					<p class="description"><?php esc_html_e( 'The pk_ key from RisingTide (Advanced Settings → Create key). Used in Embed mode. This key is publishable — it is meant to appear in page HTML; access is scoped by the key’s allowed-origins list.', 'newtide-public-agent' ); ?></p>
+				<?php endif; ?>
+			</td>
+		</tr>
+
+		<tr>
+			<th scope="row"><label for="npa-platform-url"><?php esc_html_e( 'Platform URL', 'newtide-public-agent' ); ?></label></th>
+			<td>
+				<?php if ( defined( 'NPA_PLATFORM_URL' ) ) : ?>
+					<input type="url" id="npa-platform-url" class="regular-text" value="<?php echo esc_attr( $settings->get_platform_url() ); ?>" disabled />
+					<p class="description"><?php esc_html_e( 'Defined via the NPA_PLATFORM_URL constant.', 'newtide-public-agent' ); ?></p>
+				<?php else : ?>
+					<input type="url" id="npa-platform-url" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[platform_url]" value="<?php echo esc_attr( $settings->get( 'platform_url' ) ); ?>" placeholder="https://uat-ai.newtide.ai" />
+					<p class="description"><?php esc_html_e( 'RisingTide host that serves agent-embed.js. UAT: https://uat-ai.newtide.ai — PROD: https://ai.newtide.ai', 'newtide-public-agent' ); ?></p>
+				<?php endif; ?>
+			</td>
+		</tr>
+
+		<tr>
+			<th scope="row"><label for="npa-placement"><?php esc_html_e( 'Embed placement', 'newtide-public-agent' ); ?></label></th>
+			<td>
+				<select id="npa-placement" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[placement]">
+					<option value="floating" <?php selected( $settings->get( 'placement' ), 'floating' ); ?>><?php esc_html_e( 'Floating bubble (site-wide)', 'newtide-public-agent' ); ?></option>
+					<option value="inline" <?php selected( $settings->get( 'placement' ), 'inline' ); ?>><?php esc_html_e( 'Inline (via the [newtide_agent] shortcode or block)', 'newtide-public-agent' ); ?></option>
+				</select>
+				<p class="description"><?php esc_html_e( 'Floating shows RisingTide’s bottom-right bubble on every allowed page. Inline mounts the chat where you place the shortcode/block (one per page). Applies to Embed mode; Appearance/Behavior options do not affect the embedded widget — those are set in RisingTide.', 'newtide-public-agent' ); ?></p>
+			</td>
+		</tr>
+
+		<tr>
+			<td colspan="2">
+				<hr />
+				<p style="margin:0;"><strong><?php esc_html_e( 'Proxy-mode settings', 'newtide-public-agent' ); ?></strong> <span class="description"><?php esc_html_e( '(used only when Connection mode is Proxy)', 'newtide-public-agent' ); ?></span></p>
+			</td>
+		</tr>
 		<tr>
 			<th scope="row"><label for="npa-base-url"><?php esc_html_e( 'Gateway base URL', 'newtide-public-agent' ); ?></label></th>
 			<td>

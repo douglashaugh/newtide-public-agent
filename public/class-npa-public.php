@@ -24,11 +24,41 @@ class NPA_Public {
 	const HANDLE = 'npa-widget';
 
 	/**
+	 * Handle for RisingTide's injected embed loader (agent-embed.js).
+	 *
+	 * @var string
+	 */
+	const EMBED_HANDLE = 'npa-embed';
+
+	/**
 	 * Plugin instance.
 	 *
 	 * @var NPA_Plugin
 	 */
 	private $plugin;
+
+	/**
+	 * The container id for an inline embed placement (empty = floating bubble).
+	 * agent-embed.js guards against a second instance per page, so at most one
+	 * embed is wired per request.
+	 *
+	 * @var string
+	 */
+	private $embed_container = '';
+
+	/**
+	 * Whether the embed loader has already been enqueued this request.
+	 *
+	 * @var bool
+	 */
+	private $embed_enqueued = false;
+
+	/**
+	 * Sequence for unique inline mount ids.
+	 *
+	 * @var int
+	 */
+	private static $embed_seq = 0;
 
 	/**
 	 * Constructor.
@@ -48,6 +78,7 @@ class NPA_Public {
 		add_action( 'wp_enqueue_scripts', array( $this, 'register_assets' ) );
 		add_shortcode( 'newtide_agent', array( $this, 'render_shortcode' ) );
 		add_action( 'init', array( $this, 'register_block' ) );
+		add_filter( 'script_loader_tag', array( $this, 'embed_script_tag' ), 10, 2 );
 	}
 
 	/**
@@ -70,6 +101,8 @@ class NPA_Public {
 			NPA_VERSION,
 			true
 		);
+
+		$this->register_embed_assets();
 
 		wp_localize_script(
 			self::HANDLE,
@@ -101,6 +134,107 @@ class NPA_Public {
 	private function enqueue() {
 		wp_enqueue_style( self::HANDLE );
 		wp_enqueue_script( self::HANDLE );
+	}
+
+	/**
+	 * Register RisingTide's embed loader and, for a floating placement, enqueue
+	 * it site-wide when gated (mode + config + visibility). Called from
+	 * register_assets() on wp_enqueue_scripts.
+	 *
+	 * @return void
+	 */
+	private function register_embed_assets() {
+		$s        = $this->plugin->settings;
+		$platform = $s->get_platform_url();
+
+		if ( '' !== $platform ) {
+			// Remote loader; no version query string, printed in the footer.
+			wp_register_script(
+				self::EMBED_HANDLE,
+				trailingslashit( $platform ) . 'agent-embed.js',
+				array(),
+				null, // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion -- remote loader, versioned by the platform.
+				true
+			);
+		}
+
+		// Floating embed injects itself on every allowed page.
+		if ( 'embed' === $s->get_mode()
+			&& 'floating' === $s->get( 'placement' )
+			&& $s->get( 'enabled' )
+			&& $s->is_embed_configured()
+			&& $this->should_display() ) {
+			$this->enqueue_embed( '' );
+		}
+	}
+
+	/**
+	 * Enqueue the embed loader once. A non-empty container id switches
+	 * agent-embed.js to inline mounting; empty = the floating bubble.
+	 *
+	 * @param string $container Target element id, or '' for floating.
+	 * @return void
+	 */
+	private function enqueue_embed( $container ) {
+		if ( $this->embed_enqueued ) {
+			return;
+		}
+		if ( '' !== $container ) {
+			$this->embed_container = $container;
+		}
+		wp_enqueue_script( self::EMBED_HANDLE );
+		$this->embed_enqueued = true;
+	}
+
+	/**
+	 * Append the publishable key (and, for inline, the container) to the embed
+	 * loader's <script> tag. Only the embed handle is touched; the secret gateway
+	 * credential is never involved here.
+	 *
+	 * @param string $tag    The full <script> HTML.
+	 * @param string $handle The script handle.
+	 * @return string
+	 */
+	public function embed_script_tag( $tag, $handle ) {
+		if ( self::EMBED_HANDLE !== $handle ) {
+			return $tag;
+		}
+
+		$key = $this->plugin->settings->get_public_key();
+		if ( '' === $key ) {
+			return $tag;
+		}
+
+		$attrs = ' data-api-key="' . esc_attr( $key ) . '"';
+		if ( '' !== $this->embed_container ) {
+			$attrs .= ' data-container="' . esc_attr( $this->embed_container ) . '"';
+		}
+
+		return str_replace( ' src=', $attrs . ' src=', $tag );
+	}
+
+	/**
+	 * Render an embed-mode placement for the shortcode/block. Floating auto-injects
+	 * site-wide (so a placement is a no-op); inline outputs a mount node and wires
+	 * the loader to it.
+	 *
+	 * @return string
+	 */
+	private function render_embed_placement() {
+		$s = $this->plugin->settings;
+
+		if ( ! $s->is_embed_configured() ) {
+			return '';
+		}
+
+		if ( 'inline' !== $s->get( 'placement' ) ) {
+			return '';
+		}
+
+		$id = 'npa-embed-mount-' . ( ++self::$embed_seq );
+		$this->enqueue_embed( $id );
+
+		return '<div id="' . esc_attr( $id ) . '" class="newtide-public-agent-embed"></div>';
 	}
 
 	/**
@@ -259,6 +393,10 @@ class NPA_Public {
 			return '';
 		}
 
+		if ( 'embed' === $this->plugin->settings->get_mode() ) {
+			return $this->render_embed_placement();
+		}
+
 		$atts = shortcode_atts(
 			array(
 				'agent'    => '',
@@ -307,6 +445,10 @@ class NPA_Public {
 	public function render_block( $attributes ) {
 		if ( ! $this->plugin->settings->get( 'enabled' ) || ! $this->should_display() ) {
 			return '';
+		}
+
+		if ( 'embed' === $this->plugin->settings->get_mode() ) {
+			return $this->render_embed_placement();
 		}
 
 		$attributes = is_array( $attributes ) ? $attributes : array();
