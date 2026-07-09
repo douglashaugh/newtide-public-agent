@@ -96,3 +96,81 @@
 .npa-check--fail .npa-check-mark {
 	color: #bb2124;
 }
+
+/* Publishing guide tab. */
+.npa-guide {
+	max-width: 46rem;
+}
+
+.npa-guide h2 {
+	margin-top: 1.75rem;
+}
+
+.npa-guide ol.npa-steps {
+	margin: 0.5rem 0 0 0;
+	padding: 0;
+	list-style: none;
+	counter-reset: npa-step;
+}
+
+.npa-guide ol.npa-steps > li {
+	position: relative;
+	counter-increment: npa-step;
+	margin: 0 0 1.1rem;
+	padding: 0 0 0 2.5rem;
+	min-height: 1.75rem;
+}
+
+.npa-guide ol.npa-steps > li::before {
+	content: counter( npa-step );
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 50%;
+	background: #2271b1;
+	color: #fff;
+	font-weight: 700;
+	text-align: center;
+	line-height: 1.75rem;
+}
+
+.npa-guide ol.npa-steps > li strong {
+	display: block;
+	margin-bottom: 0.15rem;
+}
+
+.npa-guide .npa-code {
+	display: block;
+	margin: 0.75rem 0;
+	padding: 0.85rem 1rem;
+	background: #1e1e1e;
+	color: #f0f0f1;
+	border-radius: 6px;
+	font-family: Consolas, Monaco, monospace;
+	font-size: 0.85rem;
+	line-height: 1.5;
+	white-space: pre;
+	overflow-x: auto;
+}
+
+.npa-guide .npa-note {
+	margin: 1rem 0;
+	padding: 0.75rem 1rem;
+	background: #fff;
+	border-left: 4px solid #2271b1;
+	border-radius: 0 4px 4px 0;
+}
+
+.npa-guide .npa-note--warn {
+	border-left-color: #dba617;
+	background: #fcf9e8;
+}
+
+.npa-guide .npa-config-value {
+	font-family: Consolas, Monaco, monospace;
+	background: #f0f0f1;
+	padding: 0.1rem 0.4rem;
+	border-radius: 3px;
+}

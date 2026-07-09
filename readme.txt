@@ -84,3 +84,4 @@ Initial build (feature-complete against the mock gateway):
 * REST proxy with nonce-protected permission callback and friendly error mapping.
 * Accessible front-end widget, `[newtide_agent]` shortcode, and Gutenberg block.
 * Widget customization (admin-wide): four launcher positions, light/dark/auto colour scheme, header title, pill or bubble launcher, and an optional "Powered by" line; auto-open delay, hide-on-mobile, remember open state, audience gate (everyone / logged-in / logged-out), and per-page suppression by ID; custom input placeholder, clickable suggested prompts, and a custom error message. Settings split across new Appearance and Behavior tabs.
+* Publishing tab: an in-plugin walkthrough of how to make a RisingTide agent public (enable public access, create a key, get the embed snippet) so the setup workflow lives next to the plugin settings.
