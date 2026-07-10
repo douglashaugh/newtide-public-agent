@@ -22,6 +22,10 @@ body.toplevel_page_newtide-public-agent #wpcontent {
 }
 
 body.toplevel_page_newtide-public-agent #wpbody-content {
+	/* Core gives #wpbody-content `width: 100%`; with the default content-box
+	   sizing, this 44px right gutter would add ON TOP of 100% and force a
+	   horizontal scrollbar. border-box keeps the padding inside the 100%. */
+	box-sizing: border-box;
 	padding-right: 44px;
 }
 
@@ -35,7 +39,7 @@ body.toplevel_page_newtide-public-agent .npa-wrap {
 	display: flex;
 	align-items: center;
 	gap: 1rem;
-	margin: 2rem 0 1.5rem;
+	margin: 2rem 0 0;
 	padding: 1.15rem 1.5rem;
 	background: var( --npa-brand-grad );
 	border-radius: 14px;
@@ -250,14 +254,21 @@ body.toplevel_page_newtide-public-agent .npa-wrap {
 	box-sizing: border-box;
 }
 
-/* Custom "pill" tabs — replaces the stock WP nav-tab look. */
-.npa-wrap .nav-tab-wrapper {
+/* Custom "pill" tabs — replaces the stock WP nav-tab look.
+   NOTE: the selector must out-specify WordPress core's
+   `.wrap h2.nav-tab-wrapper { margin: 0 }` (common.css, specificity 0,2,1),
+   which otherwise zeroes our margin and jams the tabs against the banner and
+   the content. `.wrap.npa-wrap h2.nav-tab-wrapper` is 0,3,1 — it wins outright. */
+.wrap.npa-wrap h2.nav-tab-wrapper {
 	border-bottom: none;
-	margin: 0 0 1.5rem;
+	/* Sole owner of the gap both above and below the tab row. The brand header's
+	   bottom margin and the tab-intro's top margin are both 0, so these two equal
+	   values are exactly what render on each side — no asymmetry. */
+	margin: 2rem 0;
 	padding: 0;
 	display: flex;
 	flex-wrap: wrap;
-	justify-content: center;
+	justify-content: flex-start;
 	gap: 0.4rem;
 }
 
@@ -536,4 +547,793 @@ body.toplevel_page_newtide-public-agent .npa-wrap {
 	background: #f0f0f1;
 	padding: 0.1rem 0.4rem;
 	border-radius: 3px;
+}
+
+/* ============================================================================
+   Appearance tab — controls + live preview.
+   ========================================================================= */
+
+.npa-appearance {
+	display: grid;
+	grid-template-columns: minmax( 0, 1fr ) 360px;
+	gap: 2rem;
+	align-items: start;
+}
+
+@media ( max-width: 1200px ) {
+	.npa-appearance {
+		grid-template-columns: 1fr;
+	}
+}
+
+.npa-appearance__controls {
+	min-width: 0;
+}
+
+/* The preview rides along as you scroll the controls. */
+.npa-appearance__preview {
+	position: sticky;
+	top: 2rem;
+}
+
+.npa-preview {
+	background: #fff;
+	border: 1px solid #e2e4e7;
+	border-radius: 12px;
+	overflow: hidden;
+	box-shadow: 0 1px 2px rgba( 16, 24, 40, 0.05 );
+}
+
+.npa-preview__bar {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.6rem 1rem;
+	font-weight: 600;
+	font-size: 0.85rem;
+	color: #fff;
+	background: var( --npa-brand-grad );
+}
+
+.npa-preview__bar .dashicons {
+	font-size: 18px;
+	width: 18px;
+	height: 18px;
+}
+
+/* A soft checkerboard so translucency + light/dark previews read clearly. */
+.npa-preview__stage {
+	position: relative;
+	min-height: 430px;
+	padding: 1.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: #eef1f5;
+	background-image:
+		linear-gradient( 45deg, #e2e6ec 25%, transparent 25% ),
+		linear-gradient( -45deg, #e2e6ec 25%, transparent 25% ),
+		linear-gradient( 45deg, transparent 75%, #e2e6ec 75% ),
+		linear-gradient( -45deg, transparent 75%, #e2e6ec 75% );
+	background-size: 22px 22px;
+	background-position: 0 0, 0 11px, 11px -11px, -11px 0;
+}
+
+.npa-preview__note {
+	margin: 0;
+	padding: 0.6rem 1rem 0.85rem;
+	font-size: 0.78rem;
+	color: #646970;
+	background: #fff;
+}
+
+/* Neutralize the widget's fixed positioning so it sits inside the stage, and
+   stack the (always-open) panel above the launcher like a real bottom widget. */
+.npa-preview__stage .newtide-public-agent {
+	position: static;
+	inset: auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1rem;
+	font-size: 0.95rem;
+}
+
+.npa-preview__stage .newtide-public-agent__panel {
+	position: static;
+	inset: auto;
+	width: 20rem;
+	max-width: 100%;
+	max-height: none;
+}
+
+/* Top-anchored positions put the launcher above the panel in the preview. */
+.npa-preview__stage .newtide-public-agent--top-right,
+.npa-preview__stage .newtide-public-agent--top-left {
+	flex-direction: column-reverse;
+}
+
+/* Left positions align the stack to the start. */
+.npa-preview__stage .newtide-public-agent--bottom-left,
+.npa-preview__stage .newtide-public-agent--top-left {
+	align-items: flex-start;
+}
+
+.npa-preview__stage .newtide-public-agent--bottom-right,
+.npa-preview__stage .newtide-public-agent--top-right {
+	align-items: flex-end;
+}
+
+/* --- Icon picker --------------------------------------------------------- */
+
+.npa-iconpicker {
+	padding: 0.5rem 0 0.25rem;
+}
+
+/* Segmented radio control for the icon source. */
+.npa-segmented {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 2px;
+	padding: 3px;
+	background: #f0f3f8;
+	border: 1px solid #dcdcde;
+	border-radius: 10px;
+	margin-bottom: 1rem;
+}
+
+.npa-segmented__opt {
+	margin: 0;
+}
+
+.npa-segmented__opt input {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.npa-segmented__opt span {
+	display: block;
+	padding: 0.35rem 0.8rem;
+	border-radius: 7px;
+	font-size: 0.82rem;
+	font-weight: 600;
+	color: var( --npa-navy );
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.npa-segmented__opt input:checked + span {
+	background: var( --npa-brand-grad );
+	color: #fff;
+	box-shadow: 0 2px 6px rgba( 10, 52, 139, 0.25 );
+}
+
+.npa-segmented__opt input:focus-visible + span {
+	outline: 2px solid var( --npa-azure );
+	outline-offset: 1px;
+}
+
+.npa-iconpanel {
+	margin: 0 0 0.5rem;
+}
+
+.npa-icon-image {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.npa-icon-thumb {
+	width: 56px;
+	height: 56px;
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px dashed #c3c4c7;
+	border-radius: 10px;
+	background: #fff;
+	overflow: hidden;
+}
+
+.npa-icon-thumb img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.npa-icon-image__actions {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+
+.npa-icon-remove {
+	color: #bb2124;
+}
+
+.npa-emoji-input {
+	width: 4.5rem;
+	font-size: 1.6rem;
+	line-height: 1.2;
+	text-align: center;
+	padding: 0.25rem;
+}
+
+/* Built-in icon grid. */
+.npa-icon-grid {
+	display: grid;
+	grid-template-columns: repeat( 6, 1fr );
+	gap: 0.5rem;
+	max-width: 22rem;
+}
+
+@media ( max-width: 782px ) {
+	.npa-icon-grid {
+		grid-template-columns: repeat( 4, 1fr );
+	}
+}
+
+.npa-icon-choice {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	aspect-ratio: 1 / 1;
+	padding: 0.5rem;
+	border: 1px solid #dcdcde;
+	border-radius: 10px;
+	background: #fff;
+	color: var( --npa-navy );
+	cursor: pointer;
+	transition: all 0.12s ease;
+}
+
+.npa-icon-choice:hover {
+	border-color: var( --npa-azure );
+	background: var( --npa-tint );
+}
+
+.npa-icon-choice.is-active {
+	border-color: transparent;
+	background: var( --npa-brand-grad );
+	color: #fff;
+	box-shadow: 0 3px 10px rgba( 10, 52, 139, 0.25 );
+}
+
+.npa-icon-choice__svg {
+	width: 24px;
+	height: 24px;
+	display: block;
+}
+
+.npa-icon-shape-note {
+	margin-top: 0.75rem;
+}
+
+/* --- Colour: accent + theme-palette swatches ----------------------------- */
+
+.npa-accent-hex {
+	margin-left: 0.5rem;
+	vertical-align: middle;
+	font-size: 0.85rem;
+	color: #50575e;
+	text-transform: uppercase;
+}
+
+.npa-palette-label {
+	margin: 0.75rem 0 0.35rem;
+	font-weight: 600;
+}
+
+.npa-palette {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+}
+
+.npa-swatch {
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border: 1px solid rgba( 0, 0, 0, 0.15 );
+	border-radius: 8px;
+	cursor: pointer;
+	box-shadow: inset 0 0 0 2px #fff;
+	transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.npa-swatch:hover,
+.npa-swatch:focus-visible {
+	transform: scale( 1.12 );
+	box-shadow: inset 0 0 0 2px #fff, 0 2px 8px rgba( 0, 0, 0, 0.2 );
+	outline: none;
+}
+
+/* ============================================================================
+   Additional Agents tab — explainer + repeater.
+   ========================================================================= */
+
+.npa-explain {
+	max-width: none;
+}
+
+.npa-explain__list {
+	margin: 0 0 0.5rem;
+	padding: 0.25rem 0 0.5rem;
+	list-style: none;
+}
+
+.npa-explain__list li {
+	position: relative;
+	margin: 0 0 0.6rem;
+	padding-left: 1.9rem;
+	font-size: 0.92rem;
+	line-height: 1.5;
+	color: #3c434a;
+}
+
+.npa-explain__list li::before {
+	content: "";
+	position: absolute;
+	left: 0.35rem;
+	top: 0.5rem;
+	width: 0.55rem;
+	height: 0.55rem;
+	border-radius: 50%;
+	background: var( --npa-brand-grad );
+}
+
+.npa-explain__list code {
+	background: #f0f0f1;
+	padding: 0.05rem 0.35rem;
+	border-radius: 3px;
+	font-size: 0.85em;
+}
+
+/* Our panels toggle via the [hidden] attribute; some have a CSS `display` that
+   would otherwise beat the UA [hidden] rule, so re-assert it inside the form. */
+.npa-agents-form [hidden] {
+	display: none !important;
+}
+
+.npa-agents-list {
+	margin: 0 0 1rem;
+}
+
+.npa-agent-row {
+	position: relative;
+	background: #fff;
+	border: 1px solid #e2e4e7;
+	border-left: 4px solid var( --npa-azure );
+	border-radius: 10px;
+	padding: 0.5rem 1.25rem 1rem;
+	margin: 0 0 1rem;
+	box-shadow: 0 1px 2px rgba( 16, 24, 40, 0.05 );
+}
+
+.npa-agent-row__head {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid #f0f0f1;
+	margin-bottom: 0.75rem;
+}
+
+.npa-agent-row__num {
+	font-weight: 700;
+	color: var( --npa-navy );
+}
+
+.npa-agent-row__name {
+	color: #50575e;
+	font-weight: 600;
+}
+
+.npa-agent-remove {
+	margin-left: auto;
+	color: #bb2124;
+}
+
+/* Two-column field grid; wide fields span both columns. */
+.npa-agent-row__grid {
+	display: grid;
+	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+	gap: 0.75rem 1.5rem;
+}
+
+@media ( max-width: 782px ) {
+	.npa-agent-row__grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+.npa-field {
+	margin: 0;
+	min-width: 0;
+}
+
+.npa-field--wide {
+	grid-column: 1 / -1;
+}
+
+.npa-field > label {
+	display: block;
+	margin-bottom: 0.2rem;
+	font-weight: 600;
+	font-size: 0.85rem;
+	color: var( --npa-navy );
+}
+
+.npa-field .description {
+	display: block;
+	margin-top: 0.2rem;
+}
+
+.npa-field input[type="text"],
+.npa-field select {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.npa-agent-pages {
+	height: auto;
+}
+
+.npa-agent-accent {
+	font-family: Consolas, Monaco, monospace;
+}
+
+.npa-agent-icon__controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.npa-agent-icon__controls .npa-agent-icon-type,
+.npa-agent-icon__controls .npa-agent-icon-builtin {
+	width: auto;
+	min-width: 10rem;
+}
+
+.npa-agent-icon__controls .npa-emoji-input {
+	width: 3.5rem;
+	font-size: 1.3rem;
+	text-align: center;
+}
+
+.npa-agent-icon-image {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.npa-agent-icon-thumb {
+	width: 40px;
+	height: 40px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px dashed #c3c4c7;
+	border-radius: 8px;
+	background: #fff;
+	overflow: hidden;
+}
+
+.npa-agent-icon-thumb img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.npa-agents-empty {
+	color: #646970;
+	font-style: italic;
+}
+
+/* ============================================================================
+   Home tab — setup checklist, tools, quick links.
+   ========================================================================= */
+
+.npa-setup__meter {
+	height: 10px;
+	background: #e6ecf5;
+	border-radius: 999px;
+	overflow: hidden;
+	margin: 0.25rem 0 0.5rem;
+}
+
+.npa-setup__fill {
+	height: 100%;
+	background: var( --npa-brand-grad );
+	border-radius: 999px;
+	transition: width 0.35s ease;
+}
+
+.npa-setup__count {
+	font-weight: 600;
+	color: var( --npa-navy );
+	margin: 0 0 0.75rem;
+}
+
+.npa-setup__list {
+	margin: 0;
+	list-style: none;
+}
+
+.npa-setup__list li {
+	padding: 0.45rem 0;
+	border-top: 1px solid #f0f0f1;
+}
+
+.npa-setup__mark {
+	display: inline-block;
+	width: 1.3rem;
+	font-weight: 700;
+	text-align: center;
+}
+
+.npa-setup__list li.is-done .npa-setup__mark {
+	color: #1a7f37;
+}
+
+.npa-setup__list li.is-todo .npa-setup__mark {
+	color: #c3c4c7;
+}
+
+.npa-setup__list a {
+	font-weight: 600;
+}
+
+.npa-setup__list .description {
+	display: block;
+	margin: 0.1rem 0 0 1.3rem;
+}
+
+.npa-tools {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+	align-items: center;
+	margin-top: 0.75rem;
+}
+
+.npa-import-form {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+}
+
+.npa-quicklinks {
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 14rem, 1fr ) );
+	gap: 1rem;
+	margin: 0.5rem 0 1rem;
+}
+
+.npa-quicklink {
+	display: block;
+	background: #fff;
+	border: 1px solid #e2e4e7;
+	border-radius: 12px;
+	padding: 1rem 1.15rem;
+	text-decoration: none;
+	box-shadow: 0 1px 2px rgba( 16, 24, 40, 0.05 );
+	transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.npa-quicklink:hover {
+	border-color: var( --npa-azure );
+	box-shadow: 0 6px 16px rgba( 10, 52, 139, 0.12 );
+	transform: translateY( -1px );
+}
+
+.npa-quicklink__icon {
+	color: var( --npa-navy );
+	font-size: 22px;
+	width: 22px;
+	height: 22px;
+}
+
+.npa-quicklink__title {
+	display: block;
+	font-weight: 600;
+	color: var( --npa-navy );
+	margin: 0.4rem 0 0.15rem;
+}
+
+.npa-quicklink__desc {
+	display: block;
+	color: #646970;
+	font-size: 0.85rem;
+}
+
+/* ============================================================================
+   Test-drive chat (Agent tab).
+   ========================================================================= */
+
+.npa-testdrive__log {
+	min-height: 180px;
+	max-height: 340px;
+	overflow-y: auto;
+	background: #f6f8fb;
+	border: 1px solid #e2e4e7;
+	border-radius: 10px;
+	padding: 0.75rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.npa-testdrive__hint {
+	margin: auto;
+	color: #646970;
+	font-style: italic;
+	text-align: center;
+}
+
+.npa-td-msg {
+	display: flex;
+}
+
+.npa-td-msg--user {
+	justify-content: flex-end;
+}
+
+.npa-td-bubble {
+	max-width: 80%;
+	padding: 0.5rem 0.75rem;
+	border-radius: 12px;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+	font-size: 0.92rem;
+	line-height: 1.45;
+}
+
+.npa-td-msg--agent .npa-td-bubble {
+	background: #fff;
+	border: 1px solid #e2e4e7;
+	color: #1e1e1e;
+	border-bottom-left-radius: 3px;
+}
+
+.npa-td-msg--user .npa-td-bubble {
+	background: var( --npa-navy );
+	color: #fff;
+	border-bottom-right-radius: 3px;
+}
+
+.npa-td-msg.is-error .npa-td-bubble {
+	background: #fcecec;
+	border-color: #f0c2c2;
+	color: #bb2124;
+}
+
+.npa-td-msg.is-typing .npa-td-bubble {
+	color: #8a8f94;
+	letter-spacing: 3px;
+}
+
+.npa-testdrive__form {
+	display: flex;
+	gap: 0.5rem;
+	margin-top: 0.6rem;
+}
+
+.npa-testdrive__form .regular-text {
+	flex: 1 1 auto;
+}
+
+/* ============================================================================
+   Usage analytics (Service Status tab).
+   ========================================================================= */
+
+.npa-stats {
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 9rem, 1fr ) );
+	gap: 1rem;
+	margin: 0.5rem 0 1.25rem;
+}
+
+.npa-stat {
+	background: #f6f8fb;
+	border: 1px solid #e2e4e7;
+	border-radius: 10px;
+	padding: 0.85rem 1rem;
+}
+
+.npa-stat__value {
+	font-size: 1.6rem;
+	font-weight: 700;
+	color: var( --npa-navy );
+	line-height: 1.1;
+}
+
+.npa-stat--ok .npa-stat__value {
+	color: #1a7f37;
+}
+
+.npa-stat--warn .npa-stat__value {
+	color: #bb2124;
+}
+
+.npa-stat__label {
+	font-size: 0.8rem;
+	color: #646970;
+	margin-top: 0.15rem;
+}
+
+.npa-chart {
+	margin: 0 0 1.25rem;
+}
+
+.npa-chart__title {
+	font-weight: 600;
+	color: var( --npa-navy );
+	margin-bottom: 0.4rem;
+}
+
+.npa-chart__peak {
+	font-weight: 400;
+	color: #646970;
+	font-size: 0.85rem;
+	margin-left: 0.4rem;
+}
+
+.npa-chart__svg {
+	width: 100%;
+	height: auto;
+	max-width: 640px;
+	display: block;
+}
+
+.npa-topagents {
+	max-width: 640px;
+}
+
+.npa-topagents__title {
+	margin: 0 0 0.5rem;
+	color: var( --npa-navy );
+	font-size: 0.95rem;
+}
+
+.npa-topagents__row {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin: 0.3rem 0;
+}
+
+.npa-topagents__name {
+	flex: 0 0 30%;
+	font-size: 0.85rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.npa-topagents__track {
+	flex: 1 1 auto;
+	height: 12px;
+	background: #eef2f8;
+	border-radius: 999px;
+	overflow: hidden;
+}
+
+.npa-topagents__bar {
+	display: block;
+	height: 100%;
+	background: var( --npa-brand-grad );
+	border-radius: 999px;
+}
+
+.npa-topagents__count {
+	flex: 0 0 auto;
+	font-size: 0.85rem;
+	color: #646970;
+	min-width: 2rem;
+	text-align: right;
 }

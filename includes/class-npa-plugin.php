@@ -181,6 +181,10 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-mock.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-http.php';
 
+		// Shared launcher-icon library (used by settings sanitize, the widget, and
+		// the admin picker/preview).
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-icons.php';
+
 		// Configuration (depends on the mock for the default agent id).
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-settings.php';
 
@@ -623,6 +627,61 @@ final class NPA_Plugin {
 					'pass'  => in_array( $bad_enums['theme'], NPA_Settings::THEMES, true )
 						&& in_array( $bad_enums['launcher_shape'], NPA_Settings::SHAPES, true )
 						&& in_array( $bad_enums['audience'], NPA_Settings::AUDIENCES, true ),
+				);
+
+				// Custom launcher icon + size: bad values fall back; a valid emoji is
+				// kept while tags are stripped and length is capped.
+				$bad_icon = $settings->sanitize(
+					array(
+						'launcher_icon_type'    => 'hologram',
+						'launcher_icon_builtin' => 'unicorn',
+						'launcher_size'         => 'gigantic',
+						'launcher_icon_emoji'   => '<b>🎧</b>',
+					)
+				);
+				$checks[] = array(
+					'label' => __( 'Invalid launcher icon type, built-in icon, and size fall back to whitelisted values', 'newtide-public-agent' ),
+					'pass'  => in_array( $bad_icon['launcher_icon_type'], NPA_Settings::LAUNCHER_ICON_TYPES, true )
+						&& NPA_Icons::is_valid( $bad_icon['launcher_icon_builtin'] )
+						&& in_array( $bad_icon['launcher_size'], NPA_Settings::LAUNCHER_SIZES, true ),
+				);
+				$checks[] = array(
+					'label' => __( 'Launcher emoji keeps the glyph but strips markup', 'newtide-public-agent' ),
+					'pass'  => false === strpos( $bad_icon['launcher_icon_emoji'], '<' )
+						&& false !== strpos( $bad_icon['launcher_icon_emoji'], '🎧' ),
+				);
+
+				// Additional agents: empty rows dropped, page ids normalized, bad
+				// mode falls back, and overrides survive.
+				$agents_clean = $settings->sanitize(
+					array(
+						'agents' => array(
+							array(
+								'name'     => '',
+								'agent_id' => '',
+								'page_ids' => array(),
+							), // empty → dropped.
+							array(
+								'name'     => 'Pricing bot',
+								'mode'     => 'telepathy',            // invalid → proxy.
+								'agent_id' => 'agent-42',
+								'page_ids' => array( '12', 'x', 12, 40, 0 ), // normalizes to twelve and forty.
+								'accent'   => 'not-a-color',          // invalid colour becomes inherit.
+								'label'    => 'Talk pricing',
+							),
+						),
+					)
+				);
+				$row          = isset( $agents_clean['agents'][0] ) ? $agents_clean['agents'][0] : array();
+				$checks[]     = array(
+					'label' => __( 'Additional agents: empty rows drop, page IDs normalize, invalid mode/colour fall back', 'newtide-public-agent' ),
+					'pass'  => is_array( $agents_clean['agents'] )
+						&& 1 === count( $agents_clean['agents'] )
+						&& 'proxy' === $row['mode']
+						&& array( 12, 40 ) === $row['page_ids']
+						&& '' === $row['accent']
+						&& 'agent-42' === $row['agent_id']
+						&& 'Talk pricing' === $row['label'],
 				);
 
 				// Connection mode and embed placement fall back to safe values.

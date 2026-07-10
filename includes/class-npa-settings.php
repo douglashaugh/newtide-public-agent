@@ -55,6 +55,20 @@ class NPA_Settings {
 	const SHAPES = array( 'pill', 'bubble' );
 
 	/**
+	 * Allowed launcher-icon sources.
+	 *
+	 * @var string[]
+	 */
+	const LAUNCHER_ICON_TYPES = array( 'default', 'image', 'emoji', 'builtin' );
+
+	/**
+	 * Allowed launcher sizes.
+	 *
+	 * @var string[]
+	 */
+	const LAUNCHER_SIZES = array( 'small', 'medium', 'large' );
+
+	/**
 	 * Allowed audience gates for widget visibility.
 	 *
 	 * @var string[]
@@ -138,6 +152,11 @@ class NPA_Settings {
 			'header_title'              => __( 'Chat with our agent', 'newtide-public-agent' ),
 			'theme'                     => 'auto',
 			'launcher_shape'            => 'pill',
+			'launcher_size'             => 'medium',
+			'launcher_icon_type'        => 'default', // default | image | emoji | builtin.
+			'launcher_icon_id'          => 0,         // Attachment id when type = image.
+			'launcher_icon_emoji'       => '',        // Emoji when type = emoji.
+			'launcher_icon_builtin'     => 'chat',    // Built-in slug when type = builtin.
 			'powered_by'                => true,
 			// Behaviour.
 			'auto_open_delay'           => 0, // Seconds; 0 = do not auto-open.
@@ -147,6 +166,8 @@ class NPA_Settings {
 			'exclude_ids'               => '', // Comma-separated post/page IDs to suppress on.
 			'page_scope'                => 'all', // 'all' pages or only the 'selected' ones.
 			'page_ids'                  => array(), // Selected page IDs when page_scope = 'selected'.
+			// Additional page-targeted agents. Each entry is a map; see sanitize_agents().
+			'agents'                    => array(),
 			// Content / messaging.
 			'input_placeholder'         => __( 'Type your message', 'newtide-public-agent' ),
 			'suggested_prompts'         => '', // One prompt per line.
@@ -258,6 +279,14 @@ class NPA_Settings {
 			$clean['page_ids'] = is_array( $existing['page_ids'] ) ? array_values( array_filter( array_map( 'absint', $existing['page_ids'] ) ) ) : array();
 		}
 
+		// Additional page-targeted agents (the Additional Agents tab).
+		if ( $has( 'agents' ) ) {
+			$raw_agents      = ( isset( $input['agents'] ) && is_array( $input['agents'] ) ) ? $input['agents'] : array();
+			$clean['agents'] = self::sanitize_agents( $raw_agents );
+		} else {
+			$clean['agents'] = is_array( $existing['agents'] ) ? self::sanitize_agents( $existing['agents'] ) : array();
+		}
+
 		// Position whitelist.
 		$position          = $has( 'position' ) ? sanitize_key( $input['position'] ) : $existing['position'];
 		$clean['position'] = in_array( $position, self::POSITIONS, true ) ? $position : 'bottom-right';
@@ -269,6 +298,28 @@ class NPA_Settings {
 		// Launcher-shape whitelist.
 		$shape                   = $has( 'launcher_shape' ) ? sanitize_key( $input['launcher_shape'] ) : $existing['launcher_shape'];
 		$clean['launcher_shape'] = in_array( $shape, self::SHAPES, true ) ? $shape : 'pill';
+
+		// Launcher-size whitelist.
+		$size                   = $has( 'launcher_size' ) ? sanitize_key( $input['launcher_size'] ) : $existing['launcher_size'];
+		$clean['launcher_size'] = in_array( $size, self::LAUNCHER_SIZES, true ) ? $size : 'medium';
+
+		// Custom launcher icon: source type + the value for that source.
+		$icon_type                   = $has( 'launcher_icon_type' ) ? sanitize_key( $input['launcher_icon_type'] ) : $existing['launcher_icon_type'];
+		$clean['launcher_icon_type'] = in_array( $icon_type, self::LAUNCHER_ICON_TYPES, true ) ? $icon_type : 'default';
+
+		$clean['launcher_icon_id'] = $has( 'launcher_icon_id' ) ? absint( $input['launcher_icon_id'] ) : (int) $existing['launcher_icon_id'];
+
+		// Emoji is free text; keep tags out and cap at a few code points so it
+		// stays a glyph, not a paragraph. sanitize_key() would strip the emoji.
+		if ( $has( 'launcher_icon_emoji' ) ) {
+			$emoji                        = trim( wp_strip_all_tags( (string) $input['launcher_icon_emoji'] ) );
+			$clean['launcher_icon_emoji'] = function_exists( 'mb_substr' ) ? mb_substr( $emoji, 0, 8 ) : substr( $emoji, 0, 16 );
+		} else {
+			$clean['launcher_icon_emoji'] = $existing['launcher_icon_emoji'];
+		}
+
+		$builtin                        = $has( 'launcher_icon_builtin' ) ? sanitize_key( $input['launcher_icon_builtin'] ) : $existing['launcher_icon_builtin'];
+		$clean['launcher_icon_builtin'] = NPA_Icons::is_valid( $builtin ) ? $builtin : 'chat';
 
 		// Audience whitelist.
 		$audience          = $has( 'audience' ) ? sanitize_key( $input['audience'] ) : $existing['audience'];
@@ -307,6 +358,93 @@ class NPA_Settings {
 		}
 
 		return $clean;
+	}
+
+	/**
+	 * Sanitize the additional-agents repeater: a list of maps. Each is normalized
+	 * to a fixed shape; entirely-empty rows are dropped and the list is capped.
+	 * Overrides left blank mean "inherit the global setting" at render time.
+	 *
+	 * @param array $rows Raw rows from the form (or stored).
+	 * @return array<int,array>
+	 */
+	public static function sanitize_agents( $rows ) {
+		if ( ! is_array( $rows ) ) {
+			return array();
+		}
+
+		$icon_types = array( 'inherit', 'default', 'image', 'emoji', 'builtin' );
+		$out        = array();
+
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$mode = ( isset( $row['mode'] ) && in_array( $row['mode'], self::MODES, true ) ) ? $row['mode'] : 'proxy';
+
+			$page_ids = ( isset( $row['page_ids'] ) && is_array( $row['page_ids'] ) )
+				? array_values( array_unique( array_filter( array_map( 'absint', $row['page_ids'] ) ) ) )
+				: array();
+
+			$name       = isset( $row['name'] ) ? sanitize_text_field( $row['name'] ) : '';
+			$agent_id   = isset( $row['agent_id'] ) ? sanitize_text_field( $row['agent_id'] ) : '';
+			$public_key = isset( $row['public_key'] ) ? sanitize_text_field( $row['public_key'] ) : '';
+			$greeting   = isset( $row['greeting'] ) ? sanitize_text_field( $row['greeting'] ) : '';
+			$label      = isset( $row['label'] ) ? sanitize_text_field( $row['label'] ) : '';
+
+			$accent = isset( $row['accent'] ) ? sanitize_hex_color( (string) $row['accent'] ) : '';
+			$accent = $accent ? $accent : '';
+
+			$icon_type = isset( $row['icon_type'] ) ? sanitize_key( $row['icon_type'] ) : 'inherit';
+			$icon_type = in_array( $icon_type, $icon_types, true ) ? $icon_type : 'inherit';
+			$icon_id   = isset( $row['icon_id'] ) ? absint( $row['icon_id'] ) : 0;
+
+			$icon_emoji = '';
+			if ( isset( $row['icon_emoji'] ) ) {
+				$icon_emoji = trim( wp_strip_all_tags( (string) $row['icon_emoji'] ) );
+				$icon_emoji = function_exists( 'mb_substr' ) ? mb_substr( $icon_emoji, 0, 8 ) : substr( $icon_emoji, 0, 16 );
+			}
+
+			$icon_builtin = ( isset( $row['icon_builtin'] ) && NPA_Icons::is_valid( $row['icon_builtin'] ) ) ? $row['icon_builtin'] : 'chat';
+
+			// Drop rows with no name, no target, and no pages — an empty add.
+			$has_target = ( 'embed' === $mode ) ? ( '' !== $public_key ) : ( '' !== $agent_id );
+			if ( '' === $name && ! $has_target && empty( $page_ids ) ) {
+				continue;
+			}
+
+			$out[] = array(
+				'name'         => $name,
+				'mode'         => $mode,
+				'agent_id'     => $agent_id,
+				'public_key'   => $public_key,
+				'page_ids'     => $page_ids,
+				'accent'       => $accent,
+				'greeting'     => $greeting,
+				'label'        => $label,
+				'icon_type'    => $icon_type,
+				'icon_id'      => $icon_id,
+				'icon_emoji'   => $icon_emoji,
+				'icon_builtin' => $icon_builtin,
+			);
+
+			if ( count( $out ) >= 20 ) {
+				break;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The configured additional agents (normalized list).
+	 *
+	 * @return array<int,array>
+	 */
+	public function get_agents() {
+		$rows = $this->get( 'agents', array() );
+		return is_array( $rows ) ? self::sanitize_agents( $rows ) : array();
 	}
 
 	// Secret handling.

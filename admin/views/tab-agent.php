@@ -229,3 +229,16 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 
 	<?php submit_button(); ?>
 </form>
+
+<?php $npa_admin->card_open( __( 'Test drive', 'newtide-public-agent' ), __( 'Chat with your configured agent right here — the fastest way to confirm it answers.', 'newtide-public-agent' ) ); ?>
+<div class="npa-testdrive" id="npa-testdrive">
+	<div class="npa-testdrive__log" id="npa-td-log" aria-live="polite">
+		<div class="npa-testdrive__hint"><?php esc_html_e( 'Send a message to try your agent. Save any connection changes above first.', 'newtide-public-agent' ); ?></div>
+	</div>
+	<form class="npa-testdrive__form" id="npa-td-form">
+		<input type="text" id="npa-td-input" class="regular-text" placeholder="<?php esc_attr_e( 'Type a message to your agent…', 'newtide-public-agent' ); ?>" autocomplete="off" />
+		<button type="submit" class="button button-primary" id="npa-td-send"><?php esc_html_e( 'Send', 'newtide-public-agent' ); ?></button>
+	</form>
+	<p class="description"><?php esc_html_e( 'Uses your live connection — or the built-in mock until you configure one. Messages count toward today’s usage and appear in Service Status.', 'newtide-public-agent' ); ?></p>
+</div>
+<?php $npa_admin->card_close(); ?>

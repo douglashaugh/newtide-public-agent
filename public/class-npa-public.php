@@ -61,6 +61,22 @@ class NPA_Public {
 	private static $embed_seq = 0;
 
 	/**
+	 * The publishable key to stamp onto the embed loader for THIS request. Lets a
+	 * page-matched additional agent inject its own key instead of the global one.
+	 *
+	 * @var string
+	 */
+	private $active_public_key = '';
+
+	/**
+	 * A resolved proxy config queued for auto-injection in the footer (set when a
+	 * page-matched additional agent runs in proxy mode). Null = nothing to inject.
+	 *
+	 * @var array|null
+	 */
+	private $pending_proxy_config = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param NPA_Plugin $plugin Plugin instance.
@@ -79,6 +95,8 @@ class NPA_Public {
 		add_shortcode( 'newtide_agent', array( $this, 'render_shortcode' ) );
 		add_action( 'init', array( $this, 'register_block' ) );
 		add_filter( 'script_loader_tag', array( $this, 'embed_script_tag' ), 10, 2 );
+		// Auto-inject a page-matched additional agent's proxy widget in the footer.
+		add_action( 'wp_footer', array( $this, 'render_auto_agent' ) );
 	}
 
 	/**
@@ -124,6 +142,8 @@ class NPA_Public {
 				),
 			)
 		);
+
+		$this->decide_auto_injection();
 	}
 
 	/**
@@ -157,15 +177,160 @@ class NPA_Public {
 				true
 			);
 		}
+	}
 
-		// Floating embed injects itself on every allowed page.
+	/**
+	 * Decide what auto-injects on this request. A page-matched additional agent
+	 * wins on its pages; otherwise the global embed floating bubble behaves as
+	 * before. Runs at the tail of register_assets() (on wp_enqueue_scripts), so
+	 * proxy assets enqueue here and the markup renders later in the footer.
+	 *
+	 * @return void
+	 */
+	private function decide_auto_injection() {
+		$s = $this->plugin->settings;
+
+		$active = $this->active_additional_agent();
+		if ( $active && $this->passes_common_gates() ) {
+			$this->inject_additional_agent( $active );
+			return;
+		}
+
+		// Global embed floating bubble (unchanged behavior).
 		if ( 'embed' === $s->get_mode()
 			&& 'floating' === $s->get( 'placement' )
 			&& $s->get( 'enabled' )
 			&& $s->is_embed_configured()
 			&& $this->should_display() ) {
+			$this->active_public_key = $s->get_public_key();
 			$this->enqueue_embed( '' );
 		}
+	}
+
+	/**
+	 * The first additional agent configured to target the current page, or null.
+	 *
+	 * @return array|null
+	 */
+	private function active_additional_agent() {
+		if ( ! $this->plugin->settings->get( 'enabled' ) ) {
+			return null;
+		}
+		$current = (int) get_queried_object_id();
+		if ( ! $current ) {
+			return null;
+		}
+		foreach ( $this->plugin->settings->get_agents() as $agent ) {
+			$pages = isset( $agent['page_ids'] ) ? array_map( 'absint', (array) $agent['page_ids'] ) : array();
+			if ( in_array( $current, $pages, true ) ) {
+				return $agent;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The audience gate + per-page exclusion list — the checks shared by the
+	 * primary widget and every additional agent (i.e. everything except the
+	 * primary's own page allowlist).
+	 *
+	 * @return bool
+	 */
+	private function passes_common_gates() {
+		$s = $this->plugin->settings;
+
+		$audience = (string) $s->get( 'audience', 'everyone' );
+		if ( 'logged_in' === $audience && ! is_user_logged_in() ) {
+			return false;
+		}
+		if ( 'anonymous' === $audience && is_user_logged_in() ) {
+			return false;
+		}
+
+		$raw = (string) $s->get( 'exclude_ids', '' );
+		if ( '' !== $raw ) {
+			$excluded = array_filter( array_map( 'absint', explode( ',', $raw ) ) );
+			$current  = (int) get_queried_object_id();
+			if ( $current && in_array( $current, $excluded, true ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Wire up a page-matched additional agent: embed injects its own key; proxy
+	 * enqueues assets and queues its resolved config for footer output.
+	 *
+	 * @param array $agent Sanitized additional-agent row.
+	 * @return void
+	 */
+	private function inject_additional_agent( array $agent ) {
+		$s = $this->plugin->settings;
+
+		if ( 'embed' === $agent['mode'] ) {
+			if ( '' !== trim( (string) $agent['public_key'] ) && '' !== $s->get_platform_url() ) {
+				$this->active_public_key = (string) $agent['public_key'];
+				$this->enqueue_embed( '' );
+			}
+			return;
+		}
+
+		$config = $this->resolve_agent_config( $agent );
+		if ( '' !== $config['agent'] ) {
+			$this->pending_proxy_config = $config;
+			$this->enqueue();
+		}
+	}
+
+	/**
+	 * Merge an additional agent's non-empty overrides over the global config. A
+	 * blank override inherits the global Appearance/messaging value.
+	 *
+	 * @param array $agent Sanitized additional-agent row.
+	 * @return array Resolved config for mount_html().
+	 */
+	private function resolve_agent_config( array $agent ) {
+		$config = $this->resolve_config( array() );
+
+		if ( '' !== trim( (string) $agent['agent_id'] ) ) {
+			$config['agent'] = sanitize_text_field( (string) $agent['agent_id'] );
+		}
+		if ( '' !== trim( (string) $agent['greeting'] ) ) {
+			$config['greeting'] = sanitize_text_field( (string) $agent['greeting'] );
+		}
+		if ( '' !== trim( (string) $agent['label'] ) ) {
+			$config['label'] = sanitize_text_field( (string) $agent['label'] );
+		}
+		$accent = sanitize_hex_color( (string) $agent['accent'] );
+		if ( $accent ) {
+			$config['accent'] = $accent;
+		}
+
+		$icon_type = isset( $agent['icon_type'] ) ? (string) $agent['icon_type'] : 'inherit';
+		if ( 'inherit' !== $icon_type && '' !== $icon_type ) {
+			$config['icon_type']    = $icon_type;
+			$config['icon_id']      = (int) $agent['icon_id'];
+			$config['icon_emoji']   = (string) $agent['icon_emoji'];
+			$config['icon_builtin'] = (string) $agent['icon_builtin'];
+		}
+
+		return $config;
+	}
+
+	/**
+	 * Output a page-matched additional agent's proxy widget in the footer. No-op
+	 * unless decide_auto_injection() queued one for this request.
+	 *
+	 * @return void
+	 */
+	public function render_auto_agent() {
+		if ( null === $this->pending_proxy_config ) {
+			return;
+		}
+		// mount_html escapes each attribute and emits static/curated icon markup.
+		echo $this->mount_html( $this->pending_proxy_config ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 
 	/**
@@ -200,7 +365,7 @@ class NPA_Public {
 			return $tag;
 		}
 
-		$key = $this->plugin->settings->get_public_key();
+		$key = '' !== $this->active_public_key ? $this->active_public_key : $this->plugin->settings->get_public_key();
 		if ( '' === $key ) {
 			return $tag;
 		}
@@ -248,12 +413,8 @@ class NPA_Public {
 	private function should_display() {
 		$s = $this->plugin->settings;
 
-		// Audience gate.
-		$audience = (string) $s->get( 'audience', 'everyone' );
-		if ( 'logged_in' === $audience && ! is_user_logged_in() ) {
-			return false;
-		}
-		if ( 'anonymous' === $audience && is_user_logged_in() ) {
+		// Audience gate + per-page exclusion list (shared with additional agents).
+		if ( ! $this->passes_common_gates() ) {
 			return false;
 		}
 
@@ -263,16 +424,6 @@ class NPA_Public {
 			$allowed = array_filter( array_map( 'absint', (array) $s->get( 'page_ids', array() ) ) );
 			$current = (int) get_queried_object_id();
 			if ( ! $current || ! in_array( $current, $allowed, true ) ) {
-				return false;
-			}
-		}
-
-		// Per-page exclusion list.
-		$raw = (string) $s->get( 'exclude_ids', '' );
-		if ( '' !== $raw ) {
-			$excluded = array_filter( array_map( 'absint', explode( ',', $raw ) ) );
-			$current  = (int) get_queried_object_id();
-			if ( $current && in_array( $current, $excluded, true ) ) {
 				return false;
 			}
 		}
@@ -310,25 +461,32 @@ class NPA_Public {
 		$theme = in_array( $theme, NPA_Settings::THEMES, true ) ? $theme : 'auto';
 		$shape = (string) $s->get( 'launcher_shape', 'pill' );
 		$shape = in_array( $shape, NPA_Settings::SHAPES, true ) ? $shape : 'pill';
+		$size  = (string) $s->get( 'launcher_size', 'medium' );
+		$size  = in_array( $size, NPA_Settings::LAUNCHER_SIZES, true ) ? $size : 'medium';
 
 		$prompts = array_filter( array_map( 'trim', preg_split( '/\r\n|\r|\n/', (string) $s->get( 'suggested_prompts', '' ) ) ), 'strlen' );
 
 		return array(
-			'agent'       => sanitize_text_field( $merged['agent'] ),
-			'greeting'    => sanitize_text_field( $merged['greeting'] ),
-			'label'       => sanitize_text_field( $merged['label'] ),
-			'position'    => $position,
-			'accent'      => $accent ? $accent : '#2563eb',
-			'header'      => sanitize_text_field( (string) $s->get( 'header_title' ) ),
-			'theme'       => $theme,
-			'shape'       => $shape,
-			'powered'     => (bool) $s->get( 'powered_by' ),
-			'auto_open'   => (int) $s->get( 'auto_open_delay', 0 ),
-			'hide_mobile' => (bool) $s->get( 'hide_on_mobile' ),
-			'remember'    => (bool) $s->get( 'remember_state' ),
-			'placeholder' => sanitize_text_field( (string) $s->get( 'input_placeholder' ) ),
-			'prompts'     => array_values( $prompts ),
-			'error'       => sanitize_text_field( (string) $s->get( 'error_message' ) ),
+			'agent'        => sanitize_text_field( $merged['agent'] ),
+			'greeting'     => sanitize_text_field( $merged['greeting'] ),
+			'label'        => sanitize_text_field( $merged['label'] ),
+			'position'     => $position,
+			'accent'       => $accent ? $accent : '#2563eb',
+			'header'       => sanitize_text_field( (string) $s->get( 'header_title' ) ),
+			'theme'        => $theme,
+			'shape'        => $shape,
+			'size'         => $size,
+			'icon_type'    => (string) $s->get( 'launcher_icon_type', 'default' ),
+			'icon_id'      => (int) $s->get( 'launcher_icon_id', 0 ),
+			'icon_emoji'   => (string) $s->get( 'launcher_icon_emoji', '' ),
+			'icon_builtin' => (string) $s->get( 'launcher_icon_builtin', 'chat' ),
+			'powered'      => (bool) $s->get( 'powered_by' ),
+			'auto_open'    => (int) $s->get( 'auto_open_delay', 0 ),
+			'hide_mobile'  => (bool) $s->get( 'hide_on_mobile' ),
+			'remember'     => (bool) $s->get( 'remember_state' ),
+			'placeholder'  => sanitize_text_field( (string) $s->get( 'input_placeholder' ) ),
+			'prompts'      => array_values( $prompts ),
+			'error'        => sanitize_text_field( (string) $s->get( 'error_message' ) ),
 		);
 	}
 
@@ -347,6 +505,7 @@ class NPA_Public {
 			'newtide-public-agent',
 			'newtide-public-agent--' . $config['position'],
 			'newtide-public-agent--shape-' . $config['shape'],
+			'newtide-public-agent--size-' . $config['size'],
 		);
 		if ( 'auto' !== $config['theme'] ) {
 			$classes[] = 'newtide-public-agent--theme-' . $config['theme'];
@@ -377,8 +536,9 @@ class NPA_Public {
 			$attr_html .= sprintf( ' %s="%s"', esc_attr( $name ), esc_attr( $value ) );
 		}
 
-		// A chat glyph for the bubble launcher; CSS shows icon or text per shape.
-		$icon = '<svg class="newtide-public-agent__launcher-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3C6.5 3 2 6.7 2 11.2c0 2.3 1.2 4.4 3.1 5.8-.1 1-.6 2.4-1.6 3.5 1.6-.2 3.3-.8 4.6-1.8 1.2.4 2.5.6 3.9.6 5.5 0 10-3.7 10-8.1S17.5 3 12 3Z"/></svg>';
+		// The launcher glyph: the author's custom icon (image/emoji/built-in) or the
+		// default chat glyph. CSS shows it for the bubble shape; the pill shows text.
+		$icon = $this->launcher_icon_html( $config );
 
 		return sprintf(
 			'<div%1$s>'
@@ -390,6 +550,37 @@ class NPA_Public {
 			esc_attr( $config['label'] ),
 			$icon
 		);
+	}
+
+	/**
+	 * Resolve the launcher icon markup from the chosen source. Falls back to the
+	 * built-in chat glyph whenever a custom source is selected but unusable (image
+	 * deleted, emoji blank), so the launcher is never iconless.
+	 *
+	 * @param array $config Resolved config.
+	 * @return string
+	 */
+	private function launcher_icon_html( array $config ) {
+		switch ( $config['icon_type'] ) {
+			case 'image':
+				if ( $config['icon_id'] > 0 ) {
+					$url = wp_get_attachment_image_url( $config['icon_id'], array( 64, 64 ) );
+					if ( $url ) {
+						return '<img class="newtide-public-agent__launcher-icon newtide-public-agent__launcher-icon--image" src="' . esc_url( $url ) . '" alt="" aria-hidden="true" />';
+					}
+				}
+				break;
+			case 'emoji':
+				$emoji = trim( (string) $config['icon_emoji'] );
+				if ( '' !== $emoji ) {
+					return '<span class="newtide-public-agent__launcher-icon newtide-public-agent__launcher-icon--emoji" aria-hidden="true">' . esc_html( $emoji ) . '</span>';
+				}
+				break;
+			case 'builtin':
+				return NPA_Icons::svg( $config['icon_builtin'] );
+		}
+
+		return NPA_Icons::svg( 'chat' );
 	}
 
 	/**

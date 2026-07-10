@@ -215,4 +215,65 @@ class NPA_Store {
 			'avg_latency_ms' => (int) round( $latency / $count ),
 		);
 	}
+
+	/**
+	 * Per-day usage for the last N days (oldest first), gaps filled with zeros —
+	 * a ready-to-plot series for the analytics dashboard.
+	 *
+	 * @param int $days Number of days back, including today.
+	 * @return array<int,array{date:string,count:int,errors:int,avg_latency_ms:int}>
+	 */
+	public function daily_series( $days = 14 ) {
+		global $wpdb;
+
+		$days  = max( 1, min( 90, (int) $days ) );
+		$table = $this->table_name();
+		$start = current_time( 'Y-m-d', false );
+		$from  = gmdate( 'Y-m-d', strtotime( $start . ' -' . ( $days - 1 ) . ' days' ) ) . ' 00:00:00';
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT DATE(created_at) AS d,
+					COUNT(*) AS c,
+					SUM( CASE WHEN status >= 400 OR error_code <> '' THEN 1 ELSE 0 END ) AS e,
+					AVG(latency_ms) AS l
+				FROM {$table}
+				WHERE created_at >= %s
+				GROUP BY DATE(created_at)",
+				$from
+			),
+			ARRAY_A
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		$by_date = array();
+		if ( is_array( $rows ) ) {
+			foreach ( $rows as $r ) {
+				$by_date[ (string) $r['d'] ] = array(
+					'count'          => (int) $r['c'],
+					'errors'         => (int) $r['e'],
+					'avg_latency_ms' => (int) round( (float) $r['l'] ),
+				);
+			}
+		}
+
+		$series = array();
+		for ( $i = $days - 1; $i >= 0; $i-- ) {
+			$date     = gmdate( 'Y-m-d', strtotime( $start . ' -' . $i . ' days' ) );
+			$found    = isset( $by_date[ $date ] ) ? $by_date[ $date ] : array(
+				'count'          => 0,
+				'errors'         => 0,
+				'avg_latency_ms' => 0,
+			);
+			$series[] = array(
+				'date'           => $date,
+				'count'          => $found['count'],
+				'errors'         => $found['errors'],
+				'avg_latency_ms' => $found['avg_latency_ms'],
+			);
+		}
+
+		return $series;
+	}
 }

@@ -283,6 +283,60 @@
 	border: 0;
 }
 
+/* Custom launcher icons. Image scales inside the icon box; emoji sizes by font.
+   Both carry the shared launcher-icon class, so the shape rules above show them
+   in the bubble launcher and hide them (text wins) in the pill. */
+.newtide-public-agent__launcher-icon--image {
+	object-fit: contain;
+	border-radius: 6px;
+}
+
+.newtide-public-agent__launcher-icon--emoji {
+	width: auto;
+	height: auto;
+	font-size: 1.6rem;
+	line-height: 1;
+}
+
+/* Launcher size scale: bubble diameter, pill padding, and icon size together. */
+.newtide-public-agent--size-small.newtide-public-agent--shape-bubble .newtide-public-agent__launcher {
+	width: 3rem;
+	height: 3rem;
+}
+
+.newtide-public-agent--size-large.newtide-public-agent--shape-bubble .newtide-public-agent__launcher {
+	width: 4.25rem;
+	height: 4.25rem;
+}
+
+.newtide-public-agent--size-small .newtide-public-agent__launcher {
+	padding: 0.5rem 1rem;
+	font-size: 0.9em;
+}
+
+.newtide-public-agent--size-large .newtide-public-agent__launcher {
+	padding: 0.9rem 1.6rem;
+	font-size: 1.1em;
+}
+
+.newtide-public-agent--size-small .newtide-public-agent__launcher-icon {
+	width: 1.35rem;
+	height: 1.35rem;
+}
+
+.newtide-public-agent--size-large .newtide-public-agent__launcher-icon {
+	width: 1.9rem;
+	height: 1.9rem;
+}
+
+.newtide-public-agent--size-small .newtide-public-agent__launcher-icon--emoji {
+	font-size: 1.3rem;
+}
+
+.newtide-public-agent--size-large .newtide-public-agent__launcher-icon--emoji {
+	font-size: 2rem;
+}
+
 /* Suggested-prompt chips shown under the greeting. */
 .newtide-public-agent__prompts {
 	display: flex;

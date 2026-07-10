@@ -15,6 +15,13 @@ $npa_agg    = $npa_plugin->store->aggregates( 50 );
 ?>
 <?php $npa_admin->tab_intro( 'dashicons-heart', __( 'Service status', 'newtide-public-agent' ), __( 'A live health roll-up and a snapshot of recent agent traffic.', 'newtide-public-agent' ) ); ?>
 
+<?php $npa_admin->card_open( __( 'Usage analytics', 'newtide-public-agent' ), __( 'Traffic over the last two weeks, drawn from recorded call metadata.', 'newtide-public-agent' ) ); ?>
+<?php
+// analytics_html() is fully escaped at construction.
+echo $npa_admin->analytics_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+?>
+<?php $npa_admin->card_close(); ?>
+
 <?php $npa_admin->card_open( __( 'Health', 'newtide-public-agent' ), __( 'Each dependency the plugin relies on, at a glance.', 'newtide-public-agent' ) ); ?>
 <?php
 // status_html() is fully escaped at construction.
