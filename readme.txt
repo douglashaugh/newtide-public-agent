@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.1.0
+Stable tag: 0.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,13 @@ Yes. Without a configured URL and credential the plugin runs against a determini
 Those are enforced by the gateway. The plugin offers an optional courtesy daily cap and a per-request throttle, but the authoritative controls live gateway-side.
 
 == Changelog ==
+
+= 0.2.1 =
+Admin experience and widget customization overhaul:
+* Reworked admin UX with a dedicated Appearance tab and a settings dashboard.
+* Multi-agent support in the admin UI.
+* Page-targeting control and branded admin styling.
+* Embed transport defaults to the production platform; Platform URL marked advanced.
 
 = 0.1.0 =
 Initial build (feature-complete against the mock gateway):
