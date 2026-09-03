@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.2.3
+Stable tag: 0.2.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,17 @@ Yes. Without a configured URL and credential the plugin runs against a determini
 Those are enforced by the gateway. The plugin offers an optional courtesy daily cap and a per-request throttle, but the authoritative controls live gateway-side.
 
 == Changelog ==
+
+= 0.2.4 =
+Fixes:
+* Installs no longer receive the project's internal files. Git-as-deploy installs
+  the GitHub branch archive, so deploy.bat's exclusions -- which only ever applied
+  to the local mirror -- did not apply to real sites: every install received
+  CLAUDE.md, docs/ (architecture decisions, the provisional gateway contract, the
+  publishing guide PDF), composer.json, .phpcs.xml.dist and deploy.bat. Because
+  .md, .pdf and .bat are served as static files from wp-content/plugins/, all of
+  them were readable at a public URL on the customer's own domain. A .gitattributes
+  with export-ignore now keeps them in the repository but out of the archive.
 
 = 0.2.3 =
 Fixes:

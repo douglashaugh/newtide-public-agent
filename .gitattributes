@@ -1,0 +1,22 @@
+# What ships to a customer site.
+#
+# Git-as-deploy (ADR-001) installs the GitHub branch ARCHIVE, not the deploy.bat
+# mirror -- so deploy.bat's exclusions never applied to real installs. Everything
+# tracked here landed in wp-content/plugins/ on every site, and files like .md,
+# .pdf and .bat are served as static assets: the internal ADRs, the provisional
+# gateway contract and the local Windows path in deploy.bat were all readable at
+# a public URL.
+#
+# export-ignore keeps these out of the archive GitHub generates, so the repo can
+# keep its engineering docs while installs receive only the plugin.
+#
+# Never export-ignore readme.txt or the main plugin file: Plugin Update Checker
+# reads both to detect and describe an update.
+
+/docs/            export-ignore
+/CLAUDE.md        export-ignore
+/deploy.bat       export-ignore
+/composer.json    export-ignore
+/.phpcs.xml.dist  export-ignore
+/.gitignore       export-ignore
+/.gitattributes   export-ignore
