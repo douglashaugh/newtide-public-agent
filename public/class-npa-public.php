@@ -518,6 +518,9 @@ class NPA_Public {
 			'class'            => implode( ' ', $classes ),
 			'data-npa-widget'  => '',
 			'data-agent'       => $config['agent'],
+			// Signs the agent id so the proxy will route to it (see NPA_Rest::agent_token).
+			// Without this a per-page or shortcode agent silently answers as the default.
+			'data-agent-token' => NPA_Rest::agent_token( $config['agent'] ),
 			'data-greeting'    => $config['greeting'],
 			'data-label'       => $config['label'],
 			'data-header'      => $config['header'],

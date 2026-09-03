@@ -247,7 +247,7 @@ class NPA_Admin {
 
 		$items[] = array(
 			'label' => $embed ? __( 'Connect: publishable key & platform URL', 'newtide-public-agent' ) : __( 'Connect: gateway URL, credential & agent', 'newtide-public-agent' ),
-			'done'  => $embed ? $s->is_embed_configured() : $s->is_configured(),
+			'done'  => $s->is_connection_configured(),
 			'tab'   => 'agent',
 			'hint'  => __( 'Set your connection on the Agent tab.', 'newtide-public-agent' ),
 		);

@@ -25,6 +25,7 @@
 	function Widget( mount ) {
 		this.mount = mount;
 		this.agent = mount.getAttribute( 'data-agent' ) || '';
+		this.agentToken = mount.getAttribute( 'data-agent-token' ) || '';
 		this.greeting = mount.getAttribute( 'data-greeting' ) || '';
 		this.label = mount.getAttribute( 'data-label' ) || 'Chat';
 		this.header = mount.getAttribute( 'data-header' ) || this.label;
@@ -272,6 +273,11 @@
 		var body = {
 			message: text,
 			conversation_id: this.conversationId,
+			// Which agent this mount is for. The token is the server's own
+			// signature over the id; without both the proxy answers as the
+			// site default, so per-page and shortcode agents need them sent.
+			agent_id: this.agent,
+			agent_token: this.agentToken,
 			context: {
 				page_url: window.location.href,
 				page_title: document.title,

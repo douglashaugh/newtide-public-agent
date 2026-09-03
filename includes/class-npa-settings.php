@@ -575,4 +575,33 @@ class NPA_Settings {
 			&& '' !== $this->get_agent_id()
 			&& $this->gateway_key_is_set();
 	}
+
+	/**
+	 * Whether the ACTIVE connection mode has what it needs — the only
+	 * "configured?" question any admin surface should ask.
+	 *
+	 * is_configured() answers for Proxy alone. Asking it while the site runs in
+	 * Embed mode reports "not configured" against fields Embed never uses, which
+	 * is how the Service Status tab came to contradict the Home checklist.
+	 * Route every consumer through here so the two can't diverge again.
+	 *
+	 * @return bool
+	 */
+	public function is_connection_configured() {
+		return ( 'embed' === $this->get_mode() )
+			? $this->is_embed_configured()
+			: $this->is_configured();
+	}
+
+	/**
+	 * What to tell the admin when is_connection_configured() is false, named in
+	 * terms of the fields the ACTIVE mode actually reads.
+	 *
+	 * @return string
+	 */
+	public function configuration_hint() {
+		return ( 'embed' === $this->get_mode() )
+			? __( 'No — set the publishable key and platform URL', 'newtide-public-agent' )
+			: __( 'No — set the gateway URL, credential, and agent', 'newtide-public-agent' );
+	}
 }

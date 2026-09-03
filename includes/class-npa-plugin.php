@@ -18,6 +18,25 @@ defined( 'ABSPATH' ) || exit;
 final class NPA_Plugin {
 
 	/**
+	 * The branch Plugin Update Checker watches for releases (ADR-001).
+	 *
+	 * Pushing a higher `Version:` header to this branch IS the deploy, so the
+	 * name lives here rather than inline in the bootstrap — the Environment
+	 * suite asserts the running checker is pointed at it.
+	 *
+	 * @var string
+	 */
+	const RELEASE_BRANCH = 'main';
+
+	/**
+	 * The Plugin Update Checker instance built in the bootstrap, or null when
+	 * the vendored library is missing (see newtide-public-agent.php).
+	 *
+	 * @var object|null
+	 */
+	public static $update_checker = null;
+
+	/**
 	 * Singleton instance.
 	 *
 	 * @var NPA_Plugin|null
@@ -335,6 +354,45 @@ final class NPA_Plugin {
 				$checks[] = array(
 					'label' => __( 'WordPress 6.4 or newer', 'newtide-public-agent' ),
 					'pass'  => version_compare( get_bloginfo( 'version' ), '6.4', '>=' ),
+				);
+
+				/*
+				 * ADR-002 — the two version fields must agree. If the header and
+				 * the constant drift, WordPress compares the header and never
+				 * offers the update: a release that silently does not ship.
+				 */
+				$header         = get_file_data( NPA_PLUGIN_FILE, array( 'Version' => 'Version' ), 'plugin' );
+				$header_version = isset( $header['Version'] ) ? trim( (string) $header['Version'] ) : '';
+
+				$checks[] = array(
+					'label' => __( 'Plugin header version matches the NPA_VERSION constant', 'newtide-public-agent' ),
+					'pass'  => '' !== $header_version && defined( 'NPA_VERSION' ) && $header_version === (string) NPA_VERSION,
+				);
+
+				/*
+				 * The auto-update path itself. The bootstrap wires this behind an
+				 * is_readable() guard, so a missing/emptied lib/ disables updates
+				 * with no error anywhere — exactly the failure this check exists
+				 * to make visible.
+				 */
+				$checks[] = array(
+					'label' => __( 'Update checker library is vendored and loaded', 'newtide-public-agent' ),
+					'pass'  => class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ),
+				);
+
+				/*
+				 * The bootstrap passes RELEASE_BRANCH straight to setBranch(), so
+				 * the branch cannot drift — what can fail is the checker never
+				 * being constructed. Assert the instance, not the branch: PUC
+				 * keeps $branch protected, and reaching for it would fatal here.
+				 */
+				$checks[] = array(
+					'label' => sprintf(
+						/* translators: %s: the release branch name, e.g. "main". */
+						__( 'Auto-updates are registered against the %s branch', 'newtide-public-agent' ),
+						self::RELEASE_BRANCH
+					),
+					'pass'  => is_object( self::$update_checker ),
 				);
 
 				return $checks;
@@ -970,7 +1028,43 @@ final class NPA_Plugin {
 					'pass'  => 403 === $no_nonce->get_status(),
 				);
 
+				/*
+				 * Agent routing. A page-targeted or shortcode agent tells the proxy
+				 * which agent it is, signed by the server; an unsigned or forged id
+				 * must never be honoured, or a visitor could address any agent the
+				 * credential can reach just by editing the request.
+				 */
+				$routed = '__npa_routed_agent__';
+
+				$signed = new WP_REST_Request( 'POST', '/npa/v1/message' );
+				$signed->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$signed->set_param( 'message', 'routed to a page-targeted agent' );
+				$signed->set_param( 'agent_id', $routed );
+				$signed->set_param( 'agent_token', NPA_Rest::agent_token( $routed ) );
+				$server->dispatch( $signed );
+
+				$last     = $this->store->recent( 1 );
+				$checks[] = array(
+					'label' => __( 'A signed agent id is routed to that agent, not the site default', 'newtide-public-agent' ),
+					'pass'  => isset( $last[0]['agent_id'] ) && $routed === $last[0]['agent_id'],
+				);
+
+				$forged = new WP_REST_Request( 'POST', '/npa/v1/message' );
+				$forged->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$forged->set_param( 'message', 'forged agent id' );
+				$forged->set_param( 'agent_id', '__npa_forged_agent__' );
+				$forged->set_param( 'agent_token', 'not-a-valid-signature' );
+				$server->dispatch( $forged );
+
+				$last     = $this->store->recent( 1 );
+				$checks[] = array(
+					'label' => __( 'An unsigned or forged agent id falls back to the default agent', 'newtide-public-agent' ),
+					'pass'  => isset( $last[0]['agent_id'] ) && '__npa_rest_test__' === $last[0]['agent_id'],
+				);
+
 				// Cleanup — leave no test data behind.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => $routed ), array( '%s' ) );
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_rest_test__' ), array( '%s' ) );
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
@@ -1046,6 +1140,13 @@ final class NPA_Plugin {
 				$checks[] = array(
 					'label' => __( 'The gateway credential never appears in front-end output', 'newtide-public-agent' ),
 					'pass'  => '' !== $sentinel && false === strpos( $html, $sentinel ),
+				);
+
+				// The mount must carry a valid signature for its agent, or the
+				// proxy will fall back to the default and per-page agents break.
+				$checks[] = array(
+					'label' => __( 'The mount node carries a valid signature for its agent id', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $html, 'data-agent-token="' . NPA_Rest::agent_token( $this->settings->get_agent_id() ) . '"' ),
 				);
 
 				// Page allowlist: scoped to a non-matching page id, the widget is

@@ -34,7 +34,7 @@ echo $npa_admin->status_html(); // phpcs:ignore WordPress.Security.EscapeOutput.
 	<tbody>
 		<tr>
 			<th scope="row"><?php esc_html_e( 'Configured', 'newtide-public-agent' ); ?></th>
-			<td><?php echo $settings->is_configured() ? esc_html__( 'Yes', 'newtide-public-agent' ) : esc_html__( 'No — set the gateway URL, credential, and agent', 'newtide-public-agent' ); ?></td>
+			<td><?php echo $settings->is_connection_configured() ? esc_html__( 'Yes', 'newtide-public-agent' ) : esc_html( $settings->configuration_hint() ); ?></td>
 		</tr>
 		<tr>
 			<th scope="row"><?php esc_html_e( 'Recent calls (last 50)', 'newtide-public-agent' ); ?></th>

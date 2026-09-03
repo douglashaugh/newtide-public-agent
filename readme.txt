@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.2.1
+Stable tag: 0.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,29 @@ Yes. Without a configured URL and credential the plugin runs against a determini
 Those are enforced by the gateway. The plugin offers an optional courtesy daily cap and a per-request throttle, but the authoritative controls live gateway-side.
 
 == Changelog ==
+
+= 0.2.2 =
+Fixes:
+* Per-page agents now actually answer. In Proxy mode the widget rendered with its
+  targeted agent but every message was relayed to the site-wide default, so
+  Additional Agents and the shortcode/block `agent` override had no effect. The
+  mount now carries a server signature for its agent id and the proxy honours it;
+  an unsigned or forged id still falls back to the default, so the browser can
+  never address an agent this site did not render.
+* Service Status no longer reports "Configured: No" on a correctly configured
+  Embed-mode site. The check read Proxy-only fields regardless of mode; both it
+  and the Home checklist now share one mode-aware test.
+* Usage history and the busiest-agents chart now attribute calls to the agent that
+  actually answered rather than always the default.
+* deploy.bat no longer strips the update checker's vendor/ directory when
+  mirroring to a Local site (a bare robocopy /XD name matches at any depth).
+
+Tests:
+* Environment: the plugin header and NPA_VERSION must agree (ADR-002), the update
+  checker library must be loaded, and the checker must be registered — the three
+  ways a release can silently fail to ship.
+* Message proxy: a signed agent id routes to that agent; a forged one does not.
+* Front-end widget: the mount carries a valid signature for its agent id.
 
 = 0.2.1 =
 Admin experience and widget customization overhaul:

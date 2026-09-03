@@ -94,6 +94,14 @@ class NPA_Rest {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					),
+					'agent_id'        => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'agent_token'     => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 				),
 			)
 		);
@@ -124,6 +132,46 @@ class NPA_Rest {
 	}
 
 	/**
+	 * Sign an agent id so the widget can name which agent it is talking to.
+	 *
+	 * The browser cannot be trusted to pick an agent: the gateway credential can
+	 * usually reach every agent in the tenant, so an unsigned id would let any
+	 * visitor address an internal agent by editing one request. The mount markup
+	 * therefore carries a token derived from the site's salts, and the proxy
+	 * honours an id only when it verifies — meaning only ids this server itself
+	 * rendered are ever routed to.
+	 *
+	 * @param string $agent_id Agent id.
+	 * @return string Token.
+	 */
+	public static function agent_token( $agent_id ) {
+		return wp_hash( 'npa_agent|' . (string) $agent_id );
+	}
+
+	/**
+	 * Which agent this request is for: the signed id from the widget when the
+	 * signature verifies, otherwise the site-wide default.
+	 *
+	 * Falling back rather than erroring keeps a stale cached page working — it
+	 * answers as the default agent instead of failing the visitor outright.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return string Agent id.
+	 */
+	private function resolve_agent_id( $request ) {
+		$default = $this->plugin->settings->get_agent_id();
+
+		$agent_id = trim( (string) $request->get_param( 'agent_id' ) );
+		$token    = (string) $request->get_param( 'agent_token' );
+
+		if ( '' === $agent_id || '' === $token ) {
+			return $default;
+		}
+
+		return hash_equals( self::agent_token( $agent_id ), $token ) ? $agent_id : $default;
+	}
+
+	/**
 	 * Handle a chat message: throttle, budget-check, relay to the gateway,
 	 * dual-write usage, and return a clean envelope.
 	 *
@@ -151,7 +199,7 @@ class NPA_Rest {
 
 		$conversation_id = sanitize_text_field( (string) $request->get_param( 'conversation_id' ) );
 		$context         = $this->sanitize_context( (array) $request->get_param( 'context' ) );
-		$agent_id        = $this->plugin->settings->get_agent_id();
+		$agent_id        = $this->resolve_agent_id( $request );
 
 		$start = microtime( true );
 
