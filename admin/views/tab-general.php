@@ -62,7 +62,7 @@ defined( 'ABSPATH' ) || exit;
 				<th scope="row"><label for="npa-suggested-prompts"><?php esc_html_e( 'Suggested prompts', 'newtide-public-agent' ); ?></label></th>
 				<td>
 					<textarea id="npa-suggested-prompts" class="large-text" rows="4" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[suggested_prompts]"><?php echo esc_textarea( $settings->get( 'suggested_prompts' ) ); ?></textarea>
-					<p class="description"><?php esc_html_e( 'One per line (up to 6). Shown as clickable chips when the chat opens.', 'newtide-public-agent' ); ?></p>
+					<p class="description"><?php esc_html_e( 'One per line. Shown as clickable chips when the chat opens — the first 6 are used and extra lines are ignored.', 'newtide-public-agent' ); ?></p>
 				</td>
 			</tr>
 			<tr>

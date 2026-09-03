@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.2.2
+Stable tag: 0.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,7 +56,7 @@ This plugin connects to the **NewTide Public Agent Gateway** to obtain agent rep
 * page context: the page URL, page title, and locale;
 * metadata: a source tag, the plugin version, and your site host.
 
-Data is sent only when a visitor interacts with the widget. The gateway credential is sent as an authorization header from your server and is never exposed to the browser. By default the plugin stores only call **metadata** (timestamps, latency, status, token counts) — never message content. Storing transcript content is an explicit, off-by-default option.
+Data is sent only when a visitor interacts with the widget. The gateway credential is sent as an authorization header from your server and is never exposed to the browser. The plugin stores only call **metadata** (timestamps, latency, status, token counts) — message content is never persisted. Transcript storage is planned but not implemented, and its control in the admin is disabled.
 
 Confirm the gateway's provider, terms, and privacy policy before enabling on a production or EU-facing site.
 
@@ -66,7 +66,7 @@ Confirm the gateway's provider, terms, and privacy policy before enabling on a p
 No. The browser talks only to your site's own REST proxy; the credential is added server-side. Prefer defining `NPA_GATEWAY_KEY` in `wp-config.php` so it never touches the database.
 
 = Does it store conversations? =
-By default it stores only call metadata (no message content). Transcript storage is an explicit opt-in with a retention window and is off by default.
+No. It stores only call metadata (no message content). Transcript storage is planned but not implemented in this version; the setting is shown disabled so it is clear nothing is being persisted.
 
 = Can I use it before the gateway is ready? =
 Yes. Without a configured URL and credential the plugin runs against a deterministic mock, so you can build and preview the widget.
@@ -75,6 +75,29 @@ Yes. Without a configured URL and credential the plugin runs against a determini
 Those are enforced by the gateway. The plugin offers an optional courtesy daily cap and a per-request throttle, but the authoritative controls live gateway-side.
 
 == Changelog ==
+
+= 0.2.3 =
+Fixes:
+* The Logging checkbox now works. It was read from nothing at all — only the
+  NPA_LOG_ENABLED constant could switch logging on, so ticking the box in the
+  admin changed no behaviour. Its label also described the usage table, which
+  records regardless; it now describes the diagnostic log it actually controls.
+* Average latency no longer reports a meaningless "0 ms". Calls served by the
+  built-in mock answer in about a millisecond, and averaging them in dragged the
+  figure toward zero. Mock calls are now flagged in the usage table, excluded
+  from the latency average, and counted separately; a site with no live traffic
+  says so instead of showing a confident zero. (Schema version 2 — the column is
+  added automatically on upgrade.)
+* Store transcripts is disabled rather than left looking functional. The setting
+  was sanitised and stored but nothing ever read it: no transcript table, no
+  write path, no retention purge. Message content has never been persisted, and
+  the admin and readme now say so plainly instead of implying an opt-in exists.
+* Suggested prompts helper text now states that extra lines beyond six are
+  ignored, which is what the sanitiser has always done.
+
+Tests:
+* Settings: the logging setting switches the diagnostic log on and off.
+* Usage store: mock calls are counted but excluded from average latency.
 
 = 0.2.2 =
 Fixes:

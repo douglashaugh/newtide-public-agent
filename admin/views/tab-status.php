@@ -46,7 +46,24 @@ echo $npa_admin->status_html(); // phpcs:ignore WordPress.Security.EscapeOutput.
 		</tr>
 		<tr>
 			<th scope="row"><?php esc_html_e( 'Average latency', 'newtide-public-agent' ); ?></th>
-			<td><?php echo esc_html( (string) $npa_agg['avg_latency_ms'] . ' ms' ); ?></td>
+			<td>
+				<?php
+				if ( $npa_agg['live_count'] > 0 ) {
+					echo esc_html( (string) $npa_agg['avg_latency_ms'] . ' ms' );
+					if ( $npa_agg['mock_count'] > 0 ) {
+						echo ' <span class="description">';
+						printf(
+							/* translators: %d: number of mock-served calls excluded from the average. */
+							esc_html( _n( '(excludes %d mock call)', '(excludes %d mock calls)', (int) $npa_agg['mock_count'], 'newtide-public-agent' ) ),
+							(int) $npa_agg['mock_count']
+						);
+						echo '</span>';
+					}
+				} else {
+					esc_html_e( 'No live calls yet — recent traffic was served by the built-in mock.', 'newtide-public-agent' );
+				}
+				?>
+			</td>
 		</tr>
 	</tbody>
 </table>

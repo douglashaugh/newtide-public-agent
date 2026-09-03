@@ -396,7 +396,12 @@ class NPA_Admin {
 		$tiles   = '<div class="npa-stats">';
 		$tiles  .= $this->stat_tile( esc_html__( 'Messages (14 days)', 'newtide-public-agent' ), esc_html( number_format_i18n( $total ) ), '' );
 		$tiles  .= $this->stat_tile( esc_html__( 'Error rate (last 50)', 'newtide-public-agent' ), esc_html( $err_pct . '%' ), $err_ok ? 'ok' : 'warn' );
-		$tiles  .= $this->stat_tile( esc_html__( 'Avg latency', 'newtide-public-agent' ), esc_html( number_format_i18n( $agg['avg_latency_ms'] ) . ' ms' ), '' );
+		// A mock-only site has no meaningful latency to report; say so rather than
+		// showing a confident "0 ms" that describes the in-process mock.
+		$latency_value = $agg['live_count'] > 0
+			? esc_html( number_format_i18n( $agg['avg_latency_ms'] ) . ' ms' )
+			: esc_html__( 'mock only', 'newtide-public-agent' );
+		$tiles        .= $this->stat_tile( esc_html__( 'Avg latency', 'newtide-public-agent' ), $latency_value, '' );
 		$tiles  .= '</div>';
 
 		// --- Bar chart (single series → one hue, no legend) ------------------

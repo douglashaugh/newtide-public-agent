@@ -41,7 +41,15 @@ class NPA_Logger {
 		if ( defined( 'NPA_LOG_ENABLED' ) ) {
 			return (bool) NPA_LOG_ENABLED;
 		}
-		return false;
+
+		/*
+		 * Read the option directly rather than through NPA_Settings: the logger is
+		 * constructed before the settings object exists, and this is a single
+		 * boolean on the one options array. The constant above still wins.
+		 */
+		$opts = get_option( NPA_Settings::OPTION, array() );
+
+		return is_array( $opts ) && ! empty( $opts['log_enabled'] );
 	}
 
 	/**

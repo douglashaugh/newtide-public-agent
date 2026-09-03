@@ -246,14 +246,24 @@ final class NPA_Plugin {
 			__( 'Usage history', 'newtide-public-agent' ),
 			function () {
 				$agg = $this->store->aggregates( 50 );
+
+				// Only claim a latency figure when live calls produced one.
+				$latency = $agg['live_count'] > 0
+					? sprintf(
+						/* translators: %d: average latency in milliseconds. */
+						__( '%d ms avg.', 'newtide-public-agent' ),
+						$agg['avg_latency_ms']
+					)
+					: __( 'mock only, no live latency yet.', 'newtide-public-agent' );
+
 				return array(
 					'ok'      => $agg['error_rate'] <= 0.10,
 					'message' => sprintf(
-						/* translators: 1: recent call count, 2: error rate percent, 3: average latency ms. */
-						__( '%1$d recent calls, %2$s%% errors, %3$d ms avg.', 'newtide-public-agent' ),
+						/* translators: 1: recent call count, 2: error rate percent, 3: latency phrase. */
+						__( '%1$d recent calls, %2$s%% errors, %3$s', 'newtide-public-agent' ),
 						$agg['count'],
 						number_format_i18n( $agg['error_rate'] * 100, 1 ),
-						$agg['avg_latency_ms']
+						$latency
 					),
 				);
 			}
@@ -816,6 +826,37 @@ final class NPA_Plugin {
 					'pass'  => $saw_filter && 'sk-from-filter' === $resolved,
 				);
 
+				/*
+				 * The logging toggle has to actually gate the diagnostic log. It
+				 * previously read nothing at all, so the checkbox was inert and
+				 * turning it on changed no behaviour anywhere.
+				 */
+				if ( defined( 'NPA_LOG_ENABLED' ) ) {
+					$checks[] = array(
+						'label' => __( 'Logging follows the NPA_LOG_ENABLED constant', 'newtide-public-agent' ),
+						'pass'  => (bool) NPA_LOG_ENABLED === $this->logger->is_enabled(),
+					);
+				} else {
+					$log_prev = get_option( NPA_Settings::OPTION );
+
+					update_option( NPA_Settings::OPTION, array( 'log_enabled' => true ) );
+					$log_on = $this->logger->is_enabled();
+
+					update_option( NPA_Settings::OPTION, array( 'log_enabled' => false ) );
+					$log_off = $this->logger->is_enabled();
+
+					if ( false === $log_prev ) {
+						delete_option( NPA_Settings::OPTION );
+					} else {
+						update_option( NPA_Settings::OPTION, $log_prev );
+					}
+
+					$checks[] = array(
+						'label' => __( 'The logging setting switches the diagnostic log on and off', 'newtide-public-agent' ),
+						'pass'  => $log_on && ! $log_off,
+					);
+				}
+
 				return $checks;
 			}
 		);
@@ -880,7 +921,34 @@ final class NPA_Plugin {
 					'pass'  => isset( $agg['count'], $agg['error_rate'], $agg['avg_latency_ms'] ) && $agg['count'] >= 1,
 				);
 
+				/*
+				 * Mock-served calls must not drag the latency average down. The
+				 * sentinel above is a 42 ms live row; add a 0 ms mock row and the
+				 * average has to stay 42, not fall to 21.
+				 */
+				$mock_sentinel = '__npa_test_mock__';
+				$store->record(
+					array(
+						'agent_id'      => $mock_sentinel,
+						'status'        => 200,
+						'finish_reason' => 'stop',
+						'latency_ms'    => 0,
+						'is_mock'       => true,
+					)
+				);
+
+				$mixed    = $store->aggregates( 2 );
+				$checks[] = array(
+					'label' => __( 'Mock calls are counted but excluded from average latency', 'newtide-public-agent' ),
+					'pass'  => 2 === $mixed['count']
+						&& 1 === $mixed['mock_count']
+						&& 1 === $mixed['live_count']
+						&& 42 === $mixed['avg_latency_ms'],
+				);
+
 				// Cleanup — never leave test rows behind.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->delete( $table, array( 'agent_id' => $mock_sentinel ), array( '%s' ) );
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete( $table, array( 'agent_id' => $sentinel ), array( '%s' ) );
 				delete_transient( NPA_Store::LAST_TRANSIENT );

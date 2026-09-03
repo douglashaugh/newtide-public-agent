@@ -201,10 +201,15 @@ class NPA_Rest {
 		$context         = $this->sanitize_context( (array) $request->get_param( 'context' ) );
 		$agent_id        = $this->resolve_agent_id( $request );
 
+		$client = $this->plugin->gateway_client();
+		// Mock-served calls are flagged so their ~0 ms timings stay out of the
+		// latency average (see NPA_Store::aggregates).
+		$is_mock = $client instanceof NPA_Gateway_Client_Mock;
+
 		$start = microtime( true );
 
 		try {
-			$result  = $this->plugin->gateway_client()->send_message( $agent_id, $message, $conversation_id, $context );
+			$result  = $client->send_message( $agent_id, $message, $conversation_id, $context );
 			$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
 
 			$this->plugin->store->record(
@@ -216,6 +221,7 @@ class NPA_Rest {
 					'latency_ms'      => $latency,
 					'input_tokens'    => $result->input_tokens,
 					'output_tokens'   => $result->output_tokens,
+					'is_mock'         => $is_mock,
 				)
 			);
 			$this->plugin->service_status->record_success( 'gateway' );
@@ -248,6 +254,7 @@ class NPA_Rest {
 					'finish_reason'   => 'error',
 					'latency_ms'      => $latency,
 					'error_code'      => $e->get_error_code(),
+					'is_mock'         => $is_mock,
 				)
 			);
 			$this->plugin->service_status->record_failure( 'gateway' );

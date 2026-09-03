@@ -25,7 +25,7 @@ class NPA_Store {
 	 *
 	 * @var int
 	 */
-	const SCHEMA_VERSION = 1;
+	const SCHEMA_VERSION = 2;
 
 	/**
 	 * Option storing the installed schema version.
@@ -88,6 +88,7 @@ class NPA_Store {
 			input_tokens int(10) unsigned NOT NULL DEFAULT 0,
 			output_tokens int(10) unsigned NOT NULL DEFAULT 0,
 			error_code varchar(40) NOT NULL DEFAULT '',
+			is_mock tinyint(1) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id),
 			KEY created_at (created_at),
 			KEY agent_id (agent_id)
@@ -132,13 +133,14 @@ class NPA_Store {
 			'input_tokens'    => isset( $data['input_tokens'] ) ? max( 0, (int) $data['input_tokens'] ) : 0,
 			'output_tokens'   => isset( $data['output_tokens'] ) ? max( 0, (int) $data['output_tokens'] ) : 0,
 			'error_code'      => isset( $data['error_code'] ) ? substr( (string) $data['error_code'], 0, 40 ) : '',
+			'is_mock'         => ! empty( $data['is_mock'] ) ? 1 : 0,
 		);
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$ok = $wpdb->insert(
 			$this->table_name(),
 			$row,
-			array( '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s' )
+			array( '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%d' )
 		);
 
 		if ( false === $ok ) {
@@ -196,23 +198,43 @@ class NPA_Store {
 				'count'          => 0,
 				'error_rate'     => 0.0,
 				'avg_latency_ms' => 0,
+				'live_count'     => 0,
+				'mock_count'     => 0,
 			);
 		}
 
-		$errors  = 0;
-		$latency = 0;
+		/*
+		 * Latency averages LIVE calls only. The in-process mock answers in about
+		 * a millisecond, so folding it in drags the average toward zero and the
+		 * panel reports a number that describes nothing — the "0 ms avg" seen on
+		 * a mock-only site. Errors and volume still count every call.
+		 */
+		$errors     = 0;
+		$latency    = 0;
+		$live_count = 0;
+		$mock_count = 0;
+
 		foreach ( $rows as $row ) {
 			$status = (int) $row['status'];
 			if ( '' !== (string) $row['error_code'] || $status >= 400 ) {
 				++$errors;
 			}
+
+			if ( ! empty( $row['is_mock'] ) ) {
+				++$mock_count;
+				continue;
+			}
+
+			++$live_count;
 			$latency += (int) $row['latency_ms'];
 		}
 
 		return array(
 			'count'          => $count,
 			'error_rate'     => round( $errors / $count, 4 ),
-			'avg_latency_ms' => (int) round( $latency / $count ),
+			'avg_latency_ms' => $live_count > 0 ? (int) round( $latency / $live_count ) : 0,
+			'live_count'     => $live_count,
+			'mock_count'     => $mock_count,
 		);
 	}
 

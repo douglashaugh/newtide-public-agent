@@ -3,7 +3,7 @@
  * Plugin Name:       NewTide Public Agent
  * Plugin URI:        https://github.com/douglashaugh/newtide-public-agent
  * Description:        Embed a published NewTide / Agent Harbor public agent on your WordPress site. Thin client over the Public Agent Gateway; the gateway owns identity, safety, rate-limiting, and cost control.
- * Version:           0.2.2
+ * Version:           0.2.3
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            NewTide
@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  * NPA_VERSION constant below MUST be bumped together on every release.
  * A mismatch is a release bug: WP will never offer the update.
  */
-define( 'NPA_VERSION', '0.2.2' );
+define( 'NPA_VERSION', '0.2.3' );
 define( 'NPA_PLUGIN_FILE', __FILE__ );
 define( 'NPA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'NPA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
