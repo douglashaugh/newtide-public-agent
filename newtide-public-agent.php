@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       NewTide Public Agent
- * Plugin URI:        https://github.com/asamarie/Public-Agent-Plugin
+ * Plugin URI:        https://github.com/douglashaugh/newtide-public-agent
  * Description:        Embed a published NewTide / Agent Harbor public agent on your WordPress site. Thin client over the Public Agent Gateway; the gateway owns identity, safety, rate-limiting, and cost control.
  * Version:           0.2.2
  * Requires at least: 6.4
@@ -45,7 +45,7 @@ if ( is_readable( $npa_puc ) ) {
 
 	if ( class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ) ) {
 		$npa_update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-			'https://github.com/asamarie/Public-Agent-Plugin/',
+			'https://github.com/douglashaugh/newtide-public-agent/',
 			NPA_PLUGIN_FILE,
 			'newtide-public-agent'
 		);

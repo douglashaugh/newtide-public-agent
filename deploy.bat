@@ -12,7 +12,15 @@ REM ============================================================================
 setlocal
 
 set "SRC=%~dp0"
-set "DEST=C:\Users\asama\Local Sites\asa-haugh\app\public\wp-content\plugins\newtide-public-agent"
+
+REM The Local path is machine-specific. Set NPA_LOCAL_PLUGIN_DIR to override it,
+REM so a checkout on another machine doesn't leave this file permanently modified
+REM in git just to point at a different Local site.
+if defined NPA_LOCAL_PLUGIN_DIR (
+  set "DEST=%NPA_LOCAL_PLUGIN_DIR%"
+) else (
+  set "DEST=C:\Users\dough\Local Sites\thinking-on-energy-local\app\public\wp-content\plugins\newtide-public-agent"
+)
 
 echo Deploying NewTide Public Agent to Local...
 echo   From: %SRC%
@@ -20,8 +28,13 @@ echo   To:   %DEST%
 echo.
 
 REM /MIR mirrors the tree; excludes keep dev-only artifacts out of the runtime.
+REM
+REM Directory excludes are FULL PATHS on purpose. A bare name like "vendor" makes
+REM robocopy exclude EVERY directory of that name at any depth -- which would
+REM strip lib\plugin-update-checker\vendor\ (Parsedown + PucReadmeParser) and
+REM break the update checker's "View details" screen. Anchor them to %SRC%.
 robocopy "%SRC%." "%DEST%" /MIR ^
-  /XD ".git" "node_modules" "vendor" "tests" ".github" "docs" ^
+  /XD "%SRC%.git" "%SRC%.github" "%SRC%node_modules" "%SRC%vendor" "%SRC%tests" "%SRC%docs" ^
   /XF "deploy.bat" ".gitignore" ".phpcs.xml.dist" "composer.json" "composer.lock" "phpunit.xml.dist" "*.md"
 
 REM robocopy exit codes 0-7 are success; 8+ are real errors.
