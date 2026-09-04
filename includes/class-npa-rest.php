@@ -224,6 +224,7 @@ class NPA_Rest {
 					'is_mock'         => $is_mock,
 				)
 			);
+			$this->store_turn( $agent_id, $result->conversation_id, $message, $result->reply_text );
 			$this->plugin->service_status->record_success( 'gateway' );
 			$this->plugin->logger->log(
 				array(
@@ -270,6 +271,41 @@ class NPA_Rest {
 
 			$http = ( 429 === $e->get_http_status() ) ? 429 : 502;
 			return $this->error_response( $e->get_error_code(), self::friendly_message( $e->get_error_code() ), $http );
+		}
+	}
+
+	/**
+	 * Persist one exchange when transcript storage is switched on.
+	 *
+	 * Off by default and a no-op unless the site owner opted in — this is the
+	 * only path in the plugin that writes visitor-authored content to the
+	 * database, so the gate lives here rather than being spread across callers.
+	 *
+	 * @param string $agent_id        Agent that answered.
+	 * @param string $conversation_id Conversation the turn belongs to.
+	 * @param string $message         The visitor's message.
+	 * @param string $reply           The agent's reply.
+	 * @return void
+	 */
+	private function store_turn( $agent_id, $conversation_id, $message, $reply ) {
+		if ( ! $this->plugin->settings->get( 'store_transcripts' ) ) {
+			return;
+		}
+
+		$turn = array(
+			'visitor' => $message,
+			'agent'   => $reply,
+		);
+
+		foreach ( $turn as $role => $content ) {
+			$this->plugin->store->record_transcript(
+				array(
+					'conversation_id' => $conversation_id,
+					'agent_id'        => $agent_id,
+					'role'            => $role,
+					'content'         => $content,
+				)
+			);
 		}
 	}
 

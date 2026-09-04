@@ -29,6 +29,13 @@ final class NPA_Plugin {
 	const RELEASE_BRANCH = 'main';
 
 	/**
+	 * Cron hook that enforces the transcript retention window.
+	 *
+	 * @var string
+	 */
+	const PURGE_HOOK = 'npa_purge_transcripts';
+
+	/**
 	 * The Plugin Update Checker instance built in the bootstrap, or null when
 	 * the vendored library is missing (see newtide-public-agent.php).
 	 *
@@ -159,6 +166,17 @@ final class NPA_Plugin {
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );
 
+		/*
+		 * Retention purge. Scheduled here rather than only on activation: a
+		 * git-as-deploy update (ADR-001) never fires the activation hook, so a
+		 * site upgrading into this feature would otherwise store transcripts
+		 * forever with nothing ever deleting them.
+		 */
+		add_action( self::PURGE_HOOK, array( $this, 'purge_transcripts' ) );
+		if ( ! wp_next_scheduled( self::PURGE_HOOK ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::PURGE_HOOK );
+		}
+
 		$this->register_service_status();
 		$this->register_core_tests();
 		$this->register_gateway_tests();
@@ -167,6 +185,7 @@ final class NPA_Plugin {
 		$this->register_store_tests();
 		$this->register_budget_tests();
 		$this->register_rest_tests();
+		$this->register_transcript_tests();
 		$this->register_widget_tests();
 		$this->register_embed_tests();
 
@@ -236,6 +255,34 @@ final class NPA_Plugin {
 	}
 
 	/**
+	 * Enforce the transcript retention window. Runs daily on cron, and is safe
+	 * to call at any time.
+	 *
+	 * Purges whether or not storage is currently enabled: switching the setting
+	 * off must not strand rows written while it was on, past their window.
+	 *
+	 * @return int Rows deleted.
+	 */
+	public function purge_transcripts() {
+		$days = (int) $this->settings->get( 'transcript_retention_days', 30 );
+
+		return $this->store->purge_transcripts( $days );
+	}
+
+	/**
+	 * Remove the scheduled purge. Called on deactivation so a disabled plugin
+	 * leaves no orphan cron event behind.
+	 *
+	 * @return void
+	 */
+	public static function deactivate() {
+		$timestamp = wp_next_scheduled( self::PURGE_HOOK );
+		if ( $timestamp ) {
+			wp_unschedule_event( $timestamp, self::PURGE_HOOK );
+		}
+	}
+
+	/**
 	 * Register the durable subsystems into the Service Status roll-up.
 	 *
 	 * @return void
@@ -274,6 +321,42 @@ final class NPA_Plugin {
 			__( 'Daily budget', 'newtide-public-agent' ),
 			function () {
 				return $this->budget->status();
+			}
+		);
+
+		$this->service_status->register(
+			'transcripts',
+			__( 'Transcripts', 'newtide-public-agent' ),
+			function () {
+				if ( ! $this->settings->get( 'store_transcripts' ) ) {
+					return array(
+						'ok'      => true,
+						'message' => __( 'Off — message content is not stored.', 'newtide-public-agent' ),
+					);
+				}
+
+				$stats = $this->store->transcript_stats();
+				$days  = (int) $this->settings->get( 'transcript_retention_days', 30 );
+				$next  = wp_next_scheduled( self::PURGE_HOOK );
+
+				/*
+				 * Not "ok" when nothing is scheduled to delete the data: storage
+				 * is on, so an unscheduled purge means an unbounded PII store,
+				 * which the admin needs told about rather than left to assume.
+				 */
+				return array(
+					'ok'      => (bool) $next,
+					'message' => $next
+						? sprintf(
+							/* translators: 1: message count, 2: conversation count, 3: retention days, 4: human time until next purge. */
+							__( '%1$d messages across %2$d conversations, kept %3$d days. Next purge in %4$s.', 'newtide-public-agent' ),
+							$stats['count'],
+							$stats['conversations'],
+							$days,
+							human_time_diff( time(), $next )
+						)
+						: __( 'Storing message content, but no purge is scheduled — data will be kept indefinitely.', 'newtide-public-agent' ),
+				);
 			}
 		);
 	}
@@ -1135,6 +1218,152 @@ final class NPA_Plugin {
 				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => $routed ), array( '%s' ) );
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_rest_test__' ), array( '%s' ) );
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+				if ( false === $prev ) {
+					delete_option( 'npa_options' );
+				} else {
+					update_option( 'npa_options', $prev );
+				}
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the transcript suite (Verify companion for opt-in storage).
+	 *
+	 * The security-critical assertion is the first one: with the setting off,
+	 * a real message through the proxy must write no content at all. The rest
+	 * prove the retention window actually deletes, since an unbounded PII store
+	 * is the failure that matters here.
+	 *
+	 * @return void
+	 */
+	private function register_transcript_tests() {
+		$this->test_runner->register_suite(
+			'transcripts',
+			__( 'Transcripts', 'newtide-public-agent' ),
+			__( 'Confirms message content is stored only when you explicitly turn it on, that what is stored can be read back, and that the retention window really does delete older conversations rather than merely promising to.', 'newtide-public-agent' ),
+			function () {
+				global $wpdb;
+				$checks = array();
+				$store  = $this->store;
+				$table  = $store->transcripts_table_name();
+				$server = rest_get_server();
+
+				// Table exists.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$found    = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+				$checks[] = array(
+					'label' => __( 'Transcript table exists', 'newtide-public-agent' ),
+					'pass'  => $found === $table,
+				);
+
+				$prev   = get_option( 'npa_options' );
+				$secret = 'npa-transcript-probe-' . wp_generate_password( 8, false );
+
+				// OFF (the default): a real proxy call must persist nothing.
+				update_option(
+					'npa_options',
+					array(
+						'agent_id'          => '__npa_t_test__',
+						'store_transcripts' => false,
+					)
+				);
+
+				$off_req = new WP_REST_Request( 'POST', '/npa/v1/message' );
+				$off_req->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$off_req->set_param( 'message', $secret );
+				$server->dispatch( $off_req );
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$leaked   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE content LIKE %s", '%' . $wpdb->esc_like( $secret ) . '%' ) );
+				$checks[] = array(
+					'label' => __( 'With storage off, a real message writes no content to the database', 'newtide-public-agent' ),
+					'pass'  => 0 === $leaked,
+				);
+
+				// ON: the same call stores both sides of the exchange.
+				update_option(
+					'npa_options',
+					array(
+						'agent_id'          => '__npa_t_test__',
+						'store_transcripts' => true,
+					)
+				);
+
+				$on_req = new WP_REST_Request( 'POST', '/npa/v1/message' );
+				$on_req->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$on_req->set_param( 'message', $secret );
+				$server->dispatch( $on_req );
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$stored   = $wpdb->get_results( $wpdb->prepare( "SELECT role FROM {$table} WHERE agent_id = %s", '__npa_t_test__' ), ARRAY_A );
+				$roles    = wp_list_pluck( is_array( $stored ) ? $stored : array(), 'role' );
+				$checks[] = array(
+					'label' => __( 'With storage on, both the visitor message and the agent reply are recorded', 'newtide-public-agent' ),
+					'pass'  => in_array( 'visitor', $roles, true ) && in_array( 'agent', $roles, true ),
+				);
+
+				// Markup is neutralized on the way in — a transcript is a record,
+				// never markup to be replayed into a page.
+				$store->record_transcript(
+					array(
+						'agent_id'        => '__npa_t_test__',
+						'conversation_id' => 'c-probe',
+						'role'            => 'visitor',
+						'content'         => '<script>alert(1)</script>hello',
+					)
+				);
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$tagged   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE agent_id = %s AND content LIKE %s", '__npa_t_test__', '%<script%' ) );
+				$checks[] = array(
+					'label' => __( 'Script tags are stripped from stored message content', 'newtide-public-agent' ),
+					'pass'  => 0 === $tagged,
+				);
+
+				// Retention: an aged row goes, a fresh one stays.
+				$old_id = $store->record_transcript(
+					array(
+						'agent_id'        => '__npa_t_test__',
+						'conversation_id' => 'c-old',
+						'role'            => 'visitor',
+						'content'         => 'an old message',
+					)
+				);
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->update(
+					$table,
+					array( 'created_at' => gmdate( 'Y-m-d H:i:s', strtotime( current_time( 'mysql' ) . ' -40 days' ) ) ),
+					array( 'id' => $old_id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+
+				$store->purge_transcripts( 30 );
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$old_left = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE id = %d", $old_id ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$fresh_left = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE agent_id = %s", '__npa_t_test__' ) );
+
+				$checks[] = array(
+					'label' => __( 'The retention purge deletes aged messages and keeps recent ones', 'newtide-public-agent' ),
+					'pass'  => 0 === $old_left && $fresh_left > 0,
+				);
+
+				// A purge is scheduled, so stored content actually expires.
+				$checks[] = array(
+					'label' => __( 'A daily retention purge is scheduled', 'newtide-public-agent' ),
+					'pass'  => (bool) wp_next_scheduled( self::PURGE_HOOK ),
+				);
+
+				// Cleanup — never leave probe content behind.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->delete( $table, array( 'agent_id' => '__npa_t_test__' ), array( '%s' ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_t_test__' ), array( '%s' ) );
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
 				if ( false === $prev ) {
 					delete_option( 'npa_options' );

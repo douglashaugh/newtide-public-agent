@@ -65,6 +65,7 @@ class NPA_Admin {
 		add_action( 'wp_ajax_npa_run_tests', array( $this, 'ajax_run_tests' ) );
 		add_action( 'admin_post_npa_export', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_npa_import', array( $this, 'handle_import' ) );
+		add_action( 'admin_post_npa_purge_transcripts', array( $this, 'handle_purge_transcripts' ) );
 	}
 
 	/**
@@ -360,6 +361,40 @@ class NPA_Admin {
 		update_option( NPA_Settings::OPTION, $clean );
 
 		wp_safe_redirect( add_query_arg( 'npa_import', 'ok', $redirect ) );
+		exit;
+	}
+
+	/**
+	 * Delete stored transcripts — either everything, or only what has aged past
+	 * the retention window. Destructive and irreversible, so it is a POST behind
+	 * a capability check and a nonce, never a link.
+	 *
+	 * @return void
+	 */
+	public function handle_purge_transcripts() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'newtide-public-agent' ) );
+		}
+		check_admin_referer( 'npa_purge_transcripts' );
+
+		$scope = isset( $_POST['scope'] ) ? sanitize_key( wp_unslash( $_POST['scope'] ) ) : 'expired';
+
+		if ( 'all' === $scope ) {
+			$deleted = $this->plugin->store->purge_all_transcripts();
+		} else {
+			$deleted = $this->plugin->purge_transcripts();
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'       => self::SLUG,
+					'tab'        => 'status',
+					'npa_purged' => (int) $deleted,
+				),
+				admin_url( 'admin.php' )
+			)
+		);
 		exit;
 	}
 

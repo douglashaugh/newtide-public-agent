@@ -25,7 +25,23 @@ class NPA_Store {
 	 *
 	 * @var int
 	 */
-	const SCHEMA_VERSION = 2;
+	const SCHEMA_VERSION = 3;
+
+	/**
+	 * Roles a stored transcript row can carry.
+	 *
+	 * @var string[]
+	 */
+	const TRANSCRIPT_ROLES = array( 'visitor', 'agent' );
+
+	/**
+	 * Hard cap on a stored message, in characters. The proxy already caps an
+	 * inbound message at 4000; this bounds an unexpectedly large agent reply so
+	 * one response cannot bloat the table.
+	 *
+	 * @var int
+	 */
+	const TRANSCRIPT_MAX_CHARS = 20000;
 
 	/**
 	 * Option storing the installed schema version.
@@ -49,6 +65,21 @@ class NPA_Store {
 	public function table_name() {
 		global $wpdb;
 		return $wpdb->prefix . 'npa_usage';
+	}
+
+	/**
+	 * Fully-qualified transcript table name.
+	 *
+	 * Kept separate from the usage table on purpose: usage rows are metadata and
+	 * carry no PII, so they can be retained indefinitely, while transcript rows
+	 * hold visitor-authored content and are subject to a retention window. One
+	 * table can be purged without touching the other's history.
+	 *
+	 * @return string
+	 */
+	public function transcripts_table_name() {
+		global $wpdb;
+		return $wpdb->prefix . 'npa_transcripts';
 	}
 
 	/**
@@ -96,6 +127,22 @@ class NPA_Store {
 
 		dbDelta( $sql );
 
+		$transcripts = $this->transcripts_table_name();
+
+		$transcripts_sql = "CREATE TABLE {$transcripts} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			created_at datetime NOT NULL,
+			conversation_id varchar(64) NOT NULL DEFAULT '',
+			agent_id varchar(64) NOT NULL DEFAULT '',
+			role varchar(10) NOT NULL DEFAULT '',
+			content longtext NOT NULL,
+			PRIMARY KEY  (id),
+			KEY created_at (created_at),
+			KEY conversation_id (conversation_id)
+		) {$collate};";
+
+		dbDelta( $transcripts_sql );
+
 		update_option( self::SCHEMA_OPTION, self::SCHEMA_VERSION, false );
 	}
 
@@ -106,10 +153,137 @@ class NPA_Store {
 	 */
 	public function drop() {
 		global $wpdb;
-		$table = $this->table_name();
+		$table       = $this->table_name();
+		$transcripts = $this->transcripts_table_name();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TABLE IF EXISTS {$transcripts}" );
 		delete_option( self::SCHEMA_OPTION );
+	}
+
+	// Transcripts (opt-in, retention-bound, PII-bearing).
+
+	/**
+	 * Store one message of a conversation.
+	 *
+	 * Callers must gate on the store_transcripts setting; this method does not
+	 * check it, so tests can exercise storage directly. Content is trimmed to
+	 * TRANSCRIPT_MAX_CHARS and stripped of tags — a transcript is a record of
+	 * what was said, never markup to be replayed into a page.
+	 *
+	 * @param array $data conversation_id, agent_id, role, content.
+	 * @return int|false Inserted row id, or false on failure/empty content.
+	 */
+	public function record_transcript( array $data ) {
+		global $wpdb;
+
+		$role = isset( $data['role'] ) ? (string) $data['role'] : '';
+		if ( ! in_array( $role, self::TRANSCRIPT_ROLES, true ) ) {
+			return false;
+		}
+
+		$content = isset( $data['content'] ) ? (string) $data['content'] : '';
+		$content = trim( wp_strip_all_tags( $content ) );
+		if ( '' === $content ) {
+			return false;
+		}
+		if ( function_exists( 'mb_substr' ) ) {
+			$content = mb_substr( $content, 0, self::TRANSCRIPT_MAX_CHARS );
+		} else {
+			$content = substr( $content, 0, self::TRANSCRIPT_MAX_CHARS );
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$ok = $wpdb->insert(
+			$this->transcripts_table_name(),
+			array(
+				'created_at'      => current_time( 'mysql' ),
+				'conversation_id' => isset( $data['conversation_id'] ) ? substr( (string) $data['conversation_id'], 0, 64 ) : '',
+				'agent_id'        => isset( $data['agent_id'] ) ? substr( (string) $data['agent_id'], 0, 64 ) : '',
+				'role'            => $role,
+				'content'         => $content,
+			),
+			array( '%s', '%s', '%s', '%s', '%s' )
+		);
+
+		return ( false === $ok ) ? false : (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * The most recent stored messages (newest first).
+	 *
+	 * @param int $limit Max rows.
+	 * @return array<int,array>
+	 */
+	public function recent_transcripts( $limit = 50 ) {
+		global $wpdb;
+		$limit = max( 1, min( 500, (int) $limit ) );
+		$table = $this->transcripts_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} ORDER BY id DESC LIMIT %d", $limit ), ARRAY_A );
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Volume and age of the stored transcripts — what the status panel needs to
+	 * show that a retention obligation is being met.
+	 *
+	 * @return array { count:int, conversations:int, oldest:string }
+	 */
+	public function transcript_stats() {
+		global $wpdb;
+		$table = $this->transcripts_table_name();
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row(
+			"SELECT COUNT(*) AS c, COUNT(DISTINCT conversation_id) AS k, MIN(created_at) AS oldest FROM {$table}",
+			ARRAY_A
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return array(
+			'count'         => isset( $row['c'] ) ? (int) $row['c'] : 0,
+			'conversations' => isset( $row['k'] ) ? (int) $row['k'] : 0,
+			'oldest'        => isset( $row['oldest'] ) ? (string) $row['oldest'] : '',
+		);
+	}
+
+	/**
+	 * Delete transcript rows older than the retention window.
+	 *
+	 * @param int $days Retention window in days; must be >= 1.
+	 * @return int Rows deleted.
+	 */
+	public function purge_transcripts( $days ) {
+		global $wpdb;
+
+		$days = max( 1, (int) $days );
+		// Cut-off in site-local time, matching how created_at is written.
+		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( current_time( 'mysql' ) . ' -' . $days . ' days' ) );
+		$table  = $this->transcripts_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$deleted = $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE created_at < %s", $cutoff ) );
+
+		return is_numeric( $deleted ) ? (int) $deleted : 0;
+	}
+
+	/**
+	 * Delete every stored transcript. Used by the admin "delete all" control.
+	 *
+	 * @return int Rows deleted.
+	 */
+	public function purge_all_transcripts() {
+		global $wpdb;
+		$table = $this->transcripts_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$deleted = $wpdb->query( "DELETE FROM {$table}" );
+
+		return is_numeric( $deleted ) ? (int) $deleted : 0;
 	}
 
 	/**

@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.2.4
+Stable tag: 0.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,7 +56,7 @@ This plugin connects to the **NewTide Public Agent Gateway** to obtain agent rep
 * page context: the page URL, page title, and locale;
 * metadata: a source tag, the plugin version, and your site host.
 
-Data is sent only when a visitor interacts with the widget. The gateway credential is sent as an authorization header from your server and is never exposed to the browser. The plugin stores only call **metadata** (timestamps, latency, status, token counts) — message content is never persisted. Transcript storage is planned but not implemented, and its control in the admin is disabled.
+Data is sent only when a visitor interacts with the widget. The gateway credential is sent as an authorization header from your server and is never exposed to the browser. By default the plugin stores only call **metadata** (timestamps, latency, status, token counts) — never message content. **Store transcripts** is an explicit opt-in that persists what visitors type and what the agent replies; it is off unless you turn it on, bounded by a retention window, and purged daily.
 
 Confirm the gateway's provider, terms, and privacy policy before enabling on a production or EU-facing site.
 
@@ -66,7 +66,9 @@ Confirm the gateway's provider, terms, and privacy policy before enabling on a p
 No. The browser talks only to your site's own REST proxy; the credential is added server-side. Prefer defining `NPA_GATEWAY_KEY` in `wp-config.php` so it never touches the database.
 
 = Does it store conversations? =
-No. It stores only call metadata (no message content). Transcript storage is planned but not implemented in this version; the setting is shown disabled so it is clear nothing is being persisted.
+Only if you ask it to. By default it stores call metadata alone — no message content. Turning on **Store transcripts** (Agent tab) persists both sides of each exchange for a retention window you set, after which a daily job deletes them. Service Status shows how much is held, how old the oldest record is, and when the next purge runs, and offers one-click purge and delete-all. Uninstalling drops the table.
+
+Storing transcripts means holding visitor-authored content, which may be personal data. Turn it on only with a lawful basis and a privacy notice that covers it.
 
 = Can I use it before the gateway is ready? =
 Yes. Without a configured URL and credential the plugin runs against a deterministic mock, so you can build and preview the widget.
@@ -75,6 +77,27 @@ Yes. Without a configured URL and credential the plugin runs against a determini
 Those are enforced by the gateway. The plugin offers an optional courtesy daily cap and a per-request throttle, but the authoritative controls live gateway-side.
 
 == Changelog ==
+
+= 0.3.0 =
+Feature — transcript storage (opt-in, off by default):
+* **Store transcripts** now works. Turning it on persists the visitor's message
+  and the agent's reply for each exchange; leaving it off writes no message
+  content at all, which is the default and is asserted by a test that sends a
+  real message through the proxy and checks nothing was written.
+* Retention is enforced, not just configured. A daily WP-Cron job deletes
+  anything past the window. It self-schedules on a normal page load rather than
+  only on activation, because a git-based update never fires the activation
+  hook — otherwise a site upgrading into this feature would store content
+  forever with nothing to remove it.
+* Service Status gains a Transcripts card: how many messages and conversations
+  are held, the oldest record, the retention window, when the next purge runs,
+  a viewer for the most recent messages, and buttons to purge expired or delete
+  everything. The health roll-up reports "not ok" if storage is on while no
+  purge is scheduled, rather than letting an unbounded store go unnoticed.
+* Stored content is stripped of markup on the way in — a transcript is a record
+  of what was said, never markup to be replayed into a page.
+* Uninstall drops the transcript table and clears the cron event.
+* Schema version 3; the table is created automatically on upgrade.
 
 = 0.2.4 =
 Fixes:

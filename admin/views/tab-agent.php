@@ -28,14 +28,8 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 <form method="post" action="options.php" class="npa-form">
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
 	<?php
-	/*
-	 * Keys this form is responsible for. store_transcripts and
-	 * transcript_retention_days are deliberately absent: their controls are
-	 * disabled (the feature is not implemented), so they submit nothing, and
-	 * listing them here would make sanitize() treat them as cleared — silently
-	 * resetting the stored retention window on every save of this tab.
-	 */
-	$npa_present = array( 'mode', 'placement', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled' );
+	// Keys this form is responsible for; anything omitted keeps its stored value.
+	$npa_present = array( 'mode', 'placement', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days' );
 	if ( ! $npa_key_constant ) {
 		$npa_present[] = 'gateway_key';
 	}
@@ -217,16 +211,15 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			<th scope="row"><?php esc_html_e( 'Store transcripts', 'newtide-public-agent' ); ?></th>
 			<td>
 				<label>
-					<input type="checkbox" disabled="disabled" />
+					<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[store_transcripts]" value="1" <?php checked( (bool) $settings->get( 'store_transcripts' ) ); ?> />
 					<?php esc_html_e( 'Persist message content (off by default; introduces PII/retention obligations).', 'newtide-public-agent' ); ?>
 				</label>
 				<label class="npa-inline">
 					<?php esc_html_e( 'Retention (days):', 'newtide-public-agent' ); ?>
-					<input type="number" disabled="disabled" class="small-text" value="<?php echo esc_attr( (string) $settings->get( 'transcript_retention_days' ) ); ?>" />
+					<input type="number" min="1" max="3650" class="small-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[transcript_retention_days]" value="<?php echo esc_attr( (string) $settings->get( 'transcript_retention_days' ) ); ?>" />
 				</label>
 				<p class="description">
-					<strong><?php esc_html_e( 'Not available in this version.', 'newtide-public-agent' ); ?></strong>
-					<?php esc_html_e( 'Transcript storage and its retention purge are not implemented yet, so this control is disabled rather than left looking functional. Message content is never persisted — only call metadata, as described above.', 'newtide-public-agent' ); ?>
+					<?php esc_html_e( 'Stores what visitors type and what the agent replies. Anything older than the retention window is deleted by a daily job. Turning this off stops new storage; it does not delete what is already held — use Delete all on the Service Status tab for that.', 'newtide-public-agent' ); ?>
 				</p>
 			</td>
 		</tr>
