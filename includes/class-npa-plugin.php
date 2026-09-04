@@ -463,30 +463,48 @@ final class NPA_Plugin {
 				);
 
 				/*
-				 * The auto-update path itself. The bootstrap wires this behind an
-				 * is_readable() guard, so a missing/emptied lib/ disables updates
-				 * with no error anywhere — exactly the failure this check exists
-				 * to make visible.
+				 * The auto-update path. Which assertion is right depends on how
+				 * this copy was distributed, and getting it wrong in either
+				 * direction is a real bug:
+				 *
+				 * - GitHub build: the vendored checker must be present AND built.
+				 *   The bootstrap wires it behind an is_readable() guard, so an
+				 *   emptied lib/ disables updates with no error anywhere.
+				 * - wordpress.org build: the checker is deliberately stripped,
+				 *   because core owns updates for a hosted slug and two updaters
+				 *   filtering the same transient is unpredictable. Here the bug
+				 *   would be a bundled updater that shipped anyway.
 				 */
-				$checks[] = array(
-					'label' => __( 'Update checker library is vendored and loaded', 'newtide-public-agent' ),
-					'pass'  => class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ),
-				);
+				$bundled_updater = NPA_PLUGIN_DIR . 'lib/plugin-update-checker/plugin-update-checker.php';
 
-				/*
-				 * The bootstrap passes RELEASE_BRANCH straight to setBranch(), so
-				 * the branch cannot drift — what can fail is the checker never
-				 * being constructed. Assert the instance, not the branch: PUC
-				 * keeps $branch protected, and reaching for it would fatal here.
-				 */
-				$checks[] = array(
-					'label' => sprintf(
-						/* translators: %s: the release branch name, e.g. "main". */
-						__( 'Auto-updates are registered against the %s branch', 'newtide-public-agent' ),
-						self::RELEASE_BRANCH
-					),
-					'pass'  => is_object( self::$update_checker ),
-				);
+				if ( is_readable( $bundled_updater ) ) {
+					$checks[] = array(
+						'label' => __( 'Update checker library is vendored and loaded', 'newtide-public-agent' ),
+						'pass'  => class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ),
+					);
+
+					/*
+					 * The bootstrap passes RELEASE_BRANCH straight to setBranch(),
+					 * so the branch cannot drift — what can fail is the checker
+					 * never being constructed. Assert the instance, not the
+					 * branch: PUC keeps $branch protected and reaching for it
+					 * would fatal here.
+					 */
+					$checks[] = array(
+						'label' => sprintf(
+							/* translators: %s: the release branch name, e.g. "main". */
+							__( 'Auto-updates are registered against the %s branch', 'newtide-public-agent' ),
+							self::RELEASE_BRANCH
+						),
+						'pass'  => is_object( self::$update_checker ),
+					);
+				} else {
+					$checks[] = array(
+						'label' => __( 'Updates are delivered by WordPress.org, with no competing updater bundled', 'newtide-public-agent' ),
+						'pass'  => ! class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' )
+							&& null === self::$update_checker,
+					);
+				}
 
 				return $checks;
 			}

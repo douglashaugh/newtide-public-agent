@@ -2,9 +2,9 @@
 Contributors: newtide
 Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
-Tested up to: 6.7
+Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.3.2
+Stable tag: 0.3.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,7 +49,11 @@ Define these in `wp-config.php`:
 
 == External services ==
 
-This plugin connects to the **NewTide Public Agent Gateway** to obtain agent replies. When a visitor sends a message, the plugin transmits, from your server:
+This plugin relies on external services. Which ones depends on the connection mode you choose on the **Agent** tab.
+
+**Proxy mode — the NewTide Public Agent Gateway**
+
+The plugin connects to the Public Agent Gateway to obtain agent replies. When a visitor sends a message, the plugin transmits, from your server:
 
 * the visitor's message text;
 * an opaque conversation ID used to thread the exchange;
@@ -58,7 +62,16 @@ This plugin connects to the **NewTide Public Agent Gateway** to obtain agent rep
 
 Data is sent only when a visitor interacts with the widget. The gateway credential is sent as an authorization header from your server and is never exposed to the browser. By default the plugin stores only call **metadata** (timestamps, latency, status, token counts) — never message content. **Store transcripts** is an explicit opt-in that persists what visitors type and what the agent replies; it is off unless you turn it on, bounded by a retention window, and purged daily.
 
-Confirm the gateway's provider, terms, and privacy policy before enabling on a production or EU-facing site.
+**Embed mode — RisingTide's agent widget (`agent-embed.js`)**
+
+In Embed mode the plugin does not proxy messages. Instead it adds a `<script>` tag to your pages that loads `agent-embed.js` from the platform host you configure — by default `https://ai.newtide.ai`. That script is served by NewTide, runs in the visitor's browser, and renders the chat itself, so the conversation goes directly from the visitor to the platform without passing through your server. Your publishable `pk_` key is included in the tag; it is designed to be public and is restricted by the allowed-origins list you set when creating it.
+
+The script is loaded on any page where the widget is enabled and permitted to appear, whether or not a visitor interacts with it. What the platform collects once the widget is in use is governed by NewTide's own terms and privacy policy, not by this plugin.
+
+Service URLs: `https://ai.newtide.ai` (production) — or the Platform URL / Gateway base URL you configure.
+Terms and privacy policy: https://newtide.ai
+
+Confirm the provider's terms and privacy policy before enabling on a production or EU-facing site.
 
 == Frequently Asked Questions ==
 
@@ -76,7 +89,29 @@ Yes. Without a configured URL and credential the plugin runs against a determini
 = Does the plugin prevent abuse or control cost? =
 Those are enforced by the gateway. The plugin offers an optional courtesy daily cap and a per-request throttle, but the authoritative controls live gateway-side.
 
+== Screenshots ==
+
+1. Home — the setup checklist, with each step linking to the tab that satisfies it.
+2. Agent — connection mode, publishable key or gateway credential, agent picker, and placement.
+3. Appearance — launcher shape, size, colour and icon, with a live preview that updates as you type.
+4. Additional Agents — route a different agent to specific pages, no shortcode required.
+5. Service Status — usage over the last 14 days, health roll-up, and transcript retention.
+6. Tests — the built-in battery, run from the admin, against fixtures and the mock gateway.
+7. The chat widget on the front end.
+
 == Changelog ==
+
+= 0.3.3 =
+Directory-submission readiness (no functional change to the widget):
+* readme.txt: "Tested up to" raised to 7.1; External services now also documents
+  Embed mode loading agent-embed.js from the platform host into the visitor's
+  browser, which was previously undisclosed; Screenshots and Upgrade Notice
+  sections added.
+* The Environment suite understands both distributions. A GitHub build must have
+  the bundled update checker present and registered; a WordPress.org build must
+  NOT, because core owns updates for a hosted slug and two updaters filtering the
+  same transient would compete.
+* Adds build-wporg.sh, which produces the submission package from git archive.
 
 = 0.3.2 =
 * The launcher label can now be edited on the Appearance tab, beside the Pill /
@@ -201,3 +236,14 @@ Initial build (feature-complete against the mock gateway):
 * Widget customization (admin-wide): four launcher positions, light/dark/auto colour scheme, header title, pill or bubble launcher, and an optional "Powered by" line; auto-open delay, hide-on-mobile, remember open state, audience gate (everyone / logged-in / logged-out), and per-page suppression by ID; custom input placeholder, clickable suggested prompts, and a custom error message. Settings split across new Appearance and Behavior tabs.
 * Publishing tab: an in-plugin walkthrough of how to make a RisingTide agent public (enable public access, create a key, get the embed snippet) so the setup workflow lives next to the plugin settings.
 * Embed mode (Connection mode = Embed): injects RisingTide's official agent-embed.js widget using a publishable pk_ key, honouring the enable / audience / per-page-exclusion gates. Floating (site-wide bubble) or inline (via the shortcode/block) placement. The existing Proxy mode (the plugin's own widget through a server-side gateway) remains the default.
+
+== Upgrade Notice ==
+
+= 0.3.1 =
+Fixes a bug where the widget never appeared in Proxy mode even with the widget enabled and set to show on all pages.
+
+= 0.3.0 =
+Adds opt-in transcript storage with an enforced retention window. Off by default; no message content is stored unless you turn it on.
+
+= 0.2.2 =
+Fixes per-page agents being ignored in Proxy mode: every message was answered by the site-wide default agent.

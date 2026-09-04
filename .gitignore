@@ -23,3 +23,6 @@ Thumbs.db
 
 # Do NOT ignore the vendored update checker — it must ship with the plugin.
 !/lib/plugin-update-checker/
+
+# WordPress.org build output.
+/dist/

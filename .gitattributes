@@ -20,3 +20,5 @@
 /.phpcs.xml.dist  export-ignore
 /.gitignore       export-ignore
 /.gitattributes   export-ignore
+/build-wporg.sh   export-ignore
+/dist/            export-ignore
