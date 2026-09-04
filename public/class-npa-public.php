@@ -69,12 +69,22 @@ class NPA_Public {
 	private $active_public_key = '';
 
 	/**
-	 * A resolved proxy config queued for auto-injection in the footer (set when a
-	 * page-matched additional agent runs in proxy mode). Null = nothing to inject.
+	 * A resolved proxy config queued for auto-injection in the footer (a
+	 * page-matched additional agent, or the site-wide floating widget). Null =
+	 * nothing to inject.
 	 *
 	 * @var array|null
 	 */
 	private $pending_proxy_config = null;
+
+	/**
+	 * Whether a shortcode or block already mounted a proxy widget on this
+	 * request. The site-wide bubble stands down when one has, so an author who
+	 * placed the shortcode explicitly gets one widget rather than two.
+	 *
+	 * @var bool
+	 */
+	private $mounted_in_content = false;
 
 	/**
 	 * Constructor.
@@ -196,14 +206,36 @@ class NPA_Public {
 			return;
 		}
 
-		// Global embed floating bubble (unchanged behavior).
-		if ( 'embed' === $s->get_mode()
-			&& 'floating' === $s->get( 'placement' )
-			&& $s->get( 'enabled' )
-			&& $s->is_embed_configured()
-			&& $this->should_display() ) {
-			$this->active_public_key = $s->get_public_key();
-			$this->enqueue_embed( '' );
+		// Nothing site-wide unless the widget is on, set to float, and allowed here.
+		if ( ! $s->get( 'enabled' )
+			|| 'floating' !== $s->get( 'placement' )
+			|| ! $this->should_display() ) {
+			return;
+		}
+
+		if ( 'embed' === $s->get_mode() ) {
+			if ( $s->is_embed_configured() ) {
+				$this->active_public_key = $s->get_public_key();
+				$this->enqueue_embed( '' );
+			}
+			return;
+		}
+
+		/*
+		 * Proxy mode, floating: the site-wide bubble. This previously existed only
+		 * for Embed, so a Proxy site with the widget enabled and scoped to all
+		 * pages rendered nothing at all unless a shortcode, block or additional
+		 * agent placed it — while the admin offered an enable switch, a page
+		 * scope and four launcher positions, all of which implied otherwise.
+		 *
+		 * The markup is queued rather than emitted: render_auto_agent() runs on
+		 * wp_footer, after the content, so it can stand down if a shortcode or
+		 * block already mounted a widget on this page and avoid a double render.
+		 */
+		$config = $this->resolve_config( array() );
+		if ( '' !== $config['agent'] ) {
+			$this->pending_proxy_config = $config;
+			$this->enqueue();
 		}
 	}
 
@@ -326,7 +358,7 @@ class NPA_Public {
 	 * @return void
 	 */
 	public function render_auto_agent() {
-		if ( null === $this->pending_proxy_config ) {
+		if ( null === $this->pending_proxy_config || $this->mounted_in_content ) {
 			return;
 		}
 		// mount_html escapes each attribute and emits static/curated icon markup.
@@ -620,6 +652,9 @@ class NPA_Public {
 			return '';
 		}
 
+		// Claim the page so the site-wide bubble does not also render.
+		$this->mounted_in_content = true;
+
 		$this->enqueue();
 		return $html;
 	}
@@ -671,6 +706,9 @@ class NPA_Public {
 		if ( '' === $html ) {
 			return '';
 		}
+
+		// Claim the page so the site-wide bubble does not also render.
+		$this->mounted_in_content = true;
 
 		$this->enqueue();
 		return $html;

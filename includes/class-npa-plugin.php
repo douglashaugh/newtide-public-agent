@@ -1446,6 +1446,60 @@ final class NPA_Plugin {
 					'pass'  => false !== strpos( $html, 'data-agent-token="' . NPA_Rest::agent_token( $this->settings->get_agent_id() ) . '"' ),
 				);
 
+				/*
+				 * Proxy + floating must place the widget with no shortcode at all.
+				 * This is the "enabled, all pages, still invisible" bug: site-wide
+				 * injection existed only for Embed mode, so the enable switch and
+				 * page scope promised something nothing delivered.
+				 */
+				update_option(
+					'npa_options',
+					array_merge(
+						NPA_Settings::defaults(),
+						array(
+							'enabled'   => true,
+							'mode'      => 'proxy',
+							'placement' => 'floating',
+						)
+					)
+				);
+
+				$auto = new NPA_Public( $this );
+				$auto->register_assets();
+				ob_start();
+				$auto->render_auto_agent();
+				$auto_html = (string) ob_get_clean();
+
+				$checks[] = array(
+					'label' => __( 'Proxy mode set to floating renders the widget site-wide without a shortcode', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $auto_html, 'data-npa-widget' ),
+				);
+
+				// Inline placement must NOT auto-inject — that is the setting's
+				// whole purpose, and the two must not both fire.
+				update_option(
+					'npa_options',
+					array_merge(
+						NPA_Settings::defaults(),
+						array(
+							'enabled'   => true,
+							'mode'      => 'proxy',
+							'placement' => 'inline',
+						)
+					)
+				);
+
+				$inline_auto = new NPA_Public( $this );
+				$inline_auto->register_assets();
+				ob_start();
+				$inline_auto->render_auto_agent();
+				$inline_html = (string) ob_get_clean();
+
+				$checks[] = array(
+					'label' => __( 'Inline placement does not auto-inject the site-wide widget', 'newtide-public-agent' ),
+					'pass'  => '' === trim( $inline_html ),
+				);
+
 				// Page allowlist: scoped to a non-matching page id, the widget is
 				// suppressed (the test request has no queried object).
 				update_option(

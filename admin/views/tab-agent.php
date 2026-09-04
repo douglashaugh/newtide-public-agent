@@ -83,13 +83,13 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 		</tr>
 
 		<tr>
-			<th scope="row"><label for="npa-placement"><?php esc_html_e( 'Embed placement', 'newtide-public-agent' ); ?></label></th>
+			<th scope="row"><label for="npa-placement"><?php esc_html_e( 'Placement', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<select id="npa-placement" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[placement]">
 					<option value="floating" <?php selected( $settings->get( 'placement' ), 'floating' ); ?>><?php esc_html_e( 'Floating bubble (site-wide)', 'newtide-public-agent' ); ?></option>
 					<option value="inline" <?php selected( $settings->get( 'placement' ), 'inline' ); ?>><?php esc_html_e( 'Inline (via the [newtide_agent] shortcode or block)', 'newtide-public-agent' ); ?></option>
 				</select>
-				<p class="description"><?php esc_html_e( 'Floating shows RisingTide’s bottom-right bubble on every allowed page. Inline mounts the chat where you place the shortcode/block (one per page). Applies to Embed mode; Appearance/Behavior options do not affect the embedded widget — those are set in RisingTide.', 'newtide-public-agent' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Floating shows the chat bubble automatically on every allowed page — no shortcode needed. Inline mounts it only where you place the shortcode or block. Applies to both connection modes. In Embed mode the Appearance and Behavior options do not affect the widget; those are set in RisingTide.', 'newtide-public-agent' ); ?></p>
 			</td>
 		</tr>
 	</table>

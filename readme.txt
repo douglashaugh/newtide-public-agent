@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -77,6 +77,24 @@ Yes. Without a configured URL and credential the plugin runs against a determini
 Those are enforced by the gateway. The plugin offers an optional courtesy daily cap and a per-request throttle, but the authoritative controls live gateway-side.
 
 == Changelog ==
+
+= 0.3.1 =
+Fixes:
+* The widget now actually appears in Proxy mode. Site-wide injection existed only
+  for Embed mode, so a Proxy site with the widget enabled, placement set to
+  "Floating bubble (site-wide)" and pages set to "All pages" rendered nothing at
+  all unless a shortcode, block or additional agent placed it — while the admin
+  offered an enable switch, a page scope and four launcher positions that all
+  implied otherwise. Proxy + Floating now injects on every allowed page, honouring
+  the same enable, audience, page-scope and exclusion gates as Embed.
+* A page that already mounts the widget via shortcode or block no longer also
+  gets the site-wide bubble.
+* "Embed placement" is renamed "Placement" and its help text corrected: the
+  setting governs both connection modes, not just Embed.
+
+Tests:
+* Front-end widget: Proxy + Floating renders site-wide with no shortcode, and
+  Inline placement does not auto-inject.
 
 = 0.3.0 =
 Feature — transcript storage (opt-in, off by default):
