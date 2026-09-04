@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.1
-Stable tag: 0.3.1
+Stable tag: 0.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -77,6 +77,14 @@ Yes. Without a configured URL and credential the plugin runs against a determini
 Those are enforced by the gateway. The plugin offers an optional courtesy daily cap and a per-request throttle, but the authoritative controls live gateway-side.
 
 == Changelog ==
+
+= 0.3.2 =
+* The launcher label can now be edited on the Appearance tab, beside the Pill /
+  Bubble control that refers to it, and the live preview updates as you type.
+  The setting already existed on the General tab as "Launcher label", but
+  Appearance offered a shape called "Pill (label text)" and a preview showing
+  that text with no field to change it — so the option read as missing. It is
+  the same setting in both places; editing either one changes the launcher.
 
 = 0.3.1 =
 Fixes:

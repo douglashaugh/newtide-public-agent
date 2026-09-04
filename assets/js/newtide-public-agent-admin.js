@@ -199,6 +199,15 @@
 			headerEl.textContent = header.value;
 		}
 
+		// Launcher label — the pill's visible wording. (On the real widget this
+		// is also the launcher's accessible name; the preview button is
+		// aria-hidden, so there is nothing to mirror here.)
+		var label   = field( 'launcher_label' );
+		var labelEl = form.querySelector( '[data-npa-preview="label"]' );
+		if ( label && labelEl ) {
+			labelEl.textContent = label.value;
+		}
+
 		var powered   = field( 'powered_by' );
 		var poweredEl = form.querySelector( '[data-npa-preview="powered"]' );
 		if ( poweredEl ) {

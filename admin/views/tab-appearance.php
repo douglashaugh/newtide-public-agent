@@ -64,6 +64,7 @@ if ( 'auto' !== $cur_theme ) {
 			'accent',
 			'theme',
 			'header_title',
+			'launcher_label',
 			'launcher_shape',
 			'launcher_size',
 			'launcher_icon_type',
@@ -170,6 +171,15 @@ if ( 'auto' !== $cur_theme ) {
 							<option value="pill" <?php selected( $cur_shape, 'pill' ); ?>><?php esc_html_e( 'Pill (label text)', 'newtide-public-agent' ); ?></option>
 							<option value="bubble" <?php selected( $cur_shape, 'bubble' ); ?>><?php esc_html_e( 'Bubble (round icon)', 'newtide-public-agent' ); ?></option>
 						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="npa-appearance-label"><?php esc_html_e( 'Pill label', 'newtide-public-agent' ); ?></label></th>
+					<td>
+						<input type="text" id="npa-appearance-label" class="regular-text" name="<?php echo esc_attr( $option ); ?>[launcher_label]" value="<?php echo esc_attr( $cur_label ); ?>" data-npa-preview-control="label" />
+						<p class="description">
+							<?php esc_html_e( 'The wording shown on the launcher. The Pill shape displays it; the Bubble shape shows the icon instead and uses it as the accessible name for screen readers. Also editable on the General tab.', 'newtide-public-agent' ); ?>
+						</p>
 					</td>
 				</tr>
 				<tr>
