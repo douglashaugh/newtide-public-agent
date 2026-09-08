@@ -41,20 +41,22 @@ The bootstrap already guards on `is_readable()`, so stripping `lib/` degrades cl
 
 > **Expected counts differ by design.** GitHub build: **73 of 73**. Directory build: **72 of 72** (the two GitHub-updater checks collapse into one .org check). A 72 on a GitHub build is a real failure, not a variant.
 
-### `build-wporg.sh`
+### `build-package.sh`
 
-Builds the submission package from `git archive` at `HEAD`. Run from Git Bash:
+Builds an installable zip from `git archive` at `HEAD`. **Never zip by hand.** Run from Git Bash:
 
 ```bash
 cd newtide-public-agent
-./build-wporg.sh
-# -> dist/newtide-public-agent-<version>-wporg.zip
+./build-package.sh pilot   # direct install; includes lib/ so the site auto-updates
+./build-package.sh wporg   # directory submission; lib/ stripped
 ```
 
 It refuses to build when the two version fields disagree (ADR-002), warns when the working tree is dirty (the package comes from HEAD, so uncommitted work is *not* in it), and verifies the result before handing it over:
 
 - path separators are forward slashes
-- `lib/`, `docs/`, `CLAUDE.md`, `deploy.bat`, `composer.json`, `build-wporg.sh` are all absent
+- the plugin sits in a folder named exactly `newtide-public-agent/`
+- `docs/`, `CLAUDE.md`, `deploy.bat`, `composer.json`, `build-package.sh` are absent
+- the updater is present for `pilot` and absent for `wporg` — both directions checked
 - the main file, `readme.txt` and `uninstall.php` are present
 
 On any failure it deletes the archive, so a bad package cannot be submitted by mistake.
@@ -65,9 +67,11 @@ On any failure it deletes the archive, so a bad package cannot be submitted by m
 
 **Never build the zip by hand (ADR-003).** The `newtide-public-agent-0.2.1.zip` that would not install stored **backslash** path separators, almost certainly from PowerShell's `Compress-Archive`. The ZIP spec requires forward slashes; PHP read `newtide-public-agent\admin\...` as one long *filename*, created no directories, and WordPress reported no valid plugin. `git archive` cannot make this mistake. This cost real debugging time and looked like a code problem when it was a packaging problem.
 
-**The separator guard needs `grep -F`.** `grep -q '\\'` is an incomplete escape: grep warns `Trailing backslash` and matches nothing, so the guard passes everything. Verified by pointing both forms at the real malformed 0.2.1 zip — `-F` catches it, the escaped form does not. If you touch that check, re-test it against a known-bad archive. *A verification step that cannot fail is worse than none.*
+**The separator guard needs `grep -F`.** `grep -q '\\'` is an incomplete escape: grep warns `Trailing backslash` and matches nothing, so the guard passes everything. Verified by pointing both forms at the real malformed 0.2.1 zip — `-F` catches it, the escaped form does not. If you touch that check, re-test it against a known-bad archive; every guard in the script has been negative-tested this way. *A verification step that cannot fail is worse than none.*
 
-**`lib/` is excluded in the script, not in `.gitattributes`.** It must ship to GitHub and must not ship to the directory. `.gitattributes` `export-ignore` handles everything that should never ship anywhere; `lib/` is the one path that differs per destination.
+**`lib/` is excluded by the `wporg` target, not by `.gitattributes`.** It must ship to GitHub and must not ship to the directory. `.gitattributes` `export-ignore` handles everything that should never ship anywhere; `lib/` is the one path that differs per destination.
+
+**GitHub's own download link installs under the wrong name.** `…/archive/refs/heads/main.zip` unpacks to `newtide-public-agent-main/`, so a site installing from it gets that as its permanent plugin directory — updates install into whatever folder already exists, and PUC's `fixDirectoryName` only runs during a PUC-driven update, so it cannot rescue a manual first install. A wrong folder also means wordpress.org would later treat this as a different plugin and the customer would end up with two copies. **Never hand pilots the raw GitHub download link**; send a `pilot` build instead.
 
 **The slug is permanent.** Assigned at submission, derived from the plugin name. `newtide-public-agent` matches the text domain, which is required for language-pack support. It cannot be changed afterwards.
 
@@ -98,7 +102,7 @@ branches/   rarely used
 Release cycle, replacing steps B4–B6 of the git-as-deploy loop:
 
 1. Bump **both** version fields plus `Stable tag:` in readme.txt — the same lockstep rule, now with a third field.
-2. Build with `build-wporg.sh` and copy its contents into `trunk/`.
+2. Build with `./build-package.sh wporg` and copy its contents into `trunk/`.
 3. `svn cp trunk tags/<version>` and commit.
 4. **`Stable tag:` in `trunk/readme.txt` is what actually decides which version users receive.** Pointing it at a tag that does not exist ships nothing; this is the directory's equivalent of forgetting the header bump.
 
