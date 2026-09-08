@@ -14,11 +14,23 @@ Format: **Context → Decision → Consequences → Evidence.**
 - **Consequences:** Zero-zip releases; every site checking the repo gets auto-updates; the whole team can deploy by pushing. Trade-off: `master` must always be releasable — no half-finished commits on it.
 - **Evidence:** Became the backbone of the workflow; documented as onboarding for a co-worker. It's "a bit non-standard but a lot cleaner once working."
 
+### ADR-001a — Amendment (2026-09-07): releases gate the deploy, not branch pushes
+- **Context:** ADR-001 as written means every push to the release branch reaches every install within hours. That was right while the only installs were ours. With pilot customers on real sites, it means a work-in-progress commit is a production deploy, with nothing between the two.
+- **Decision:** Cut a GitHub Release for each version. PUC's strategy order on `main` is *latest release → latest tag → branch head*, so the moment a release exists it becomes the update source and branch pushes stop reaching installs on their own. `main` remains the source of truth and must still always be releasable; shipping is now a deliberate second step.
+- **Consequences:** A push is no longer a deploy — **forgetting to cut the release is the new silent "nothing shipped" failure**, taking over the role ADR-002 describes for the version header. In exchange, pilots stop receiving every intermediate commit, each version gets a stable URL to point people at, and a release can carry a correctly-named install zip (see ADR-003a).
+- **Evidence:** Introduced when the first pilot build was cut. PUC strips a leading `v`, so tag `v0.3.3` resolves to version `0.3.3`; `fixDirectoryName` renames the extracted folder to the installed directory, so the auto-generated release zipball updates existing sites correctly regardless of its own folder name.
+
 ### ADR-002 — Two version fields, always in lockstep
 - **Context:** WP has a header `Version:` (what PUC compares) and we keep a runtime `VERSION` constant. They can drift.
 - **Decision:** Bump BOTH on every release; treat a mismatch as a release bug.
 - **Consequences:** If the header isn't bumped, WP never offers the update and "nothing deployed" — a silent, confusing failure. Making it a checklist item eliminates it.
 - **Evidence:** Repeatedly the first thing to verify when "the update didn't show up."
+
+### ADR-003a — Amendment: the zip is generated, never hand-made
+- **Context:** ADR-003 forbids hand-built production zips. A hand-built `0.2.1` zip later proved the point by refusing to install at all: it stored **backslash** path separators (almost certainly PowerShell `Compress-Archive`), so PHP read each path as one long filename, created no directories, and WordPress found no plugin.
+- **Decision:** `build-package.sh [pilot|wporg]` produces every package from `git archive` at `HEAD`, which cannot emit backslashes and stamps the correct folder prefix. It refuses to build on a version mismatch and verifies its own output; a failed build deletes its archive.
+- **Consequences:** A zip is safe to produce on demand, so the release can carry one. This does not weaken ADR-003 — nothing is hand-assembled; the tool is deterministic and self-checking.
+- **Evidence:** Every guard negative-tested against a deliberately broken package, after the first separator check shipped in a form (`grep -q '\'`) that matched nothing and passed everything.
 
 ### ADR-003 — Never let the assistant build the prod zip
 - **Context:** One host (WordPress.com managed) can't use PUC and needs a zip.

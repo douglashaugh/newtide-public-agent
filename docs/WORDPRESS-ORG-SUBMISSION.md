@@ -13,7 +13,7 @@ Publishing to wordpress.org makes **WordPress core the update source** for the s
 | | Discoverability | Release flow | Review risk |
 |---|---|---|---|
 | **wordpress.org** | Searchable; installs from wp-admin | SVN; tag every release; PUC stripped | Human review, unpredictable duration |
-| **GitHub** (today) | None — you send a link | `git push` **is** the deploy | None |
+| **GitHub** (today) | Send a release link | `git push` + cut a release (ADR-001a) | None |
 
 Everything else built this cycle survives the move: version-lockstep discipline (ADR-002), the test battery, `.gitattributes` keeping internal files out of installs, the clean-archive verification. **Only delivery changes.**
 

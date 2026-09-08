@@ -84,9 +84,10 @@ A feature is done when it can be **operated, tuned, and trusted**, not when it r
 
 ## Deployment (git-as-deploy, no zip)
 
-- Prod delivery = **Plugin Update Checker wired to GitHub `main`**. Pushing to `main` IS the deploy; commit directly to it — no release feature-branches. `main` must always be releasable.
-- **Bump BOTH version fields** before pushing.
-- **Do NOT build production zips** (a hand-built zip once crashed prod — ADR-003). The user handles any zip.
+- Prod delivery = **Plugin Update Checker wired to GitHub `main`**, gated by **GitHub Releases** (ADR-001a). Commit directly to `main` — no release feature-branches — but a push alone no longer ships: PUC reads the latest release first, so **cut a release or nothing reaches installs**. `main` must always be releasable.
+- **Bump BOTH version fields** before pushing, then tag `v<version>` and cut the release.
+- **Never hand-build a zip** (ADR-003). Run `./build-package.sh pilot` (direct install, includes the updater) or `./build-package.sh wporg` (directory submission, updater stripped). Both come from `git archive` and self-verify.
+- **Never send anyone GitHub's own branch download link** — it unpacks to `newtide-public-agent-main/` and that wrong folder name becomes permanent. Send a `pilot` build.
 - `deploy.bat` mirrors the repo into the Local site each cycle; test on Local, not the repo.
 
 ## Verify habit (hard-won)
