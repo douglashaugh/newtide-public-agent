@@ -49,7 +49,7 @@ $npa_agent_id = $settings->get_agent_id();
 				<?php esc_html_e( 'In the “Create public key” dialog:', 'newtide-public-agent' ); ?>
 				<ul class="ul-disc" style="margin-top:0.4rem;">
 					<li><?php echo wp_kses_post( __( '<strong>Name</strong> — anything you will recognize.', 'newtide-public-agent' ) ); ?></li>
-					<li><?php echo wp_kses_post( __( '<strong>Allowed origins</strong> — the real site URL(s), one per line, starting with <code>https://</code>. The widget only works on these domains — use the actual site, not a placeholder.', 'newtide-public-agent' ) ); ?></li>
+					<li><?php echo wp_kses_post( __( '<strong>Allowed origins</strong> — the real site URL(s), one per line, starting with <code>https://</code>. The widget only works on these domains — use the actual site, not a placeholder. Match the origin exactly as browsers send it: if both <code>https://example.com</code> and <code>https://www.example.com</code> resolve, list both. A local development site (<code>http://…</code>, or a <code>.local</code> domain) is not a valid origin, so test Embed mode on the real site — or use Proxy mode locally, which calls the gateway server-side and has no origin check.', 'newtide-public-agent' ) ); ?></li>
 					<li><?php echo wp_kses_post( __( '<strong>Bind to user</strong> — a <strong>non-admin</strong> user. The chat runs with this user’s permissions. Admin accounts are rejected.', 'newtide-public-agent' ) ); ?></li>
 					<li><?php echo wp_kses_post( __( '<strong>Expected traffic</strong> — Small / Medium / Large for rate limits. Small is fine for testing.', 'newtide-public-agent' ) ); ?></li>
 				</ul>
@@ -74,6 +74,12 @@ $npa_agent_id = $settings->get_agent_id();
 	</div>
 
 	<h2><?php esc_html_e( 'Once you have the key', 'newtide-public-agent' ); ?></h2>
+
+	<div class="notice notice-warning inline">
+		<p>
+			<?php echo wp_kses_post( __( '<strong>A <code>pk_</code> key is not the gateway credential.</strong> It belongs in <strong>Publishable key</strong> (Embed mode) or the <code>NPA_PUBLIC_KEY</code> constant. Do <em>not</em> put it in <code>NPA_GATEWAY_KEY</code> — that is the separate server-side secret used by Proxy mode, and a <code>pk_</code> key placed there leaves Embed mode unconfigured, so the widget simply never appears.', 'newtide-public-agent' ) ); ?>
+		</p>
+	</div>
 	<div class="npa-columns npa-columns--2">
 		<?php $npa_admin->card_open( __( 'Connect it to the plugin', 'newtide-public-agent' ), __( 'Where the ID and key go.', 'newtide-public-agent' ) ); ?>
 		<p>
@@ -81,7 +87,7 @@ $npa_agent_id = $settings->get_agent_id();
 		echo wp_kses_post(
 			sprintf(
 				/* translators: 1: Agent tab link, 2: General tab link. */
-				__( 'Put the <strong>agent ID</strong> on the %1$s tab, and the <strong>key</strong> either in a <code>NPA_GATEWAY_KEY</code> constant in <code>wp-config.php</code> (recommended — it never touches the database) or in the key field. Then place the widget with the <code>[newtide_agent]</code> shortcode or the block, and tune it on the %2$s, Appearance, and Behavior tabs.', 'newtide-public-agent' ),
+				__( 'On the %1$s tab set <strong>Connection mode</strong> to <strong>Embed</strong> and paste the <code>pk_</code> key into <strong>Publishable key</strong> (or define <code>NPA_PUBLIC_KEY</code> in <code>wp-config.php</code>). The key selects the agent, so no agent ID is needed in this mode. Leave <strong>Platform URL</strong> at the production default. Then set <strong>Placement</strong> — <em>Floating</em> puts the chat on every allowed page with no shortcode, or <em>Inline</em> mounts it where you place <code>[newtide_agent]</code> or the block. Tune the wording on the %2$s tab.', 'newtide-public-agent' ),
 				'<a href="' . esc_url( $npa_admin->tab_url( 'agent' ) ) . '">' . esc_html__( 'Agent', 'newtide-public-agent' ) . '</a>',
 				'<a href="' . esc_url( $npa_admin->tab_url( 'general' ) ) . '">' . esc_html__( 'General', 'newtide-public-agent' ) . '</a>'
 			)

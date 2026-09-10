@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.3.3
+Stable tag: 0.3.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,20 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.3.4 =
+Fixes to the Publishing guide, which gave instructions that could not work:
+* The guide walks you through creating a publishable `pk_` key and then told you
+  to put it in `NPA_GATEWAY_KEY` — the Proxy-mode server-side secret, a different
+  credential entirely. Following it left Embed mode unconfigured and the widget
+  silently absent. It now says to set Connection mode to Embed and paste the key
+  into Publishable key (or `NPA_PUBLIC_KEY`), notes that the key selects the agent
+  so no agent ID is needed, and carries a warning against the old advice.
+* The connect step still assumed the widget needed a shortcode; it now explains
+  that Floating placement covers every allowed page on its own.
+* Allowed origins now says to match the origin exactly as browsers send it (list
+  www and non-www if both resolve) and warns that a local development site is not
+  a valid origin — test Embed on the real domain, or use Proxy mode locally.
 
 = 0.3.3 =
 Directory-submission readiness (no functional change to the widget):
