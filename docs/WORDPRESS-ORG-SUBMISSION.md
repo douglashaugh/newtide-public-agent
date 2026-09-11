@@ -118,6 +118,8 @@ Keep pushing to GitHub as the source of truth and treat SVN as a publishing targ
 
 **Review duration is unknowable.** A volunteer queue; historically days to months. Do not plan a launch date around it.
 
+**The pilot site auto-updates from GitHub.** `thinkingonenergy.com` is on WordPress.com / Automattic hosting and receives PUC updates normally — the older claim in ADR-003 that managed hosting needs manual zips is corrected there. Releases reach it like any other site, so nothing about the pilot forces a move to the directory.
+
 **A service-dependent plugin is allowed but must degrade honestly.** The built-in mock helps here: the plugin does something coherent before it is configured, rather than erroring.
 
 ---

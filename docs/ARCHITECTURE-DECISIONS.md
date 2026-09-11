@@ -33,10 +33,11 @@ Format: **Context → Decision → Consequences → Evidence.**
 - **Evidence:** Every guard negative-tested against a deliberately broken package, after the first separator check shipped in a form (`grep -q '\'`) that matched nothing and passed everything.
 
 ### ADR-003 — Never let the assistant build the prod zip
-- **Context:** One host (WordPress.com managed) can't use PUC and needs a zip.
+- **Context:** ~~One host (WordPress.com managed) can't use PUC and needs a zip.~~ **Superseded 2026-09-10 — see the correction below.** The zip was originally needed because a managed host could not auto-update.
 - **Decision:** The assistant deploys to Local only and prepares files; the **user** builds/handles any production zip.
 - **Consequences:** Removes a whole class of packaging errors from the automated path.
 - **Evidence:** An assistant-built zip once **crashed the production site.** Hard line since.
+- **Correction (2026-09-10):** The premise no longer holds. `thinkingonenergy.com` is on WordPress.com / Automattic hosting (`Server-Timing: a8c-cdn`) and **does receive Plugin Update Checker updates from GitHub normally** — confirmed in practice on that site. Do not cite the original context when planning a release; a managed host is not automatically a zip-only host. The rule itself stands for a different and still-valid reason: hand-built zips are error-prone, which ADR-003a addresses by generating them instead.
 
 ### ADR-004 — A disposable Local mirror for every cycle
 - **Context:** The repo is the source of truth but WP reads from its plugins dir.
