@@ -185,6 +185,55 @@ class NPA_Settings {
 	 *
 	 * @return array
 	 */
+	/**
+	 * In-memory settings override used by the test battery, or null.
+	 *
+	 * @var array|null
+	 */
+	private static $test_override = null;
+
+	/**
+	 * Make every reader of the options row see $values for the duration of one
+	 * test suite.
+	 *
+	 * The battery used to do this with update_option() and restore the previous
+	 * value afterwards. That is not safe on a live site: if the run is cut short
+	 * — a PHP timeout, a memory limit, a fatal, the admin closing the tab — the
+	 * restore never happens and the site is left running the fixture. It did
+	 * exactly that on a production install, which then served the placeholder
+	 * key pk_embed_test_123 to real visitors. Even a clean run left a window
+	 * where a visitor could be served test configuration.
+	 *
+	 * Nothing is written now, so there is nothing to leave behind however the
+	 * request ends.
+	 *
+	 * @param array $values Full settings array to present.
+	 * @return void
+	 */
+	public static function begin_test_override( array $values ) {
+		self::$test_override = $values;
+	}
+
+	/**
+	 * Stop overriding the options row.
+	 *
+	 * @return void
+	 */
+	public static function end_test_override() {
+		self::$test_override = null;
+	}
+
+	/**
+	 * Filter callback on `option_npa_options`. Catches every reader — the
+	 * settings object, the logger, the admin export — not just this class.
+	 *
+	 * @param mixed $value Stored option value.
+	 * @return mixed
+	 */
+	public static function filter_test_override( $value ) {
+		return ( null === self::$test_override ) ? $value : self::$test_override;
+	}
+
 	public function all() {
 		$stored = get_option( self::OPTION, array() );
 		if ( ! is_array( $stored ) ) {

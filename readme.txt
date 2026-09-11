@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.3.4
+Stable tag: 0.3.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,25 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.3.5 =
+Important fix — the Tests tab could overwrite your live settings:
+* Running the battery wrote fixture values into the real settings row and
+  restored them at the end. If a run was cut short — a PHP timeout, a memory
+  limit, a fatal, closing the tab — the restore never happened and the site was
+  left running the fixture. On a production install this published the
+  placeholder key `pk_embed_test_123` to real visitors, so the widget loaded and
+  answered every message with "Invalid or revoked API key". Even a completed run
+  left a window where a visitor could be served test configuration.
+* Suites now present fixture settings through a filter and write nothing, so
+  there is nothing to leave behind however the request ends. The runner clears
+  the override after every suite in a `finally`, so one suite cannot leak into
+  the next either.
+* A new check asserts this directly: the override is visible to readers while
+  the stored row underneath is byte-for-byte untouched.
+
+If your widget is showing "Invalid or revoked API key", re-enter your publishable
+key on the Agent tab and save — the stored value was replaced by the fixture.
 
 = 0.3.4 =
 Fixes to the Publishing guide, which gave instructions that could not work:

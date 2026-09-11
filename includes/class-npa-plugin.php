@@ -938,25 +938,51 @@ final class NPA_Plugin {
 						'pass'  => (bool) NPA_LOG_ENABLED === $this->logger->is_enabled(),
 					);
 				} else {
-					$log_prev = get_option( NPA_Settings::OPTION );
-
-					update_option( NPA_Settings::OPTION, array( 'log_enabled' => true ) );
+					// The logger reads the option directly, so the override has
+					// to be the filter rather than a write — same reason as
+					// every other suite.
+					NPA_Settings::begin_test_override( array( 'log_enabled' => true ) );
 					$log_on = $this->logger->is_enabled();
 
-					update_option( NPA_Settings::OPTION, array( 'log_enabled' => false ) );
+					NPA_Settings::begin_test_override( array( 'log_enabled' => false ) );
 					$log_off = $this->logger->is_enabled();
 
-					if ( false === $log_prev ) {
-						delete_option( NPA_Settings::OPTION );
-					} else {
-						update_option( NPA_Settings::OPTION, $log_prev );
-					}
+					NPA_Settings::end_test_override();
 
 					$checks[] = array(
 						'label' => __( 'The logging setting switches the diagnostic log on and off', 'newtide-public-agent' ),
 						'pass'  => $log_on && ! $log_off,
 					);
 				}
+
+				/*
+				 * Running the battery must never change what the site serves.
+				 * It used to: suites wrote fixtures into the options row and
+				 * restored them at the end, so any interrupted run left the
+				 * fixture live. A production site published the placeholder key
+				 * pk_embed_test_123 to real visitors exactly that way.
+				 *
+				 * Assert both halves: the override is visible to readers, and
+				 * the stored row underneath is untouched. Read raw, past the
+				 * filter, or this proves nothing.
+				 */
+				global $wpdb;
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$raw_before = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", NPA_Settings::OPTION ) );
+
+				NPA_Settings::begin_test_override(
+					array_merge( NPA_Settings::defaults(), array( 'launcher_label' => '__npa_override_probe__' ) )
+				);
+				$seen_label = (string) $settings->get( 'launcher_label' );
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$raw_after = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", NPA_Settings::OPTION ) );
+				NPA_Settings::end_test_override();
+
+				$checks[] = array(
+					'label' => __( 'Running the tests never writes to your saved settings', 'newtide-public-agent' ),
+					'pass'  => '__npa_override_probe__' === $seen_label && $raw_before === $raw_after,
+				);
 
 				return $checks;
 			}
@@ -1166,8 +1192,7 @@ final class NPA_Plugin {
 
 				// Real dispatch with a sentinel agent id; assert + clean up.
 				global $wpdb;
-				$prev = get_option( 'npa_options' );
-				update_option( 'npa_options', array( 'agent_id' => '__npa_rest_test__' ) );
+				NPA_Settings::begin_test_override( array( 'agent_id' => '__npa_rest_test__' ) );
 
 				$before  = $this->store->count_today();
 				$request = new WP_REST_Request( 'POST', '/npa/v1/message' );
@@ -1237,11 +1262,6 @@ final class NPA_Plugin {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_rest_test__' ), array( '%s' ) );
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
-				if ( false === $prev ) {
-					delete_option( 'npa_options' );
-				} else {
-					update_option( 'npa_options', $prev );
-				}
 
 				return $checks;
 			}
@@ -1278,13 +1298,10 @@ final class NPA_Plugin {
 					'pass'  => $found === $table,
 				);
 
-				$prev   = get_option( 'npa_options' );
 				$secret = 'npa-transcript-probe-' . wp_generate_password( 8, false );
 
 				// OFF (the default): a real proxy call must persist nothing.
-				update_option(
-					'npa_options',
-					array(
+				NPA_Settings::begin_test_override( array(
 						'agent_id'          => '__npa_t_test__',
 						'store_transcripts' => false,
 					)
@@ -1303,9 +1320,7 @@ final class NPA_Plugin {
 				);
 
 				// ON: the same call stores both sides of the exchange.
-				update_option(
-					'npa_options',
-					array(
+				NPA_Settings::begin_test_override( array(
 						'agent_id'          => '__npa_t_test__',
 						'store_transcripts' => true,
 					)
@@ -1383,11 +1398,6 @@ final class NPA_Plugin {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_t_test__' ), array( '%s' ) );
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
-				if ( false === $prev ) {
-					delete_option( 'npa_options' );
-				} else {
-					update_option( 'npa_options', $prev );
-				}
 
 				return $checks;
 			}
@@ -1421,14 +1431,17 @@ final class NPA_Plugin {
 					'pass'  => WP_Block_Type_Registry::get_instance()->is_registered( 'newtide/agent' ),
 				);
 
-				// Pin proxy mode + enabled so the render check is deterministic
-				// regardless of the site's live connection mode.
-				$prev = get_option( 'npa_options' );
-				update_option(
-					'npa_options',
+				/*
+				 * Pin proxy mode + enabled so the render check is deterministic
+				 * regardless of the site's live connection mode, but keep the
+				 * rest of the real configuration so this exercises the actual
+				 * agent id and appearance. Read before any override is active.
+				 */
+				$live = get_option( 'npa_options' );
+				NPA_Settings::begin_test_override(
 					array_merge(
 						NPA_Settings::defaults(),
-						is_array( $prev ) ? $prev : array(),
+						is_array( $live ) ? $live : array(),
 						array(
 							'mode'    => 'proxy',
 							'enabled' => true,
@@ -1470,9 +1483,7 @@ final class NPA_Plugin {
 				 * injection existed only for Embed mode, so the enable switch and
 				 * page scope promised something nothing delivered.
 				 */
-				update_option(
-					'npa_options',
-					array_merge(
+				NPA_Settings::begin_test_override( array_merge(
 						NPA_Settings::defaults(),
 						array(
 							'enabled'   => true,
@@ -1495,9 +1506,7 @@ final class NPA_Plugin {
 
 				// Inline placement must NOT auto-inject — that is the setting's
 				// whole purpose, and the two must not both fire.
-				update_option(
-					'npa_options',
-					array_merge(
+				NPA_Settings::begin_test_override( array_merge(
 						NPA_Settings::defaults(),
 						array(
 							'enabled'   => true,
@@ -1520,9 +1529,7 @@ final class NPA_Plugin {
 
 				// Page allowlist: scoped to a non-matching page id, the widget is
 				// suppressed (the test request has no queried object).
-				update_option(
-					'npa_options',
-					array_merge(
+				NPA_Settings::begin_test_override( array_merge(
 						NPA_Settings::defaults(),
 						array(
 							'mode'       => 'proxy',
@@ -1538,11 +1545,6 @@ final class NPA_Plugin {
 					'pass'  => '' === trim( $scoped_html ),
 				);
 
-				if ( false !== $prev ) {
-					update_option( 'npa_options', $prev );
-				} else {
-					delete_option( 'npa_options' );
-				}
 
 				return $checks;
 			}
@@ -1566,7 +1568,6 @@ final class NPA_Plugin {
 			__( 'Confirms the RisingTide embed mode wires up correctly — inline placements get a mount node, the injected loader carries the publishable key, and the private gateway credential is never written into the embed output.', 'newtide-public-agent' ),
 			function () {
 				$checks = array();
-				$prev   = get_option( 'npa_options' );
 
 				$base = array_merge(
 					NPA_Settings::defaults(),
@@ -1580,7 +1581,7 @@ final class NPA_Plugin {
 				);
 
 				// Inline placement renders a mount node.
-				update_option( 'npa_options', $base );
+				NPA_Settings::begin_test_override( $base );
 				$inline   = do_shortcode( '[newtide_agent]' );
 				$checks[] = array(
 					'label' => __( 'Inline embed placement renders a mount node', 'newtide-public-agent' ),
@@ -1590,7 +1591,7 @@ final class NPA_Plugin {
 
 				// Floating placement defers to the site-wide loader (no inline markup).
 				$base['placement'] = 'floating';
-				update_option( 'npa_options', $base );
+				NPA_Settings::begin_test_override( $base );
 				$floating = do_shortcode( '[newtide_agent]' );
 				$checks[] = array(
 					'label' => __( 'Floating embed placement emits no inline markup', 'newtide-public-agent' ),
@@ -1626,12 +1627,6 @@ final class NPA_Plugin {
 					'pass'  => false === strpos( $guard_tag, $sentinel ),
 				);
 
-				// Restore prior options.
-				if ( false !== $prev ) {
-					update_option( 'npa_options', $prev );
-				} else {
-					delete_option( 'npa_options' );
-				}
 
 				return $checks;
 			}

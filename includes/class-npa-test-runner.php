@@ -60,8 +60,21 @@ class NPA_Test_Runner {
 		$total_pass  = 0;
 		$total_count = 0;
 
+		/*
+		 * Suites present fixture settings through a filter rather than writing
+		 * the options row (NPA_Settings::begin_test_override). The filter is
+		 * added for the duration of the run and the override is cleared after
+		 * every suite, pass or throw, so a suite cannot leak its fixture into
+		 * the next one or into the live site.
+		 */
+		add_filter( 'option_' . NPA_Settings::OPTION, array( 'NPA_Settings', 'filter_test_override' ), PHP_INT_MAX );
+
 		foreach ( $this->suites as $id => $suite ) {
-			$checks = call_user_func( $suite['callback'] );
+			try {
+				$checks = call_user_func( $suite['callback'] );
+			} finally {
+				NPA_Settings::end_test_override();
+			}
 			$checks = is_array( $checks ) ? $checks : array();
 
 			$suite_pass = 0;
@@ -82,6 +95,8 @@ class NPA_Test_Runner {
 			$total_pass  += $suite_pass;
 			$total_count += count( $checks );
 		}
+
+		remove_filter( 'option_' . NPA_Settings::OPTION, array( 'NPA_Settings', 'filter_test_override' ), PHP_INT_MAX );
 
 		$snapshot = array(
 			'time'    => time(),
