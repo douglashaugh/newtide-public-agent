@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.5.3
+Stable tag: 0.5.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,20 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.5.4 =
+* Fixes the Conversation probe and the resolved-agent display not appearing. The
+  Agent tab decided which Proxy route was in use with a looser test than the code
+  that actually picks the client: a stored gateway credential on its own counted
+  as a dedicated gateway and hid both sections, even though the site was using the
+  public agent API regardless. The tab now asks exactly the same question the
+  runtime does.
+* A gateway credential that no code path can reach is now called out. A dedicated
+  gateway needs all three of an API base URL, an agent ID and a credential before
+  it takes over — and an earlier version of the Publishing guide wrongly told
+  people to paste their pk_ key there, so a stray one is likely.
+* The Agent tab no longer makes two identical calls to the agent API on every
+  page load.
 
 = 0.5.3 =
 * Adds a **conversation probe** to the Agent tab (Proxy mode, diagnostic). The

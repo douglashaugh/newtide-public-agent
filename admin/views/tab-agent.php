@@ -23,11 +23,21 @@ $npa_pages        = get_pages(
 );
 $npa_page_scope   = (string) $settings->get( 'page_scope', 'all' );
 $npa_mode         = $settings->get_mode();
-// A dedicated gateway (its own base URL or credential) takes precedence over the
-// public agent API; which one is in play changes what this panel should offer.
-$npa_legacy_gw    = ( '' !== trim( (string) $settings->get_gateway_base_url() ) ) || $settings->gateway_key_is_set();
+/*
+ * Which route Proxy mode takes. This MUST mirror NPA_Plugin::gateway_client()
+ * exactly: a dedicated gateway wins only when is_configured() passes — base URL
+ * AND agent id AND credential. An earlier version treated a stored credential
+ * alone as "legacy", which hid this panel's public-API sections on a site whose
+ * runtime was using the public API regardless. The old Publishing guide told
+ * people to paste their pk_ key into the gateway credential, so a stray one is
+ * common; see $npa_unused_credential below.
+ */
+$npa_legacy_gw    = $settings->is_configured();
 $npa_public_api   = $settings->public_api_available() && ! $npa_legacy_gw;
-$npa_resolved     = $npa_public_api ? $npa_admin->available_agents() : array();
+$npa_resolved     = $npa_public_api ? $npa_agents : array();
+
+// A credential that is stored but cannot be reached by any code path.
+$npa_unused_credential = $settings->gateway_key_is_set() && ! $npa_legacy_gw;
 $npa_is_embed     = ( 'embed' === $npa_mode );
 $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', array() ) );
 ?>
@@ -161,6 +171,17 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			<p>
 				<strong><?php esc_html_e( 'Proxy mode has nothing to talk to yet.', 'newtide-public-agent' ); ?></strong>
 				<?php esc_html_e( 'Set a publishable key and platform URL above and it will relay through the public agent API. Without either, the plugin answers from its built-in mock — an administrator sees those canned replies when previewing, visitors are shown your error message instead.', 'newtide-public-agent' ); ?>
+			</p>
+		</div>
+	<?php endif; ?>
+	<?php if ( $npa_unused_credential ) : ?>
+		<div class="notice notice-warning inline">
+			<p>
+				<strong><?php esc_html_e( 'A gateway credential is stored but not being used.', 'newtide-public-agent' ); ?></strong>
+				<?php esc_html_e( 'This site is talking to the public agent API, which authenticates with the publishable key instead. A dedicated gateway needs all three of an API base URL, an agent ID and this credential before it takes over.', 'newtide-public-agent' ); ?>
+			</p>
+			<p>
+				<?php esc_html_e( 'If you pasted your pk_ key here — an earlier version of the Publishing guide wrongly said to — clear it and put it in Publishable key above. It is doing nothing where it is.', 'newtide-public-agent' ); ?>
 			</p>
 		</div>
 	<?php endif; ?>
@@ -305,7 +326,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	</div>
 	</div>
 
-	<?php if ( $npa_public_api ) : ?>
+	<?php if ( $settings->public_api_available() ) : ?>
 		<?php $npa_admin->card_open( __( 'Conversation probe (diagnostic)', 'newtide-public-agent' ), __( 'Does the agent remember anything between messages?', 'newtide-public-agent' ) ); ?>
 		<p class="description">
 			<?php esc_html_e( 'The agent API takes a single message and its own embed widget sends nothing else, so each turn may arrive with no memory of the last. This asks the agent to remember a random code, then asks for it back — trying a few request shapes in case the server supports threading its client never uses.', 'newtide-public-agent' ); ?>
