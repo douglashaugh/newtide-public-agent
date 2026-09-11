@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.5.2
+Stable tag: 0.5.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,18 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.5.3 =
+* Adds a **conversation probe** to the Agent tab (Proxy mode, diagnostic). The
+  agent API takes a single message and its own embed widget sends nothing else,
+  so each turn may arrive with no memory of the last. The probe asks the agent to
+  remember a random code and then asks for it back, trying several request shapes
+  — chatId, conversationId, sessionId, history[], messages[] — in case the server
+  supports threading its client never uses. It makes real calls to your live
+  agent, one shape at a time so a slow reply cannot time out the whole run.
+* Connection-mode and publishable-key descriptions corrected: the key is used by
+  both modes and is what selects the agent, and Proxy no longer claims to need a
+  server-side gateway credential.
 
 = 0.5.2 =
 Gateway settings brought in line with how Proxy mode now works:

@@ -59,7 +59,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 					<option value="proxy" <?php selected( $settings->get_mode(), 'proxy' ); ?>><?php esc_html_e( 'Proxy — the plugin’s own widget via the server-side gateway', 'newtide-public-agent' ); ?></option>
 					<option value="embed" <?php selected( $settings->get_mode(), 'embed' ); ?>><?php esc_html_e( 'Embed — RisingTide’s public widget via a publishable key', 'newtide-public-agent' ); ?></option>
 				</select>
-				<p class="description"><?php echo wp_kses_post( __( '<strong>Embed</strong> injects RisingTide’s official <code>agent-embed.js</code> using a publishable <code>pk_</code> key — recommended for published public agents. <strong>Proxy</strong> uses the plugin’s own chat widget through a server-side gateway credential. See the <em>Publishing</em> tab for how to get a key.', 'newtide-public-agent' ) ); ?></p>
+				<p class="description"><?php echo wp_kses_post( __( '<strong>Embed</strong> injects RisingTide’s official <code>agent-embed.js</code> using a publishable <code>pk_</code> key — recommended for published public agents. <strong>Proxy</strong> relays through your server to the same agent API, and renders the plugin’s own chat widget — so the Appearance and Behavior tabs apply. Both modes use the publishable key below. See the <em>Publishing</em> tab for how to get one.', 'newtide-public-agent' ) ); ?></p>
 			</td>
 		</tr>
 
@@ -71,7 +71,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 					<p class="description"><?php esc_html_e( 'Set via the NPA_PUBLIC_KEY constant.', 'newtide-public-agent' ); ?></p>
 				<?php else : ?>
 					<input type="text" id="npa-public-key" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[public_key]" value="<?php echo esc_attr( $settings->get( 'public_key' ) ); ?>" placeholder="pk_…" />
-					<p class="description"><?php esc_html_e( 'The pk_ key from RisingTide (Advanced Settings → Create key). Used in Embed mode. This key is publishable — it is meant to appear in page HTML; access is scoped by the key’s allowed-origins list.', 'newtide-public-agent' ); ?></p>
+					<p class="description"><?php esc_html_e( 'The pk_ key from RisingTide (Advanced Settings → Create key). Used by both connection modes, and it is what selects the agent. The key is publishable — designed to appear in page HTML — and access is scoped by its allowed-origins list, which must include this site’s address.', 'newtide-public-agent' ); ?></p>
 				<?php endif; ?>
 			</td>
 		</tr>
@@ -304,6 +304,23 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	<?php $npa_admin->card_close(); ?>
 	</div>
 	</div>
+
+	<?php if ( $npa_public_api ) : ?>
+		<?php $npa_admin->card_open( __( 'Conversation probe (diagnostic)', 'newtide-public-agent' ), __( 'Does the agent remember anything between messages?', 'newtide-public-agent' ) ); ?>
+		<p class="description">
+			<?php esc_html_e( 'The agent API takes a single message and its own embed widget sends nothing else, so each turn may arrive with no memory of the last. This asks the agent to remember a random code, then asks for it back — trying a few request shapes in case the server supports threading its client never uses.', 'newtide-public-agent' ); ?>
+		</p>
+		<p class="description">
+			<strong><?php esc_html_e( 'This talks to your live agent.', 'newtide-public-agent' ); ?></strong>
+			<?php esc_html_e( 'Two real messages per shape, so it counts toward usage and rate limits, and takes up to a minute.', 'newtide-public-agent' ); ?>
+		</p>
+		<p class="npa-actions">
+			<button type="button" class="button" id="npa-probe-conversation"><?php esc_html_e( 'Run conversation probe', 'newtide-public-agent' ); ?></button>
+			<span id="npa-probe-status" class="npa-test-result" role="status" aria-live="polite"></span>
+		</p>
+		<div id="npa-probe-results"></div>
+		<?php $npa_admin->card_close(); ?>
+	<?php endif; ?>
 
 	<p class="npa-actions">
 		<button type="button" class="button" id="npa-test-connection"><?php esc_html_e( 'Test connection', 'newtide-public-agent' ); ?></button>

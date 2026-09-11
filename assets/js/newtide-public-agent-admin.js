@@ -593,3 +593,111 @@
 	select.addEventListener( 'change', apply );
 	apply();
 }() );
+
+/* Agent tab: conversation probe. Walks the request shapes one at a time —
+   each is two real calls to a live agent, so doing them in a single request
+   invites a PHP timeout partway through and no result at all. Results stream
+   in as each shape finishes. */
+( function () {
+	'use strict';
+
+	var cfg = window.NPA_ADMIN || {};
+
+	function row( d ) {
+		var tr = document.createElement( 'tr' );
+		var mark = d.status === 'retained' ? '✓' : ( d.status === 'error' ? '!' : '·' );
+		var cls  = d.status === 'retained' ? 'is-ok' : ( d.status === 'error' ? 'is-error' : '' );
+
+		var c1 = document.createElement( 'td' );
+		c1.className = 'npa-test-result ' + cls;
+		c1.textContent = mark;
+
+		var c2 = document.createElement( 'td' );
+		c2.innerHTML = '<code></code>';
+		c2.querySelector( 'code' ).textContent = d.label || d.shape;
+
+		var c3 = document.createElement( 'td' );
+		c3.textContent = d.detail || '';
+
+		tr.appendChild( c1 );
+		tr.appendChild( c2 );
+		tr.appendChild( c3 );
+		return tr;
+	}
+
+	function run( btn ) {
+		var shapes = ( cfg.probeShapes || [] ).slice();
+		var status = document.getElementById( 'npa-probe-status' );
+		var out    = document.getElementById( 'npa-probe-results' );
+		if ( ! shapes.length || ! out ) {
+			return;
+		}
+
+		btn.disabled = true;
+		out.innerHTML = '';
+		var table = document.createElement( 'table' );
+		table.className = 'npa-status widefat striped';
+		var tbody = document.createElement( 'tbody' );
+		table.appendChild( tbody );
+		out.appendChild( table );
+
+		var retained = 0;
+		var done     = 0;
+
+		function next() {
+			if ( ! shapes.length ) {
+				btn.disabled = false;
+				if ( status ) {
+					status.className = 'npa-test-result ' + ( retained ? 'is-ok' : '' );
+					status.textContent = retained
+						? retained + ' of ' + done + ' shapes retained context'
+						: 'No shape retained context — every turn starts fresh.';
+				}
+				return;
+			}
+
+			var shape = shapes.shift();
+			if ( status ) {
+				status.className = 'npa-test-result';
+				status.textContent = 'Trying ' + shape + '… (' + ( shapes.length + 1 ) + ' left)';
+			}
+
+			var body = new URLSearchParams();
+			body.set( 'action', 'npa_probe_conversation' );
+			body.set( 'nonce', cfg.nonce );
+			body.set( 'shape', shape );
+
+			fetch( cfg.ajaxUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: body.toString()
+			} ).then( function ( r ) {
+				return r.json();
+			} ).then( function ( res ) {
+				done++;
+				var d = ( res && res.data ) || {};
+				if ( ! res || ! res.success ) {
+					d = { shape: shape, status: 'error', detail: d.message || cfg.errorText };
+				}
+				if ( d.status === 'retained' ) {
+					retained++;
+				}
+				tbody.appendChild( row( d ) );
+				next();
+			} ).catch( function () {
+				done++;
+				tbody.appendChild( row( { shape: shape, status: 'error', detail: cfg.errorText } ) );
+				next();
+			} );
+		}
+
+		next();
+	}
+
+	document.addEventListener( 'click', function ( e ) {
+		if ( e.target && e.target.id === 'npa-probe-conversation' ) {
+			run( e.target );
+		}
+	} );
+}() );

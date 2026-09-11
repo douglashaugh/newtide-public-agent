@@ -63,6 +63,7 @@ class NPA_Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
 		add_action( 'wp_ajax_npa_test_connection', array( $this, 'ajax_test_connection' ) );
 		add_action( 'wp_ajax_npa_run_tests', array( $this, 'ajax_run_tests' ) );
+		add_action( 'wp_ajax_npa_probe_conversation', array( $this, 'ajax_probe_conversation' ) );
 		add_action( 'admin_post_npa_export', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_npa_import', array( $this, 'handle_import' ) );
 		add_action( 'admin_post_npa_purge_transcripts', array( $this, 'handle_purge_transcripts' ) );
@@ -122,6 +123,8 @@ class NPA_Admin {
 				'testingText' => __( 'Testing…', 'newtide-public-agent' ),
 				'runningText' => __( 'Running…', 'newtide-public-agent' ),
 				'errorText'   => __( 'Request failed. Please try again.', 'newtide-public-agent' ),
+				// The probe runs one shape per request; the order lives server-side.
+				'probeShapes' => array_keys( $this->conversation_probe_shapes() ),
 			)
 		);
 
@@ -922,6 +925,183 @@ class NPA_Admin {
 				(string) wp_parse_url( $url, PHP_URL_HOST )
 			),
 			'latency' => $latency,
+		);
+	}
+
+	/**
+	 * The request-body shapes the conversation probe tries, in order.
+	 *
+	 * The API is undocumented and its own embed client sends `{message}` alone,
+	 * so the question is whether the server supports threading that the client
+	 * simply never uses. Each entry builds the body for one turn; the probe runs
+	 * two turns per shape and looks for a token planted in the first.
+	 *
+	 * @return array<string,array{label:string,build:callable}>
+	 */
+	private function conversation_probe_shapes() {
+		$thread = 'npa-probe-' . wp_generate_uuid4();
+
+		return array(
+			'baseline'        => array(
+				'label' => __( 'message only (what the embed widget sends)', 'newtide-public-agent' ),
+				'build' => static function ( $message, $prior ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+					return array( 'message' => $message );
+				},
+			),
+			'chat_id'         => array(
+				'label' => __( 'message + chatId', 'newtide-public-agent' ),
+				'build' => static function ( $message, $prior ) use ( $thread ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+					return array(
+						'message' => $message,
+						'chatId'  => $thread,
+					);
+				},
+			),
+			'conversation_id' => array(
+				'label' => __( 'message + conversationId', 'newtide-public-agent' ),
+				'build' => static function ( $message, $prior ) use ( $thread ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+					return array(
+						'message'        => $message,
+						'conversationId' => $thread,
+					);
+				},
+			),
+			'session_id'      => array(
+				'label' => __( 'message + sessionId', 'newtide-public-agent' ),
+				'build' => static function ( $message, $prior ) use ( $thread ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+					return array(
+						'message'   => $message,
+						'sessionId' => $thread,
+					);
+				},
+			),
+			'history'         => array(
+				'label' => __( 'message + history[]', 'newtide-public-agent' ),
+				'build' => static function ( $message, $prior ) {
+					return array(
+						'message' => $message,
+						'history' => $prior,
+					);
+				},
+			),
+			'messages'        => array(
+				'label' => __( 'message + messages[]', 'newtide-public-agent' ),
+				'build' => static function ( $message, $prior ) {
+					return array(
+						'message'  => $message,
+						'messages' => $prior,
+					);
+				},
+			),
+		);
+	}
+
+	/**
+	 * Run one shape of the conversation probe: plant a token, then ask for it
+	 * back, and report whether the second turn knew.
+	 *
+	 * One shape per request on purpose. Each turn is a real call to a live agent
+	 * and can take seconds; doing all six in one request invites a PHP timeout
+	 * halfway through and no result at all.
+	 *
+	 * @return void
+	 */
+	public function ajax_probe_conversation() {
+		check_ajax_referer( self::NONCE, 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'newtide-public-agent' ) ), 403 );
+		}
+
+		$s = $this->plugin->settings;
+		if ( ! $s->public_api_available() ) {
+			wp_send_json_error( array( 'message' => __( 'Needs a publishable key and platform URL.', 'newtide-public-agent' ) ), 400 );
+		}
+
+		$shapes = $this->conversation_probe_shapes();
+		$key    = isset( $_POST['shape'] ) ? sanitize_key( wp_unslash( $_POST['shape'] ) ) : '';
+
+		if ( ! isset( $shapes[ $key ] ) ) {
+			wp_send_json_error( array( 'message' => __( 'Unknown probe shape.', 'newtide-public-agent' ) ), 400 );
+		}
+
+		$shape  = $shapes[ $key ];
+		$build  = $shape['build'];
+		$client = new NPA_Gateway_Client_Public( $s->get_public_api_base_url(), $s->get_public_key() );
+
+		// A token the agent cannot possibly know or infer. A topical follow-up
+		// would be answerable from its knowledge base with no memory at all.
+		$token = 'NT' . wp_rand( 100000, 999999 );
+
+		$first_msg = sprintf(
+			/* translators: %s: a random token the agent is asked to remember. */
+			__( 'Please remember this reference code for later in our conversation: %s. Reply with just OK.', 'newtide-public-agent' ),
+			$token
+		);
+
+		$turn1 = $client->probe_chat( call_user_func( $build, $first_msg, array() ) );
+
+		if ( ! $turn1['ok'] ) {
+			wp_send_json_success(
+				array(
+					'shape'    => $key,
+					'label'    => $shape['label'],
+					'retained' => false,
+					'status'   => 'error',
+					'detail'   => sprintf(
+						/* translators: %s: error detail from the API. */
+						__( 'First turn failed: %s', 'newtide-public-agent' ),
+						$turn1['note']
+					),
+				)
+			);
+		}
+
+		$second_msg = __( 'What reference code did I just ask you to remember? Reply with the code only.', 'newtide-public-agent' );
+
+		$prior = array(
+			array(
+				'role'    => 'user',
+				'content' => $first_msg,
+			),
+			array(
+				'role'    => 'assistant',
+				'content' => $turn1['text'],
+			),
+		);
+
+		$turn2 = $client->probe_chat( call_user_func( $build, $second_msg, $prior ) );
+
+		if ( ! $turn2['ok'] ) {
+			wp_send_json_success(
+				array(
+					'shape'    => $key,
+					'label'    => $shape['label'],
+					'retained' => false,
+					'status'   => 'error',
+					'detail'   => sprintf(
+						/* translators: %s: error detail from the API. */
+						__( 'Second turn failed: %s', 'newtide-public-agent' ),
+						$turn2['note']
+					),
+				)
+			);
+		}
+
+		$retained = false !== stripos( $turn2['text'], $token );
+
+		wp_send_json_success(
+			array(
+				'shape'    => $key,
+				'label'    => $shape['label'],
+				'retained' => $retained,
+				'status'   => $retained ? 'retained' : 'forgotten',
+				'detail'   => sprintf(
+					/* translators: 1: the planted token, 2: the agent's reply, trimmed. */
+					__( 'Planted %1$s — replied: “%2$s”', 'newtide-public-agent' ),
+					$token,
+					wp_trim_words( $turn2['text'], 24, '…' )
+				),
+			)
 		);
 	}
 

@@ -319,6 +319,53 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	}
 
 	/**
+	 * Send an arbitrary body to the chat endpoint and report what came back.
+	 *
+	 * Exists for the conversation probe: the API is undocumented, and the only
+	 * way to learn whether it accepts more than `{message}` is to offer it more
+	 * and see. Never throws — the probe wants to report a failure, not handle an
+	 * exception — and is never used on a visitor path.
+	 *
+	 * @param array $body Request body to send verbatim.
+	 * @return array { ok:bool, code:int, text:string, note:string }
+	 */
+	public function probe_chat( array $body ) {
+		$response = wp_remote_post(
+			$this->base_url . '/public/chat/stream',
+			array(
+				'timeout' => $this->timeout,
+				'headers' => $this->headers( true ),
+				'body'    => wp_json_encode( $body ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'ok'   => false,
+				'code' => 0,
+				'text' => '',
+				'note' => $response->get_error_message(),
+			);
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		$raw  = (string) wp_remote_retrieve_body( $response );
+		$note = '';
+
+		if ( $code < 200 || $code >= 300 ) {
+			$decoded = json_decode( $raw, true );
+			$note    = ( is_array( $decoded ) && ! empty( $decoded['message'] ) ) ? (string) $decoded['message'] : 'HTTP ' . $code;
+		}
+
+		return array(
+			'ok'   => ( $code >= 200 && $code < 300 ),
+			'code' => $code,
+			'text' => self::collect_stream_text( $raw ),
+			'note' => $note,
+		);
+	}
+
+	/**
 	 * Accumulate the reply text from a Server-Sent Events body.
 	 *
 	 * Frames are separated by a blank line; each carries one or more `data:`
