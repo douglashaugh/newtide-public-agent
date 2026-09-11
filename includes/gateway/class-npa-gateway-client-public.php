@@ -207,27 +207,22 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	 * @param bool $json Whether to declare a JSON request body.
 	 * @return array
 	 */
-	private function headers( $json = false ) {
+	private function headers( $json = false, $origin = null ) {
 		$headers = array(
 			'X-Api-Key' => $this->key,
 			'Accept'    => 'text/event-stream, application/json',
 		);
 
 		/*
-		 * The API requires BOTH origin headers, and they carry different things.
-		 *
-		 * In the browser the call runs from the embed iframe, so `Origin` is set
-		 * automatically to the iframe's own origin — the platform host, the same
-		 * value for every customer. It therefore cannot be the allowed-origins
-		 * check; `X-Embed-Origin`, which the client sets to the parent page, is.
-		 * PHP sends no Origin at all, which the API rejects with "Origin header
-		 * is required" once the key has validated.
-		 *
-		 * So send what the browser would: the platform as Origin, this site as
-		 * X-Embed-Origin.
+		 * Two origin headers, and which one the API measures against a key's
+		 * allowed-origins list is not documented. `X-Embed-Origin` always carries
+		 * this site, because that is what the browser client puts there. `Origin`
+		 * is negotiated — see origin_candidates().
 		 */
-		if ( '' !== $this->platform_origin ) {
-			$headers['Origin'] = $this->platform_origin;
+		$origin = ( null === $origin ) ? $this->platform_origin : (string) $origin;
+
+		if ( '' !== $origin ) {
+			$headers['Origin'] = $origin;
 		}
 
 		if ( '' !== $this->origin ) {
@@ -244,6 +239,117 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 		 * @param array $headers Default headers.
 		 */
 		return apply_filters( 'npa_public_api_headers', $headers );
+	}
+
+	/**
+	 * Transient key remembering which Origin value this key accepts.
+	 *
+	 * @var string
+	 */
+	const ORIGIN_PREF = 'npa_api_origin_';
+
+	/**
+	 * Origin values to try, best first.
+	 *
+	 * The API rejects a call whose Origin is not permitted for the key, but does
+	 * not say which of the two origin headers it measured. Both readings are
+	 * defensible and both occur in practice: a key whose allowed-origins list
+	 * holds only the customer's site needs Origin to BE that site, while a key
+	 * listing a platform host needs the platform value the browser would send.
+	 * Guessing wrong produces "Origin not permitted for this API key" with no
+	 * indication of what to change, so try the site first, fall back to the
+	 * platform, and remember which one worked.
+	 *
+	 * @return string[]
+	 */
+	private function origin_candidates() {
+		$preferred = get_transient( self::ORIGIN_PREF . md5( $this->key ) );
+
+		$order = ( 'platform' === $preferred )
+			? array( $this->platform_origin, $this->origin )
+			: array( $this->origin, $this->platform_origin );
+
+		return array_values( array_unique( array_filter( $order ) ) );
+	}
+
+	/**
+	 * Whether a response is the API refusing the Origin specifically, as opposed
+	 * to refusing the key. Only the former is worth retrying.
+	 *
+	 * @param int    $code    HTTP status.
+	 * @param string $message Message from the API envelope.
+	 * @return bool
+	 */
+	private function is_origin_rejection( $code, $message ) {
+		return ( 401 === $code || 403 === $code ) && false !== stripos( (string) $message, 'origin' );
+	}
+
+	/**
+	 * Make a request, trying each Origin candidate until one is not refused on
+	 * origin grounds. Remembers the winner so later calls go straight there.
+	 *
+	 * @param string     $path Endpoint path.
+	 * @param array|null $body JSON body for a POST, or null for a GET.
+	 * @return array { error:WP_Error|null, code:int, body:string, api_message:string, origin:string, origin_rejected:bool }
+	 */
+	private function dispatch( $path, $body = null ) {
+		$url        = $this->base_url . $path;
+		$candidates = $this->origin_candidates();
+		$last       = null;
+
+		foreach ( $candidates as $origin ) {
+			$args = array(
+				'timeout' => $this->timeout,
+				'headers' => $this->headers( null !== $body, $origin ),
+			);
+
+			if ( null !== $body ) {
+				$args['body'] = wp_json_encode( $body );
+				$response     = wp_remote_post( $url, $args );
+			} else {
+				$response = wp_remote_get( $url, $args );
+			}
+
+			if ( is_wp_error( $response ) ) {
+				return array(
+					'error'           => $response,
+					'code'            => 0,
+					'body'            => '',
+					'api_message'     => $response->get_error_message(),
+					'origin'          => $origin,
+					'origin_rejected' => false,
+				);
+			}
+
+			$code    = (int) wp_remote_retrieve_response_code( $response );
+			$raw     = (string) wp_remote_retrieve_body( $response );
+			$decoded = json_decode( $raw, true );
+			$message = ( is_array( $decoded ) && ! empty( $decoded['message'] ) ) ? (string) $decoded['message'] : '';
+
+			$rejected = $this->is_origin_rejection( $code, $message );
+
+			$last = array(
+				'error'           => null,
+				'code'            => $code,
+				'body'            => $raw,
+				'api_message'     => $message,
+				'origin'          => $origin,
+				'origin_rejected' => $rejected,
+			);
+
+			if ( ! $rejected ) {
+				// Remember what worked; a wrong guess costs an extra round trip
+				// on every call otherwise.
+				set_transient(
+					self::ORIGIN_PREF . md5( $this->key ),
+					( $origin === $this->platform_origin ) ? 'platform' : 'site',
+					DAY_IN_SECONDS
+				);
+				return $last;
+			}
+		}
+
+		return $last;
 	}
 
 	/**
@@ -273,27 +379,19 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 		 */
 		$body = apply_filters( 'npa_public_api_chat_body', $body, $agent_id );
 
-		$response = wp_remote_post(
-			$this->base_url . '/public/chat/stream',
-			array(
-				'timeout' => $this->timeout,
-				'headers' => $this->headers( true ),
-				'body'    => wp_json_encode( $body ),
-			)
-		);
+		$attempt = $this->dispatch( '/public/chat/stream', $body );
 
-		if ( is_wp_error( $response ) ) {
+		if ( null !== $attempt['error'] ) {
 			// Internal, log-facing message — not browser output.
-			throw new NPA_Gateway_Exception( $response->get_error_message(), 'transport', 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			throw new NPA_Gateway_Exception( $attempt['api_message'], 'transport', 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		}
 
-		$code = (int) wp_remote_retrieve_response_code( $response );
-		$raw  = (string) wp_remote_retrieve_body( $response );
+		$code = $attempt['code'];
+		$raw  = $attempt['body'];
 
 		if ( $code < 200 || $code >= 300 ) {
-			$decoded = json_decode( $raw, true );
-			$message = ( is_array( $decoded ) && ! empty( $decoded['message'] ) )
-				? (string) $decoded['message']
+			$message = '' !== $attempt['api_message']
+				? $attempt['api_message']
 				: 'Public agent API error (HTTP ' . $code . ').';
 
 			// Internal, log-facing message — not browser output.
@@ -330,37 +428,26 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	 * @return array { ok:bool, code:int, text:string, note:string }
 	 */
 	public function probe_chat( array $body ) {
-		$response = wp_remote_post(
-			$this->base_url . '/public/chat/stream',
-			array(
-				'timeout' => $this->timeout,
-				'headers' => $this->headers( true ),
-				'body'    => wp_json_encode( $body ),
-			)
-		);
+		$attempt = $this->dispatch( '/public/chat/stream', $body );
 
-		if ( is_wp_error( $response ) ) {
+		if ( null !== $attempt['error'] ) {
 			return array(
 				'ok'   => false,
 				'code' => 0,
 				'text' => '',
-				'note' => $response->get_error_message(),
+				'note' => $attempt['api_message'],
 			);
 		}
 
-		$code = (int) wp_remote_retrieve_response_code( $response );
-		$raw  = (string) wp_remote_retrieve_body( $response );
-		$note = '';
-
-		if ( $code < 200 || $code >= 300 ) {
-			$decoded = json_decode( $raw, true );
-			$note    = ( is_array( $decoded ) && ! empty( $decoded['message'] ) ) ? (string) $decoded['message'] : 'HTTP ' . $code;
-		}
+		$code = $attempt['code'];
+		$note = ( $code < 200 || $code >= 300 )
+			? ( '' !== $attempt['api_message'] ? $attempt['api_message'] : 'HTTP ' . $code )
+			: '';
 
 		return array(
 			'ok'   => ( $code >= 200 && $code < 300 ),
 			'code' => $code,
-			'text' => self::collect_stream_text( $raw ),
+			'text' => self::collect_stream_text( $attempt['body'] ),
 			'note' => $note,
 		);
 	}
@@ -485,19 +572,13 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	 * @return array|null
 	 */
 	private function agent_info() {
-		$response = wp_remote_get(
-			$this->base_url . '/public/agent/info',
-			array(
-				'timeout' => $this->timeout,
-				'headers' => $this->headers(),
-			)
-		);
+		$attempt = $this->dispatch( '/public/agent/info' );
 
-		if ( is_wp_error( $response ) ) {
+		if ( null !== $attempt['error'] ) {
 			return null;
 		}
 
-		$decoded = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		$decoded = json_decode( $attempt['body'], true );
 
 		if ( ! is_array( $decoded ) || empty( $decoded['success'] ) || ! isset( $decoded['data'] ) ) {
 			return null;
@@ -518,26 +599,40 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	public function health_check(): NPA_Gateway_Health {
 		$start = microtime( true );
 
-		$response = wp_remote_get(
-			$this->base_url . '/public/agent/info',
-			array(
-				'timeout' => $this->timeout,
-				'headers' => $this->headers(),
-			)
-		);
+		$attempt = $this->dispatch( '/public/agent/info' );
 
 		$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
 
-		if ( is_wp_error( $response ) ) {
-			return new NPA_Gateway_Health( false, $response->get_error_message(), $latency );
+		if ( null !== $attempt['error'] ) {
+			return new NPA_Gateway_Health( false, $attempt['api_message'], $latency );
 		}
 
-		$code    = (int) wp_remote_retrieve_response_code( $response );
-		$decoded = json_decode( (string) wp_remote_retrieve_body( $response ), true );
-		$detail  = ( is_array( $decoded ) && ! empty( $decoded['message'] ) ) ? (string) $decoded['message'] : '';
+		$code    = $attempt['code'];
+		$decoded = json_decode( $attempt['body'], true );
+		$detail  = $attempt['api_message'];
 
 		if ( $code >= 200 && $code < 300 && is_array( $decoded ) && ! empty( $decoded['success'] ) ) {
 			return new NPA_Gateway_Health( true, __( 'Connected to the public agent API.', 'newtide-public-agent' ), $latency );
+		}
+
+		/*
+		 * An origin refusal is the one failure a site owner can fix themselves,
+		 * and the API does not say which value it objected to — so name both, and
+		 * the fact that every candidate was tried. Without this the message is
+		 * "Origin not permitted" with nothing to act on.
+		 */
+		if ( $attempt['origin_rejected'] ) {
+			return new NPA_Gateway_Health(
+				false,
+				sprintf(
+					/* translators: 1: the API's message, 2: site origin, 3: platform origin. */
+					__( '%1$s This site tried both %2$s and %3$s as the Origin, and neither is permitted for this key. Add %2$s to the key’s allowed origins in RisingTide — exactly that, with no trailing slash and no path.', 'newtide-public-agent' ),
+					'' !== $detail ? $detail : __( 'Origin not permitted for this API key.', 'newtide-public-agent' ),
+					$this->origin,
+					$this->platform_origin
+				),
+				$latency
+			);
 		}
 
 		if ( 401 === $code || 403 === $code ) {
@@ -545,7 +640,7 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 				false,
 				'' !== $detail
 					? $detail
-					: __( 'Key or origin rejected. Check that this site’s URL is in the key’s allowed origins.', 'newtide-public-agent' ),
+					: __( 'Key rejected. Check the key was created on the same platform this site points at.', 'newtide-public-agent' ),
 				$latency
 			);
 		}

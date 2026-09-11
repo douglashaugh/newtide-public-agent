@@ -73,9 +73,21 @@
 > origin error means the key is good.
 >
 > - `Origin:` — in the browser this is set automatically to the **iframe's own
->   origin**, i.e. the platform host. It is the same value for every customer, so
->   it cannot be the allowed-origins check. A server must send it explicitly.
-> - `X-Embed-Origin: <parent page origin>` — the per-key allowed-origins check. The iframe derives
+>   origin**, i.e. the platform host. A server must send it explicitly.
+> - `X-Embed-Origin: <parent page origin>` — the parent page the widget is on.
+>
+> **Which of the two is measured against the key's allowed-origins list is not
+> known, and behaves differently between keys.** One key worked with the platform
+> value in `Origin` and the site in `X-Embed-Origin`; another, whose allowed list
+> held only the customer's site, was refused with
+> `Origin not permitted for this API key.` until `Origin` carried the site value
+> instead. The plugin therefore tries the site origin first, falls back to the
+> platform origin on an origin-specific refusal, and caches whichever the key
+> accepts (`NPA_Gateway_Client_Public::dispatch()`).
+>
+> **Question for the platform team:** which header is authoritative, and should a
+> server-side caller send its own site as `Origin`? An answer removes the
+> negotiation entirely. The iframe derives
 > it from `window.location.ancestorOrigins[0]`, falling back to the `document.referrer`
 > origin. **It is an ordinary request header the caller sets**, which is why a server
 > can call this API too: WordPress would send its own site origin.

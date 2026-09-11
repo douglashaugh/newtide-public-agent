@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.1
+Stable tag: 0.6.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,17 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.2 =
+* Fixes "Origin not permitted for this API key" on a key whose allowed-origins
+  list contains only your own site. The API takes two origin headers and does not
+  document which one it checks against the key — and it evidently varies by key.
+  The plugin now tries your site's address first, falls back to the platform
+  address if that is refused, and remembers whichever the key accepts.
+* When both are refused, the error now names both values it tried and tells you
+  exactly what to add in RisingTide, instead of repeating "Origin not permitted"
+  with nothing to act on.
+* Test: a refused Origin is retried with the other candidate rather than failing.
 
 = 0.6.1 =
 * Fixes the chat panel's close button doing nothing. The widget hides the panel

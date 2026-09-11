@@ -1522,6 +1522,64 @@ final class NPA_Plugin {
 						&& 'https://example.test' === $seen_headers['X-Embed-Origin'],
 				);
 
+				/*
+				 * Origin negotiation. The API refuses a call whose Origin is not
+				 * permitted for the key but never says which of the two origin
+				 * headers it measured, and both readings occur: some keys list
+				 * the customer's site, others a platform host. Refusing the first
+				 * candidate must therefore lead to the second being tried, not to
+				 * a dead end the site owner cannot diagnose.
+				 */
+				delete_transient( NPA_Gateway_Client_Public::ORIGIN_PREF . md5( 'pk_origin_probe' ) );
+
+				$origins_tried = array();
+				$negotiate     = static function ( $pre, $args, $url ) use ( &$origins_tried ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+					$sent            = isset( $args['headers']['Origin'] ) ? $args['headers']['Origin'] : '';
+					$origins_tried[] = $sent;
+
+					// Refuse everything except the site origin.
+					if ( 'https://example.test' !== $sent ) {
+						return array(
+							'headers'  => array(),
+							'body'     => '{"success":false,"message":"Origin not permitted for this API key."}',
+							'response' => array(
+								'code'    => 403,
+								'message' => 'Forbidden',
+							),
+						);
+					}
+
+					return array(
+						'headers'  => array(),
+						'body'     => 'data: {"Event":"TextDelta","Data":{"Text":"ok"}}' . "\n\n",
+						'response' => array(
+							'code'    => 200,
+							'message' => 'OK',
+						),
+					);
+				};
+
+				add_filter( 'pre_http_request', $negotiate, 10, 3 );
+
+				$neg_client = new NPA_Gateway_Client_Public( 'https://uat-ai-api.newtide.ai', 'pk_origin_probe', 'https://example.test' );
+				$neg_reply  = '';
+				try {
+					$neg_reply = $neg_client->send_message( '', 'hello', '', array() )->reply_text;
+				} catch ( NPA_Gateway_Exception $e ) {
+					$neg_reply = '';
+				}
+
+				remove_filter( 'pre_http_request', $negotiate, 10 );
+
+				$checks[] = array(
+					'label' => __( 'A refused Origin is retried with the other candidate rather than failing', 'newtide-public-agent' ),
+					'pass'  => 'ok' === $neg_reply
+						&& count( $origins_tried ) > 1
+						&& in_array( 'https://example.test', $origins_tried, true ),
+				);
+
+				delete_transient( NPA_Gateway_Client_Public::ORIGIN_PREF . md5( 'pk_origin_probe' ) );
+
 				// A 429 must surface as rate-limited, not a generic failure, so
 				// the widget can say "busy" rather than "something went wrong".
 				$mode      = 429;
