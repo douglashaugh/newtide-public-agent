@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.2
+Stable tag: 0.6.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,16 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.3 =
+Diagnostics for "Something went wrong reaching the assistant":
+* Visitors still see only your error message — gateway internals must never reach
+  the browser — but an administrator can now see what actually failed. Service
+  Status shows the last upstream error with the API's own explanation, and the
+  admin Test drive appends the detail inline.
+* A reply that arrives empty now quotes the start of the response in that detail,
+  so an error frame, an unfamiliar event name and a non-stream body can be told
+  apart instead of all reading as "no reply text".
 
 = 0.6.2 =
 * Fixes "Origin not permitted for this API key" on a key whose allowed-origins

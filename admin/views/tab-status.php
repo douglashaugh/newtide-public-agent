@@ -44,6 +44,33 @@ echo $npa_admin->status_html(); // phpcs:ignore WordPress.Security.EscapeOutput.
 			<th scope="row"><?php esc_html_e( 'Configured', 'newtide-public-agent' ); ?></th>
 			<td><?php echo $settings->is_connection_configured() ? esc_html__( 'Yes', 'newtide-public-agent' ) : esc_html( $settings->configuration_hint() ); ?></td>
 		</tr>
+		<?php
+		$npa_last_error = NPA_Rest::last_error();
+		if ( $npa_last_error ) :
+			?>
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Last error', 'newtide-public-agent' ); ?></th>
+			<td>
+				<code><?php echo esc_html( $npa_last_error['code'] ); ?></code>
+				<?php if ( $npa_last_error['status'] ) : ?>
+					<code><?php echo esc_html( 'HTTP ' . $npa_last_error['status'] ); ?></code>
+				<?php endif; ?>
+				<?php if ( '' !== $npa_last_error['detail'] ) : ?>
+					<p class="description"><?php echo esc_html( $npa_last_error['detail'] ); ?></p>
+				<?php endif; ?>
+				<p class="description">
+					<?php
+					printf(
+						/* translators: %s: human-readable time since the error. */
+						esc_html__( '%s ago. Visitors saw only your error message — this detail is shown to administrators.', 'newtide-public-agent' ),
+						esc_html( human_time_diff( (int) $npa_last_error['time'], time() ) )
+					);
+					?>
+				</p>
+			</td>
+		</tr>
+		<?php endif; ?>
+
 		<tr>
 			<th scope="row"><?php esc_html_e( 'Recent calls (last 50)', 'newtide-public-agent' ); ?></th>
 			<td><?php echo esc_html( (string) $npa_agg['count'] ); ?></td>

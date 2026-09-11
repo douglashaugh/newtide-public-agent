@@ -554,7 +554,12 @@
 				}
 				bubble( 'agent', res.data.reply );
 			} else {
-				var m = ( res.data && res.data.error && res.data.error.message ) || cfg.errorText || 'Request failed.';
+				var err = ( res.data && res.data.error ) || {};
+				// detail is only ever returned to an administrator; visitors get
+				// the generic message alone. Show it here — it is the whole point
+				// of testing from the admin.
+				var m = ( err.message || cfg.errorText || 'Request failed.' ) +
+					( err.detail ? ' — ' + err.detail : '' );
 				bubble( 'agent', m, 'is-error' );
 			}
 		} ).catch( function () {

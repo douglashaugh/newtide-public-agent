@@ -401,9 +401,22 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 		$reply = self::collect_stream_text( $raw );
 
 		if ( '' === $reply ) {
-			// A 2xx with nothing usable in it is still a failed exchange; saying
-			// "the agent replied with nothing" would be worse than an error.
-			throw new NPA_Gateway_Exception( 'The API returned no reply text.', 'server_error', 502 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+			/*
+			 * A 2xx carrying nothing usable is still a failed exchange. Quote the
+			 * start of the body in the exception: this message is log- and
+			 * admin-facing only, and without it "no reply text" cannot be told
+			 * apart from an error frame, an unfamiliar event name, or a body that
+			 * was not a stream at all.
+			 */
+			$snippet = trim( preg_replace( '/\s+/', ' ', substr( $raw, 0, 300 ) ) );
+
+			throw new NPA_Gateway_Exception( // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+				'' !== $snippet
+					? 'The API returned no reply text. Response began: ' . $snippet
+					: 'The API returned an empty response body.',
+				'server_error',
+				502
+			);
 		}
 
 		return new NPA_Gateway_Result(

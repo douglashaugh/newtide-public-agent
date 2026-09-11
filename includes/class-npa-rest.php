@@ -333,8 +333,27 @@ class NPA_Rest {
 				)
 			);
 
-			$http = ( 429 === $e->get_http_status() ) ? 429 : 502;
-			return $this->error_response( $e->get_error_code(), self::friendly_message( $e->get_error_code() ), $http );
+			/*
+				 * Keep the visitor's message generic — gateway internals must never
+				 * reach the browser — but stop the admin flying blind. The upstream
+				 * detail is the only thing that distinguishes "the agent's bound
+				 * user lacks permission" from "the stream was empty" from "the key
+				 * is for the other environment", and all three surface to a visitor
+				 * as the same sentence. Stashed for Service Status, and returned
+				 * inline only to someone who could read it in the admin anyway.
+				 */
+			self::remember_error( $e->get_error_code(), $e->getMessage(), $e->get_http_status() );
+
+			$http     = ( 429 === $e->get_http_status() ) ? 429 : 502;
+			$response = $this->error_response( $e->get_error_code(), self::friendly_message( $e->get_error_code() ), $http );
+
+			if ( current_user_can( 'manage_options' ) ) {
+				$data                    = $response->get_data();
+				$data['error']['detail'] = $e->getMessage();
+				$response->set_data( $data );
+			}
+
+			return $response;
 		}
 	}
 
@@ -371,6 +390,47 @@ class NPA_Rest {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Transient holding the most recent upstream failure, for the admin.
+	 *
+	 * @var string
+	 */
+	const LAST_ERROR = 'npa_last_error';
+
+	/**
+	 * Record the most recent upstream failure so an administrator can see what
+	 * actually went wrong. Message content is never included — only the code,
+	 * the API's own explanation, and when it happened.
+	 *
+	 * @param string $code    Stable error code.
+	 * @param string $detail  Upstream message.
+	 * @param int    $status  HTTP status.
+	 * @return void
+	 */
+	private static function remember_error( $code, $detail, $status ) {
+		set_transient(
+			self::LAST_ERROR,
+			array(
+				'code'   => (string) $code,
+				'detail' => wp_strip_all_tags( (string) $detail ),
+				'status' => (int) $status,
+				'time'   => time(),
+			),
+			DAY_IN_SECONDS
+		);
+	}
+
+	/**
+	 * The most recent upstream failure, or null.
+	 *
+	 * @return array|null
+	 */
+	public static function last_error() {
+		$stored = get_transient( self::LAST_ERROR );
+
+		return is_array( $stored ) ? $stored : null;
 	}
 
 	/**
