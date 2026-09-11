@@ -1477,6 +1477,27 @@ final class NPA_Plugin {
 					'pass'  => 'Hello, world' === NPA_Gateway_Client_Public::collect_stream_text( $stream ),
 				);
 
+				/*
+				 * An agent-side failure arrives as an error frame inside a 200
+				 * response, so the HTTP status is no help. Surfacing the agent's
+				 * own words is the difference between an admin reading
+				 * "Internal error." and reading a description of our parser.
+				 */
+				$error_stream = "event: error\n" . 'data: {"error":"Internal error."}' . "\n\n";
+
+				$checks[] = array(
+					'label' => __( 'An error reported inside a successful stream is surfaced, not read as an empty reply', 'newtide-public-agent' ),
+					'pass'  => 'Internal error.' === NPA_Gateway_Client_Public::collect_stream_error( $error_stream )
+						&& '' === NPA_Gateway_Client_Public::collect_stream_text( $error_stream ),
+				);
+
+				$checks[] = array(
+					'label' => __( 'A normal reply is never mistaken for an error', 'newtide-public-agent' ),
+					'pass'  => '' === NPA_Gateway_Client_Public::collect_stream_error(
+						'data: {"Event":"TextDelta","Data":{"Text":"all good"}}' . "\n\n"
+					),
+				);
+
 				// Unknown events and noise must be skipped, not break the reply.
 				$noisy = "data: {\"Event\":\"Heartbeat\"}\n\n"
 					. "data: not-json\n\n"

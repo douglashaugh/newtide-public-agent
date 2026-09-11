@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.3
+Stable tag: 0.6.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,14 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.4 =
+* The agent API reports agent-side failures *inside* a successful response — an
+  `event: error` frame within an HTTP 200 — so the status code says nothing. The
+  plugin read that as an empty stream and told administrators "no reply text",
+  describing its own parser instead of the actual fault. It now surfaces the
+  agent's own words, so Service Status shows what really failed.
+* Visitors are unaffected: they still see only your error message.
 
 = 0.6.3 =
 Diagnostics for "Something went wrong reaching the assistant":

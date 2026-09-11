@@ -103,6 +103,21 @@
 >                                  -> text/event-stream
 > ```
 >
+> **Errors arrive inside a 200.** An agent-side failure is reported as a frame in
+> the stream, not as an HTTP status:
+>
+> ```
+> event: error
+> data: {"error":"Internal error."}
+> ```
+>
+> So a 200 does not mean the agent answered, and a client that only parses text
+> frames sees an empty stream and misreports the cause. `collect_stream_error()`
+> exists for this. Observed 2026-09-12 on a newly created TOE agent whose
+> `/public/agent/info` succeeded — metadata can be readable while the chat itself
+> fails, which is why Test connection passing proves the key, origin and
+> environment but says nothing about whether the agent will answer.
+>
 > **Response shape** — `/public/chat/stream` is **Server-Sent Events**, not JSON.
 > Frames are separated by a blank line; text arrives as events of
 > `Event: "TextDelta"` carrying `Data.Text`. `NPA_Gateway_Client_Http` expects a

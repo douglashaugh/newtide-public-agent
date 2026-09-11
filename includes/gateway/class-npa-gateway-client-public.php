@@ -402,12 +402,24 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 
 		if ( '' === $reply ) {
 			/*
-			 * A 2xx carrying nothing usable is still a failed exchange. Quote the
-			 * start of the body in the exception: this message is log- and
-			 * admin-facing only, and without it "no reply text" cannot be told
-			 * apart from an error frame, an unfamiliar event name, or a body that
-			 * was not a stream at all.
+			 * An agent-side failure arrives as an error frame inside a 200, so
+			 * look for one before concluding the stream was merely empty. This is
+			 * the difference between telling an admin "Internal error." and
+			 * telling them "no reply text", which describes our parser rather
+			 * than their problem.
 			 */
+			$upstream = self::collect_stream_error( $raw );
+
+			if ( '' !== $upstream ) {
+				throw new NPA_Gateway_Exception( // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+					'The agent returned an error: ' . $upstream,
+					'server_error',
+					502
+				);
+			}
+
+			// No text and no error frame: quote the body so an unfamiliar shape
+			// is visible rather than guessed at.
 			$snippet = trim( preg_replace( '/\s+/', ' ', substr( $raw, 0, 300 ) ) );
 
 			throw new NPA_Gateway_Exception( // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
@@ -463,6 +475,76 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 			'text' => self::collect_stream_text( $attempt['body'] ),
 			'note' => $note,
 		);
+	}
+
+	/**
+	 * Pull an upstream failure out of a Server-Sent Events body.
+	 *
+	 * The API reports agent-side failures *inside* a 200 response — an
+	 * `event: error` frame carrying `{"error":"…"}` — so the HTTP status says
+	 * nothing and a parser looking only for text sees an empty stream. Reporting
+	 * that as "no reply text" hid the real message ("Internal error.") behind a
+	 * symptom, which cost a round of diagnosis.
+	 *
+	 * @param string $raw Full response body.
+	 * @return string Error message, or '' when the stream carries none.
+	 */
+	public static function collect_stream_error( $raw ) {
+		$raw = (string) $raw;
+		if ( '' === trim( $raw ) ) {
+			return '';
+		}
+
+		$normalized = str_replace( array( "\r\n", "\r" ), "\n", $raw );
+
+		foreach ( preg_split( '/\n{2,}/', $normalized ) as $frame ) {
+			$frame = trim( $frame );
+			if ( '' === $frame ) {
+				continue;
+			}
+
+			$event   = '';
+			$payload = '';
+
+			foreach ( explode( "\n", $frame ) as $line ) {
+				$line = ltrim( $line );
+				if ( 0 === strpos( $line, 'event:' ) ) {
+					$event = trim( substr( $line, 6 ) );
+				} elseif ( 0 === strpos( $line, 'data:' ) ) {
+					$payload .= ltrim( substr( $line, 5 ) );
+				}
+			}
+
+			if ( '' === $payload ) {
+				continue;
+			}
+
+			$decoded = json_decode( $payload, true );
+
+			// Either the frame is named as an error, or its payload carries one.
+			$named   = ( 'error' === strtolower( $event ) );
+			$carried = is_array( $decoded ) && ( isset( $decoded['error'] ) || isset( $decoded['Error'] ) );
+
+			if ( ! $named && ! $carried ) {
+				continue;
+			}
+
+			if ( is_array( $decoded ) ) {
+				foreach ( array( 'error', 'Error', 'message', 'Message' ) as $field ) {
+					if ( ! empty( $decoded[ $field ] ) && is_string( $decoded[ $field ] ) ) {
+						return $decoded[ $field ];
+					}
+				}
+			}
+
+			// Named as an error but shaped unfamiliarly — better the raw payload
+			// than nothing.
+			if ( $named ) {
+				return trim( preg_replace( '/\s+/', ' ', substr( $payload, 0, 200 ) ) );
+			}
+		}
+
+		return '';
 	}
 
 	/**
