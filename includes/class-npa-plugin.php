@@ -185,6 +185,7 @@ final class NPA_Plugin {
 		$this->register_store_tests();
 		$this->register_budget_tests();
 		$this->register_rest_tests();
+		$this->register_public_api_tests();
 		$this->register_transcript_tests();
 		$this->register_widget_tests();
 		$this->register_embed_tests();
@@ -218,6 +219,7 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-exception.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-mock.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-http.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-public.php';
 
 		// Shared launcher-icon library (used by settings sanitize, the widget, and
 		// the admin picker/preview).
@@ -376,10 +378,22 @@ final class NPA_Plugin {
 		if ( null === $this->gateway_client ) {
 			$force_mock = defined( 'NPA_FORCE_MOCK' ) && NPA_FORCE_MOCK;
 
-			if ( ! $force_mock && $this->settings->is_configured() ) {
+			if ( $force_mock ) {
+				$default = new NPA_Gateway_Client_Mock();
+			} elseif ( $this->settings->is_configured() ) {
+				// A dedicated gateway with its own secret credential, if a site
+				// has been given one.
 				$default = new NPA_Gateway_Client_Http(
 					$this->settings->get_gateway_base_url(),
 					$this->settings->get_gateway_key()
+				);
+			} elseif ( $this->settings->public_api_available() ) {
+				// The public agent API — the service the embedded widget uses.
+				// Needs only the publishable key, and claims this site's origin
+				// the way the iframe claims its parent page's.
+				$default = new NPA_Gateway_Client_Public(
+					$this->settings->get_public_api_base_url(),
+					$this->settings->get_public_key()
 				);
 			} else {
 				$default = new NPA_Gateway_Client_Mock();
@@ -1288,6 +1302,115 @@ final class NPA_Plugin {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_rest_test__' ), array( '%s' ) );
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
+	 * Register the public-agent-API suite (Verify companion for Proxy mode over
+	 * the service the embedded widget uses).
+	 *
+	 * Every check here is a pure function or a filtered HTTP fixture — no live
+	 * call — because the real API needs a key and an allowed origin, which a
+	 * test battery must never depend on.
+	 *
+	 * @return void
+	 */
+	private function register_public_api_tests() {
+		$this->test_runner->register_suite(
+			'public_api',
+			__( 'Public agent API', 'newtide-public-agent' ),
+			__( 'Confirms Proxy mode can talk to the same service the embedded widget uses: that the API address is derived correctly from your platform URL, that this site announces its own origin for the allowed-origins check, and that a streamed reply is reassembled into the text a visitor sees.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+
+				// Host derivation: the API is a sibling host of the platform.
+				$derived  = array(
+					'https://ai.newtide.ai'     => 'https://ai-api.newtide.ai',
+					'https://uat-ai.newtide.ai' => 'https://uat-ai-api.newtide.ai',
+				);
+				$host_ok = true;
+				foreach ( $derived as $platform => $expected ) {
+					if ( NPA_Gateway_Client_Public::api_base_from_platform( $platform ) !== $expected ) {
+						$host_ok = false;
+					}
+				}
+				$checks[] = array(
+					'label' => __( 'The API address is derived correctly from the platform URL', 'newtide-public-agent' ),
+					'pass'  => $host_ok,
+				);
+
+				$checks[] = array(
+					'label' => __( 'A malformed platform URL yields no API address rather than a broken one', 'newtide-public-agent' ),
+					'pass'  => '' === NPA_Gateway_Client_Public::api_base_from_platform( 'not a url' )
+						&& '' === NPA_Gateway_Client_Public::api_base_from_platform( '' ),
+				);
+
+				// Origin: scheme + host only. A trailing slash or path here is
+				// the difference between the key being accepted and rejected.
+				$origin   = NPA_Gateway_Client_Public::site_origin();
+				$checks[] = array(
+					'label' => __( 'This site announces a bare origin (no trailing slash or path)', 'newtide-public-agent' ),
+					'pass'  => '' !== $origin
+						&& '/' !== substr( $origin, -1 )
+						&& '' === (string) wp_parse_url( $origin, PHP_URL_PATH ),
+				);
+
+				// Stream reassembly: several TextDelta frames become one reply.
+				$stream = "event: message\n"
+					. 'data: {"Event":"TextDelta","Data":{"Text":"Hello"}}' . "\n\n"
+					. "event: message\n"
+					. 'data: {"Event":"TextDelta","Data":{"Text":", world"}}' . "\n\n"
+					. "event: done\n"
+					. 'data: [DONE]' . "\n\n";
+
+				$checks[] = array(
+					'label' => __( 'A streamed reply is reassembled in order', 'newtide-public-agent' ),
+					'pass'  => 'Hello, world' === NPA_Gateway_Client_Public::collect_stream_text( $stream ),
+				);
+
+				// Unknown events and noise must be skipped, not break the reply.
+				$noisy = "data: {\"Event\":\"Heartbeat\"}\n\n"
+					. "data: not-json\n\n"
+					. 'data: {"Event":"TextDelta","Data":{"text":"lowercase key"}}' . "\n\n";
+
+				$checks[] = array(
+					'label' => __( 'Unknown events and unparsable frames are skipped, not treated as errors', 'newtide-public-agent' ),
+					'pass'  => 'lowercase key' === NPA_Gateway_Client_Public::collect_stream_text( $noisy ),
+				);
+
+				// A 429 must surface as rate-limited, not a generic failure, so
+				// the widget can say "busy" rather than "something went wrong".
+				$mode      = 429;
+				$responder = static function ( $pre, $args, $url ) use ( &$mode ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+					return array(
+						'headers'  => array( 'retry-after' => '30' ),
+						'body'     => '{"success":false,"message":"Too many requests."}',
+						'response' => array(
+							'code'    => $mode,
+							'message' => 'Too Many Requests',
+						),
+					);
+				};
+
+				add_filter( 'pre_http_request', $responder, 10, 3 );
+
+				$client = new NPA_Gateway_Client_Public( 'https://example-api.test', 'pk_test', 'https://example.test' );
+				$code   = '';
+				try {
+					$client->send_message( '', 'hello', '', array() );
+				} catch ( NPA_Gateway_Exception $e ) {
+					$code = $e->get_error_code();
+				}
+
+				remove_filter( 'pre_http_request', $responder, 10 );
+
+				$checks[] = array(
+					'label' => __( 'A rate-limited response is reported as busy, not as a generic error', 'newtide-public-agent' ),
+					'pass'  => 'rate_limited' === $code,
+				);
 
 				return $checks;
 			}

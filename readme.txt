@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.4.1
+Stable tag: 0.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,27 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.5.0 =
+**Proxy mode works.** It now relays through the public agent API — the same
+service the embedded widget itself calls — so the plugin renders its own chat
+widget and the Appearance and Behavior tabs apply again.
+
+* Set Connection mode to Proxy with your publishable key and platform URL in
+  place. No separate gateway credential is needed; the API host is derived from
+  the platform URL (`ai.newtide.ai` → `ai-api.newtide.ai`).
+* Your server sends this site's own address as the request origin, so the site
+  URL must be in the key's allowed-origins list exactly as it is for Embed mode.
+* Replies arrive as a stream and are reassembled server-side, so the widget shows
+  the finished answer. Rate limiting is reported as "busy" rather than a generic
+  error.
+* Test connection in Proxy mode now genuinely validates the key *and* the origin,
+  because the API checks both.
+
+Note: this API is not yet formally documented by NewTide. It is what the embedded
+widget calls, so it is the same service — confirm with the platform team before
+relying on it in production. Conversation memory across turns is not yet proven
+on this path.
 
 = 0.4.1 =
 * The built-in mock can no longer answer a real visitor. Proxy mode falls back to

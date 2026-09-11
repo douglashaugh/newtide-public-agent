@@ -639,7 +639,47 @@ class NPA_Settings {
 	public function is_connection_configured() {
 		return ( 'embed' === $this->get_mode() )
 			? $this->is_embed_configured()
-			: $this->is_configured();
+			: $this->is_proxy_configured();
+	}
+
+	/**
+	 * Whether Proxy mode can reach an agent.
+	 *
+	 * Two routes now. The original assumed a dedicated gateway with its own base
+	 * URL and secret credential — still honoured if a site has one. The route
+	 * that actually exists is the public agent API, which needs only the
+	 * publishable key and the platform URL the API host is derived from.
+	 *
+	 * @return bool
+	 */
+	public function is_proxy_configured() {
+		return $this->is_configured() || $this->public_api_available();
+	}
+
+	/**
+	 * Whether the public agent API can be called: a publishable key, and a
+	 * platform URL an API host can be derived from.
+	 *
+	 * @return bool
+	 */
+	public function public_api_available() {
+		return '' !== trim( (string) $this->get_public_key() )
+			&& '' !== NPA_Gateway_Client_Public::api_base_from_platform( $this->get_platform_url() );
+	}
+
+	/**
+	 * The public agent API base URL: an explicit gateway base URL when one is
+	 * set, otherwise derived from the platform URL.
+	 *
+	 * @return string
+	 */
+	public function get_public_api_base_url() {
+		$explicit = trim( (string) $this->get_gateway_base_url() );
+		if ( '' !== $explicit ) {
+			return untrailingslashit( $explicit );
+		}
+
+		return NPA_Gateway_Client_Public::api_base_from_platform( $this->get_platform_url() );
 	}
 
 	/**

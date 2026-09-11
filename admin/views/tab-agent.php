@@ -58,7 +58,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			</td>
 		</tr>
 
-		<tr data-npa-mode="embed" <?php echo $npa_is_embed ? '' : 'hidden'; ?>>
+		<tr>
 			<th scope="row"><label for="npa-public-key"><?php esc_html_e( 'Publishable key', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<?php if ( defined( 'NPA_PUBLIC_KEY' ) ) : ?>
@@ -71,7 +71,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			</td>
 		</tr>
 
-		<tr data-npa-mode="embed" <?php echo $npa_is_embed ? '' : 'hidden'; ?>>
+		<tr>
 			<th scope="row"><label for="npa-platform-url"><?php esc_html_e( 'Platform URL (advanced)', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<?php if ( defined( 'NPA_PLATFORM_URL' ) ) : ?>
@@ -135,15 +135,30 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	<?php $npa_admin->card_close(); ?>
 
 	<div data-npa-mode="proxy" <?php echo $npa_is_embed ? 'hidden' : ''; ?>>
-	<div class="notice notice-warning inline">
-		<p>
-			<strong><?php esc_html_e( 'Proxy mode needs a gateway that is not available yet.', 'newtide-public-agent' ); ?></strong>
-			<?php esc_html_e( 'It relays messages to a server-to-server agent API. The published public-agent path is an embedded page rather than such an API, so unless NewTide has given you a gateway URL and credential, there is nothing for this mode to talk to.', 'newtide-public-agent' ); ?>
-		</p>
-		<p>
-			<?php esc_html_e( 'Without one the plugin answers from its built-in mock. An administrator sees those canned replies when previewing; visitors are shown your error message instead, so nobody is served a fake agent. Use Embed mode for a live site.', 'newtide-public-agent' ); ?>
-		</p>
-	</div>
+	<?php if ( $settings->public_api_available() ) : ?>
+		<div class="notice notice-info inline">
+			<p>
+				<strong><?php esc_html_e( 'Proxy mode uses the public agent API.', 'newtide-public-agent' ); ?></strong>
+				<?php
+				printf(
+					/* translators: %s: the derived API host. */
+					esc_html__( 'Messages are relayed through your server to %s using the publishable key above, and this site’s own address is sent as the origin — so your site URL must be in the key’s allowed-origins list, exactly as it is for Embed mode.', 'newtide-public-agent' ),
+					'<code>' . esc_html( (string) wp_parse_url( $settings->get_public_api_base_url(), PHP_URL_HOST ) ) . '</code>'
+				);
+				?>
+			</p>
+			<p>
+				<?php esc_html_e( 'This API is not yet formally documented by NewTide. It is what the embedded widget itself calls, so it is the same service — but confirm with the platform team before relying on it for a production site.', 'newtide-public-agent' ); ?>
+			</p>
+		</div>
+	<?php else : ?>
+		<div class="notice notice-warning inline">
+			<p>
+				<strong><?php esc_html_e( 'Proxy mode has nothing to talk to yet.', 'newtide-public-agent' ); ?></strong>
+				<?php esc_html_e( 'Set a publishable key and platform URL above and it will relay through the public agent API. Without either, the plugin answers from its built-in mock — an administrator sees those canned replies when previewing, visitors are shown your error message instead.', 'newtide-public-agent' ); ?>
+			</p>
+		</div>
+	<?php endif; ?>
 	<?php $npa_admin->card_open( __( 'Gateway settings', 'newtide-public-agent' ), __( 'The server-side gateway path. Used only by Proxy mode.', 'newtide-public-agent' ) ); ?>
 	<table class="form-table" role="presentation">
 		<tr>
