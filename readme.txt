@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.5.1
+Stable tag: 0.5.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,24 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.5.2 =
+Gateway settings brought in line with how Proxy mode now works:
+* **Agent** is no longer an editable field on the public API path — the key
+  selects the agent, so the panel shows the one your key resolves to and says
+  there is nothing to choose. It also carries that id forward on save, which
+  clears a stale value; a wrong id did not affect replies but misattributed every
+  row in the usage table and the busiest-agents chart. If the stored id differs,
+  the panel says so before you save.
+* **Gateway base URL** is now labelled advanced and states the address actually in
+  use, derived from your Platform URL. Leave it blank unless NewTide gives you a
+  dedicated endpoint.
+* **Gateway credential** is marked advanced and explains that the public agent API
+  authenticates with the publishable key, so most sites leave it empty.
+* The **daily cap** description no longer claims abuse prevention happens at "the
+  gateway"; it names the agent API and its retry behaviour.
+* The setup checklist asks for a publishable key rather than an agent id whenever
+  the key is what identifies the agent — which is both modes now.
 
 = 0.5.1 =
 * Fixes Proxy mode failing with "Origin header is required". The API needs two

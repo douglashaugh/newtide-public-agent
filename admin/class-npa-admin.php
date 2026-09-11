@@ -253,11 +253,20 @@ class NPA_Admin {
 			'hint'  => __( 'Set your connection on the Agent tab.', 'newtide-public-agent' ),
 		);
 
+		/*
+		 * Both modes now identify the agent by the publishable key — Embed puts it
+		 * in the loader tag, Proxy sends it as X-Api-Key — so there is nothing to
+		 * "choose". Only a dedicated gateway still needs an agent id typed in.
+		 */
+		$by_key = $embed || $s->public_api_available();
+
 		$items[] = array(
-			'label' => __( 'Choose an agent', 'newtide-public-agent' ),
-			'done'  => $embed ? ( '' !== $s->get_public_key() ) : ( '' !== $s->get_agent_id() ),
+			'label' => $by_key ? __( 'Connect an agent with a publishable key', 'newtide-public-agent' ) : __( 'Choose an agent', 'newtide-public-agent' ),
+			'done'  => $by_key ? ( '' !== trim( (string) $s->get_public_key() ) ) : ( '' !== $s->get_agent_id() ),
 			'tab'   => 'agent',
-			'hint'  => __( 'Pick which published agent answers visitors.', 'newtide-public-agent' ),
+			'hint'  => $by_key
+				? __( 'The key decides which published agent answers visitors.', 'newtide-public-agent' )
+				: __( 'Pick which published agent answers visitors.', 'newtide-public-agent' ),
 		);
 
 		$items[] = array(

@@ -23,6 +23,11 @@ $npa_pages        = get_pages(
 );
 $npa_page_scope   = (string) $settings->get( 'page_scope', 'all' );
 $npa_mode         = $settings->get_mode();
+// A dedicated gateway (its own base URL or credential) takes precedence over the
+// public agent API; which one is in play changes what this panel should offer.
+$npa_legacy_gw    = ( '' !== trim( (string) $settings->get_gateway_base_url() ) ) || $settings->gateway_key_is_set();
+$npa_public_api   = $settings->public_api_available() && ! $npa_legacy_gw;
+$npa_resolved     = $npa_public_api ? $npa_admin->available_agents() : array();
 $npa_is_embed     = ( 'embed' === $npa_mode );
 $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', array() ) );
 ?>
@@ -162,19 +167,33 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	<?php $npa_admin->card_open( __( 'Gateway settings', 'newtide-public-agent' ), __( 'The server-side gateway path. Used only by Proxy mode.', 'newtide-public-agent' ) ); ?>
 	<table class="form-table" role="presentation">
 		<tr>
-			<th scope="row"><label for="npa-base-url"><?php esc_html_e( 'Gateway base URL', 'newtide-public-agent' ); ?></label></th>
+			<th scope="row"><label for="npa-base-url"><?php esc_html_e( 'API base URL (advanced)', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<?php if ( defined( 'NPA_GATEWAY_BASE_URL' ) ) : ?>
 					<input type="url" id="npa-base-url" class="regular-text" value="<?php echo esc_attr( $settings->get_gateway_base_url() ); ?>" disabled />
 					<p class="description"><?php esc_html_e( 'Defined via the NPA_GATEWAY_BASE_URL constant.', 'newtide-public-agent' ); ?></p>
 				<?php else : ?>
 					<input type="url" id="npa-base-url" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[gateway_base_url]" value="<?php echo esc_attr( $settings->get( 'gateway_base_url' ) ); ?>" placeholder="https://…" />
+					<p class="description">
+						<?php
+						$npa_derived = NPA_Gateway_Client_Public::api_base_from_platform( $settings->get_platform_url() );
+						if ( '' !== $npa_derived ) {
+							printf(
+								/* translators: %s: the API base URL derived from the platform URL. */
+								esc_html__( 'Leave blank. The API address is derived from your Platform URL — currently %s. Set this only if NewTide gives you a different endpoint.', 'newtide-public-agent' ),
+								'<code>' . esc_html( $npa_derived ) . '</code>'
+							);
+						} else {
+							esc_html_e( 'Leave blank unless NewTide gives you a dedicated endpoint. Normally the API address is derived from your Platform URL.', 'newtide-public-agent' );
+						}
+						?>
+					</p>
 				<?php endif; ?>
 			</td>
 		</tr>
 
 		<tr>
-			<th scope="row"><?php esc_html_e( 'Gateway credential', 'newtide-public-agent' ); ?></th>
+			<th scope="row"><?php esc_html_e( 'Gateway credential (advanced)', 'newtide-public-agent' ); ?></th>
 			<td>
 				<?php if ( $npa_key_constant ) : ?>
 					<p><span class="npa-pill npa-pill--ok"><?php esc_html_e( 'Configured via wp-config.php', 'newtide-public-agent' ); ?></span></p>
@@ -184,7 +203,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 					<?php if ( 'none' !== $npa_key_source ) : ?>
 						<p><span class="npa-pill npa-pill--ok"><?php esc_html_e( 'A credential is set', 'newtide-public-agent' ); ?></span></p>
 					<?php endif; ?>
-					<p class="description"><?php esc_html_e( 'Stored write-only; the saved value is never shown. Prefer defining NPA_GATEWAY_KEY in wp-config.php instead.', 'newtide-public-agent' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Only for a dedicated gateway. The public agent API authenticates with the publishable key above, so most sites leave this empty. Stored write-only; the saved value is never shown. Prefer defining NPA_GATEWAY_KEY in wp-config.php.', 'newtide-public-agent' ); ?></p>
 				<?php endif; ?>
 			</td>
 		</tr>
@@ -192,7 +211,38 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 		<tr>
 			<th scope="row"><label for="npa-agent-id"><?php esc_html_e( 'Agent', 'newtide-public-agent' ); ?></label></th>
 			<td>
-				<?php if ( ! empty( $npa_agents ) ) : ?>
+				<?php if ( $npa_public_api ) : ?>
+					<?php
+					/*
+					 * On the public API the key selects the agent — nothing here
+					 * chooses it. Show what the key actually resolves to, and
+					 * carry that id forward so the stored value stops drifting:
+					 * a stale id is harmless to the conversation but misattributes
+					 * every row in the usage table and the busiest-agents chart.
+					 */
+					$npa_live = ! empty( $npa_resolved ) ? $npa_resolved[0] : null;
+					?>
+					<?php if ( $npa_live ) : ?>
+						<p>
+							<span class="npa-pill npa-pill--ok"><?php echo esc_html( '' !== $npa_live->name ? $npa_live->name : $npa_live->id ); ?></span>
+						</p>
+						<?php if ( '' !== $npa_live->id ) : ?>
+							<p class="description"><code><?php echo esc_html( $npa_live->id ); ?></code></p>
+						<?php endif; ?>
+						<input type="hidden" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[agent_id]" value="<?php echo esc_attr( $npa_live->id ); ?>" />
+						<p class="description">
+							<?php esc_html_e( 'Resolved from your publishable key. To use a different agent, create a key on that agent in RisingTide — there is nothing to choose here.', 'newtide-public-agent' ); ?>
+							<?php if ( '' !== $npa_current && $npa_live->id !== $npa_current ) : ?>
+								<br /><strong><?php esc_html_e( 'Saving this tab will replace the stored agent ID with the one above.', 'newtide-public-agent' ); ?></strong>
+								<?php printf( /* translators: %s: the stale agent id currently stored. */ esc_html__( 'It currently reads %s, which is not the agent answering.', 'newtide-public-agent' ), '<code>' . esc_html( $npa_current ) . '</code>' ); ?>
+							<?php endif; ?>
+						</p>
+					<?php else : ?>
+						<p><span class="npa-pill"><?php esc_html_e( 'Not resolved yet', 'newtide-public-agent' ); ?></span></p>
+						<input type="hidden" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[agent_id]" value="<?php echo esc_attr( $npa_current ); ?>" />
+						<p class="description"><?php esc_html_e( 'The key selects the agent, so nothing is chosen here. Run Test connection below — once the API answers, the agent it resolves to is shown.', 'newtide-public-agent' ); ?></p>
+					<?php endif; ?>
+				<?php elseif ( ! empty( $npa_agents ) ) : ?>
 					<select id="npa-agent-id" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[agent_id]">
 						<?php
 						$npa_found = false;
@@ -210,7 +260,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 					<p class="description"><?php esc_html_e( 'Published agents available to this credential.', 'newtide-public-agent' ); ?></p>
 				<?php else : ?>
 					<input type="text" id="npa-agent-id" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[agent_id]" value="<?php echo esc_attr( $npa_current ); ?>" />
-					<p class="description"><?php esc_html_e( 'Enter the published agent ID. (A list will appear here once the gateway can be reached.)', 'newtide-public-agent' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Enter the published agent ID for a dedicated gateway. (A list appears here once the gateway can be reached.)', 'newtide-public-agent' ); ?></p>
 				<?php endif; ?>
 			</td>
 		</tr>
@@ -219,7 +269,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			<th scope="row"><label for="npa-cap"><?php esc_html_e( 'Daily message cap', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<input type="number" id="npa-cap" min="0" class="small-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[daily_message_cap]" value="<?php echo esc_attr( (string) $settings->get( 'daily_message_cap' ) ); ?>" />
-				<p class="description"><?php esc_html_e( 'Courtesy limiter. 0 = unlimited. (Abuse prevention is enforced by the gateway.)', 'newtide-public-agent' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Courtesy limiter on this site. 0 = unlimited. Real rate limiting is enforced upstream by the agent API, which returns a retry time the widget passes on to the visitor.', 'newtide-public-agent' ); ?></p>
 			</td>
 		</tr>
 
