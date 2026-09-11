@@ -102,6 +102,9 @@ class NPA_Rest {
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
 					),
+					'new_conversation' => array(
+						'type' => 'boolean',
+					),
 				),
 			)
 		);
@@ -198,6 +201,34 @@ class NPA_Rest {
 		}
 
 		$conversation_id = sanitize_text_field( (string) $request->get_param( 'conversation_id' ) );
+
+		/*
+		 * Conversation memory. The upstream API is single-turn and ignores every
+		 * threading field, so continuity is reconstructed here or not at all —
+		 * see NPA_Conversation. Off leaves every turn independent, which is what
+		 * the platform itself does today.
+		 */
+		$remember = (bool) $this->plugin->settings->get( 'conversation_memory' )
+			&& $this->plugin->gateway_client() instanceof NPA_Gateway_Client_Public;
+
+		if ( $request->get_param( 'new_conversation' ) ) {
+			NPA_Conversation::forget( $conversation_id );
+			$conversation_id = '';
+		}
+
+		if ( $remember ) {
+			// Only ever continue an id this server issued; anything else starts
+			// a new conversation rather than failing.
+			if ( ! NPA_Conversation::is_valid_id( $conversation_id ) ) {
+				$conversation_id = NPA_Conversation::new_id();
+			}
+
+			$history = NPA_Conversation::load( $conversation_id );
+			$outbound = NPA_Conversation::compose( $history, $message );
+		} else {
+			$history  = array();
+			$outbound = $message;
+		}
 		$context         = $this->sanitize_context( (array) $request->get_param( 'context' ) );
 		$agent_id        = $this->resolve_agent_id( $request );
 
@@ -237,7 +268,7 @@ class NPA_Rest {
 		$start = microtime( true );
 
 		try {
-			$result  = $client->send_message( $agent_id, $message, $conversation_id, $context );
+			$result  = $client->send_message( $agent_id, $outbound, $conversation_id, $context );
 			$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
 
 			$this->plugin->store->record(
@@ -252,6 +283,11 @@ class NPA_Rest {
 					'is_mock'         => $is_mock,
 				)
 			);
+			if ( $remember ) {
+				NPA_Conversation::append( $conversation_id, $message, $result->reply_text );
+			}
+
+			// Transcripts store what was actually said, never the composed prompt.
 			$this->store_turn( $agent_id, $result->conversation_id, $message, $result->reply_text );
 			$this->plugin->service_status->record_success( 'gateway' );
 			$this->plugin->logger->log(

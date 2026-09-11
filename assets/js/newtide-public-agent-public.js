@@ -169,7 +169,18 @@
 		} );
 		closeBtn.innerHTML = '&times;';
 		closeBtn.addEventListener( 'click', this.close.bind( this ) );
+
+		// Start over. The server holds the conversation, so this only clears the
+		// local view and flags the next message to drop the stored thread.
+		var newBtn = el( 'button', 'newtide-public-agent__newchat', {
+			type: 'button',
+			'aria-label': t( 'newChat', 'Start a new chat' )
+		} );
+		newBtn.textContent = t( 'newChat', 'New chat' );
+		newBtn.addEventListener( 'click', this.newConversation.bind( this ) );
+
 		header.appendChild( title );
+		header.appendChild( newBtn );
 		header.appendChild( closeBtn );
 
 		var log = el( 'div', 'newtide-public-agent__log', {
@@ -212,6 +223,31 @@
 		this.log = log;
 		this.input = input;
 		this.send = send;
+	};
+
+	/* Clear the visible conversation and mark the next message as a fresh start.
+	   The reset is not sent immediately — that would cost a request for a visitor
+	   who never types again. The flag rides along with the next message, and an
+	   abandoned thread expires on the server by itself. */
+	Widget.prototype.newConversation = function () {
+		this.resetPending = true;
+		this.conversationId = '';
+		this.greeted = false;
+
+		if ( this.log ) {
+			this.log.innerHTML = '';
+		}
+		this.promptsEl = null;
+
+		if ( this.greeting ) {
+			this.addMessage( 'agent', this.greeting, true );
+		}
+		this.renderPrompts();
+		this.greeted = true;
+
+		if ( this.input ) {
+			this.input.focus();
+		}
 	};
 
 	Widget.prototype.addMessage = function ( who, text, announce ) {
@@ -273,6 +309,7 @@
 		var body = {
 			message: text,
 			conversation_id: this.conversationId,
+			new_conversation: this.resetPending || false,
 			// Which agent this mount is for. The token is the server's own
 			// signature over the id; without both the proxy answers as the
 			// site default, so per-page and shortcode agents need them sent.
@@ -284,6 +321,8 @@
 				locale: cfg.locale || ''
 			}
 		};
+
+		this.resetPending = false;
 
 		fetch( cfg.restUrl, {
 			method: 'POST',

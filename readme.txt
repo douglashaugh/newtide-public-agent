@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.5.4
+Stable tag: 0.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,29 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.0 =
+**The agent can follow up.** Proxy mode now keeps short-lived conversation
+context on your server, so "and who runs it?" works.
+
+* The agent API is single-turn and ignores every threading field offered to it
+  (measured across six request shapes — see the Conversation probe), so
+  continuity is reconstructed here. The last **10 exchanges** are kept for **one
+  hour** and replayed as context, under a hard character cap.
+* History is held **server-side and never taken from the browser**. A
+  browser-supplied transcript would let a visitor invent turns the agent never
+  said; here the client can only add its own next message.
+* Conversation ids are minted with UUID entropy and an id this site did not issue
+  is never continued, so one visitor cannot reach another's conversation.
+* The widget gains a **New chat** button, which clears the view and discards the
+  stored conversation.
+* On by default, and switchable off on the Agent tab — a chat that cannot follow
+  up is the worse failure today. **Turn it off once the agent platform supports
+  conversations itself**; this is a workaround, and it means earlier messages are
+  replayed to the agent, so turns get longer and visitor text sits inside the
+  prompt.
+* Embed mode is unaffected: that widget is RisingTide's and has the same
+  single-turn limitation, which only they can fix.
 
 = 0.5.4 =
 * Fixes the Conversation probe and the resolved-agent display not appearing. The

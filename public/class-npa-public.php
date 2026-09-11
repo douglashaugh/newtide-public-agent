@@ -149,6 +149,7 @@ class NPA_Public {
 					'sent'      => __( 'You said', 'newtide-public-agent' ),
 					'received'  => __( 'Assistant replied', 'newtide-public-agent' ),
 					'poweredBy' => __( 'Powered by NewTide', 'newtide-public-agent' ),
+					'newChat'   => __( 'New chat', 'newtide-public-agent' ),
 				),
 			)
 		);

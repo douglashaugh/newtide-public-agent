@@ -387,3 +387,26 @@
 		animation: none;
 	}
 }
+
+/* Header "New chat" — a quiet secondary action; the close button stays the
+   prominent one. Inherits the header's colour so it works on any accent. */
+.newtide-public-agent__newchat {
+	margin-left: auto;
+	margin-right: .5rem;
+	padding: .15em .6em;
+	font: inherit;
+	font-size: .8125rem;
+	line-height: 1.6;
+	color: inherit;
+	background: rgba( 255, 255, 255, .18 );
+	border: 0;
+	border-radius: 999px;
+	cursor: pointer;
+	opacity: .9;
+}
+
+.newtide-public-agent__newchat:hover,
+.newtide-public-agent__newchat:focus-visible {
+	background: rgba( 255, 255, 255, .3 );
+	opacity: 1;
+}

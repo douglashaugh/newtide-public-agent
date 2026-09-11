@@ -175,6 +175,10 @@ class NPA_Settings {
 			// Privacy / limits.
 			'log_enabled'               => false,
 			'store_transcripts'         => false,
+			// Reconstructs multi-turn context because the agent API is single-turn.
+			// On by default: a chat that cannot follow up is the worse failure.
+			// Turn off once the platform supports conversation continuity.
+			'conversation_memory'       => true,
 			'transcript_retention_days' => 30,
 			'daily_message_cap'         => 0, // 0 = unlimited.
 		);
@@ -288,6 +292,7 @@ class NPA_Settings {
 		$clean['remember_state']    = $has( 'remember_state' ) ? ! empty( $input['remember_state'] ) : (bool) $existing['remember_state'];
 		$clean['log_enabled']       = $has( 'log_enabled' ) ? ! empty( $input['log_enabled'] ) : (bool) $existing['log_enabled'];
 		$clean['store_transcripts'] = $has( 'store_transcripts' ) ? ! empty( $input['store_transcripts'] ) : (bool) $existing['store_transcripts'];
+		$clean['conversation_memory'] = $has( 'conversation_memory' ) ? ! empty( $input['conversation_memory'] ) : (bool) $existing['conversation_memory'];
 
 		// Text / URL.
 		$clean['agent_id']          = $has( 'agent_id' ) ? sanitize_text_field( $input['agent_id'] ) : $existing['agent_id'];
