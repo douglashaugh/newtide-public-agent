@@ -101,6 +101,36 @@
 > **Rate limiting** — HTTP 429 with a `Retry-After` header in seconds. The embed UI
 > turns that into escalating copy (seconds / minutes / "daily limit").
 >
+> ### Conversation continuity: none, and not for want of asking
+>
+> Measured 2026-09-11 against the live UAT agent with the plugin's conversation
+> probe (Agent tab, Proxy mode). Each shape planted a random code in turn one and
+> asked for it back in turn two:
+>
+> | Request body | Retained? |
+> |---|---|
+> | `{message}` (what the embed client sends) | no |
+> | `{message, chatId}` | no |
+> | `{message, conversationId}` | no |
+> | `{message, sessionId}` | no |
+> | `{message, history:[…]}` | no |
+> | `{message, messages:[…]}` | no |
+>
+> Every reply was a cold start — *"Each conversation with me starts fresh — I have
+> no memory…"*. **`POST /public/chat/stream` is single-turn**, and the server
+> ignores every threading field offered to it.
+>
+> This is a platform limitation, not a plugin one. The embed client sends
+> `{message}` alone and never forwards the `chatId` that `agent-embed.js`
+> generates, so **RisingTide's own iframe widget behaves identically on every
+> public agent**. Anyone deploying one today has a chat that cannot follow up.
+>
+> **For the platform team:** can `/public/chat/stream` carry conversation
+> continuity — a server-side thread keyed by an id the caller supplies, or an
+> accepted history array? Until then any multi-turn experience has to be
+> reconstructed by each client, which duplicates the work and puts visitor text
+> into prompt-composition code that sits outside the platform's guardrails.
+
 > ### What this means for Proxy mode
 >
 > **It can work.** Point `NPA_Gateway_Client_Http` at the API host, send
