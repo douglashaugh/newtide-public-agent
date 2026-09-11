@@ -1760,6 +1760,22 @@ final class NPA_Plugin {
 					'pass'  => '' !== $sentinel && false === strpos( $html, $sentinel ),
 				);
 
+				/*
+				 * The widget opens and closes by toggling the `hidden` property,
+				 * and an author `display:` rule silently beats the browser's
+				 * `[hidden] { display: none }`. Without an explicit rule the
+				 * close button sets the attribute and nothing happens — which
+				 * shipped unnoticed from the first build, because the panel is
+				 * built and shown in the same call so only closing was affected.
+				 */
+				$css_path = NPA_PLUGIN_DIR . 'assets/css/newtide-public-agent-public.css';
+				$css      = is_readable( $css_path ) ? (string) file_get_contents( $css_path ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled asset, not a remote resource.
+
+				$checks[] = array(
+					'label' => __( 'The chat panel can actually be closed (the stylesheet honours “hidden”)', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $css, '.newtide-public-agent__panel[hidden]' ),
+				);
+
 				// The mount must carry a valid signature for its agent, or the
 				// proxy will fall back to the default and per-page agents break.
 				$checks[] = array(

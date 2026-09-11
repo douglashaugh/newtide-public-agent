@@ -47,6 +47,16 @@
 	outline-offset: 2px;
 }
 
+/* The panel is shown and hidden with the `hidden` property. An author rule wins
+   over the browser's `[hidden] { display: none }` regardless of specificity, so
+   the `display: flex` below would keep the panel visible after close() set the
+   attribute — the close button appeared to do nothing. This rule restores it.
+   Keep the two together: adding a display to .__panel without this reintroduces
+   the bug, and it fails silently. */
+.newtide-public-agent__panel[hidden] {
+	display: none;
+}
+
 .newtide-public-agent__panel {
 	position: absolute;
 	bottom: 3.5rem;

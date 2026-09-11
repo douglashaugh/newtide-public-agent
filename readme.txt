@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.0
+Stable tag: 0.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,16 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.1 =
+* Fixes the chat panel's close button doing nothing. The widget hides the panel
+  with the `hidden` property, but the stylesheet had no rule for it — and an
+  author `display:` rule beats the browser's own `[hidden] { display: none }`
+  whatever its specificity. The attribute was set and the panel stayed put. This
+  has been broken since the first build; it only ever affected closing, because
+  the panel is created and shown in the same step, so opening always looked fine.
+  Pressing Escape was affected too and now works.
+* Test: the stylesheet honours `hidden` on the chat panel.
 
 = 0.6.0 =
 **The agent can follow up.** Proxy mode now keeps short-lived conversation
