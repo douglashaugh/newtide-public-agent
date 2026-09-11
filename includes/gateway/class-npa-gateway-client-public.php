@@ -52,6 +52,14 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	private $origin;
 
 	/**
+	 * Value sent as the `Origin` header — the platform origin, mirroring the
+	 * iframe the browser would make this call from.
+	 *
+	 * @var string
+	 */
+	private $platform_origin;
+
+	/**
 	 * Request timeout, seconds.
 	 *
 	 * @var int
@@ -105,6 +113,45 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	}
 
 	/**
+	 * Reverse of api_base_from_platform(): the platform origin an API base came
+	 * from, used as the `Origin` header.
+	 *
+	 * Strips the `-api` suffix from the host's first label
+	 * (`uat-ai-api.newtide.ai` -> `https://uat-ai.newtide.ai`). When the host does
+	 * not follow that convention — a site pointed at some other base URL — falls
+	 * back to the API's own origin, which still satisfies "Origin is required"
+	 * without inventing a hostname.
+	 *
+	 * @param string $api_base API base URL.
+	 * @return string
+	 */
+	public static function platform_origin_from_api_base( $api_base ) {
+		$parts = wp_parse_url( (string) $api_base );
+		if ( empty( $parts['host'] ) ) {
+			return '';
+		}
+
+		$scheme = ! empty( $parts['scheme'] ) ? $parts['scheme'] : 'https';
+		$host   = $parts['host'];
+
+		$dot = strpos( $host, '.' );
+		if ( false !== $dot ) {
+			$first = substr( $host, 0, $dot );
+			if ( '-api' === substr( $first, -4 ) ) {
+				$host = substr( $first, 0, -4 ) . substr( $host, $dot );
+			}
+		}
+
+		/**
+		 * Filter the value sent as the Origin header.
+		 *
+		 * @param string $origin   Derived platform origin.
+		 * @param string $api_base The API base URL it came from.
+		 */
+		return apply_filters( 'npa_public_api_request_origin', $scheme . '://' . $host, $api_base );
+	}
+
+	/**
 	 * This site's origin, for the X-Embed-Origin header.
 	 *
 	 * The browser sends the page that framed the widget; a server-side caller
@@ -138,15 +185,17 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	/**
 	 * Constructor.
 	 *
-	 * @param string      $base_url API base URL.
-	 * @param string      $key      Publishable key.
-	 * @param string|null $origin   Origin to claim; defaults to this site's.
-	 * @param int|null    $timeout  Seconds; defaults to NPA_HTTP_TIMEOUT or 30.
+	 * @param string      $base_url        API base URL.
+	 * @param string      $key             Publishable key.
+	 * @param string|null $origin          Site origin for X-Embed-Origin; defaults to this site's.
+	 * @param int|null    $timeout         Seconds; defaults to NPA_HTTP_TIMEOUT or 30.
+	 * @param string|null $platform_origin Value for the Origin header; derived from $base_url by default.
 	 */
-	public function __construct( $base_url, $key, $origin = null, $timeout = null ) {
-		$this->base_url = untrailingslashit( (string) $base_url );
-		$this->key      = (string) $key;
-		$this->origin   = null !== $origin ? (string) $origin : self::site_origin();
+	public function __construct( $base_url, $key, $origin = null, $timeout = null, $platform_origin = null ) {
+		$this->base_url        = untrailingslashit( (string) $base_url );
+		$this->key             = (string) $key;
+		$this->origin          = null !== $origin ? (string) $origin : self::site_origin();
+		$this->platform_origin = null !== $platform_origin ? (string) $platform_origin : self::platform_origin_from_api_base( $this->base_url );
 		// A streamed reply can run past the 15s used for plain JSON calls.
 		$this->timeout = null !== $timeout ? (int) $timeout : ( defined( 'NPA_HTTP_TIMEOUT' ) ? (int) NPA_HTTP_TIMEOUT : 30 );
 	}
@@ -163,6 +212,23 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 			'X-Api-Key' => $this->key,
 			'Accept'    => 'text/event-stream, application/json',
 		);
+
+		/*
+		 * The API requires BOTH origin headers, and they carry different things.
+		 *
+		 * In the browser the call runs from the embed iframe, so `Origin` is set
+		 * automatically to the iframe's own origin — the platform host, the same
+		 * value for every customer. It therefore cannot be the allowed-origins
+		 * check; `X-Embed-Origin`, which the client sets to the parent page, is.
+		 * PHP sends no Origin at all, which the API rejects with "Origin header
+		 * is required" once the key has validated.
+		 *
+		 * So send what the browser would: the platform as Origin, this site as
+		 * X-Embed-Origin.
+		 */
+		if ( '' !== $this->platform_origin ) {
+			$headers['Origin'] = $this->platform_origin;
+		}
 
 		if ( '' !== $this->origin ) {
 			$headers['X-Embed-Origin'] = $this->origin;

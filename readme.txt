@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.5.0
+Stable tag: 0.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,14 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.5.1 =
+* Fixes Proxy mode failing with "Origin header is required". The API needs two
+  origin headers, not one: `X-Embed-Origin` carries your site (the allowed-origins
+  check), while `Origin` carries the platform — in a browser it is set
+  automatically to the embed iframe's own origin, and PHP sends none at all. The
+  plugin now sends both, exactly as the browser does.
+* Test: requests carry the API key and both origin headers.
 
 = 0.5.0 =
 **Proxy mode works.** It now relays through the public agent API — the same

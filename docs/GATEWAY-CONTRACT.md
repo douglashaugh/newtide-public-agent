@@ -66,7 +66,16 @@
 > **Auth** — `X-Api-Key: <pk_ key>`. Not `Authorization: Bearer`. The credential is
 > the *publishable* key; there is no separate server secret on this path.
 >
-> **Origin enforcement** — `X-Embed-Origin: <parent page origin>`. The iframe derives
+> **Origin headers — BOTH are required.** A call with a valid key but no `Origin`
+> is rejected with `Origin header is required.`, which reads like a credential
+> problem and is not. Key validation runs first: a bad key returns
+> `Invalid or revoked API key.` regardless of origin headers, so reaching the
+> origin error means the key is good.
+>
+> - `Origin:` — in the browser this is set automatically to the **iframe's own
+>   origin**, i.e. the platform host. It is the same value for every customer, so
+>   it cannot be the allowed-origins check. A server must send it explicitly.
+> - `X-Embed-Origin: <parent page origin>` — the per-key allowed-origins check. The iframe derives
 > it from `window.location.ancestorOrigins[0]`, falling back to the `document.referrer`
 > origin. **It is an ordinary request header the caller sets**, which is why a server
 > can call this API too: WordPress would send its own site origin.

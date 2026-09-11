@@ -1381,6 +1381,41 @@ final class NPA_Plugin {
 					'pass'  => 'lowercase key' === NPA_Gateway_Client_Public::collect_stream_text( $noisy ),
 				);
 
+				/*
+				 * Both origin headers must go out, carrying different things.
+				 * PHP sends no Origin of its own, and the API rejects the call
+				 * with "Origin header is required" once the key has validated —
+				 * a failure that looks like a bad key and is not.
+				 */
+				$seen_headers = array();
+				$sniff        = static function ( $pre, $args, $url ) use ( &$seen_headers ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+					$seen_headers = isset( $args['headers'] ) ? (array) $args['headers'] : array();
+					return array(
+						'headers'  => array(),
+						'body'     => 'data: {"Event":"TextDelta","Data":{"Text":"ok"}}' . "\n\n",
+						'response' => array(
+							'code'    => 200,
+							'message' => 'OK',
+						),
+					);
+				};
+
+				add_filter( 'pre_http_request', $sniff, 10, 3 );
+				$sniff_client = new NPA_Gateway_Client_Public( 'https://uat-ai-api.newtide.ai', 'pk_test', 'https://example.test' );
+				try {
+					$sniff_client->send_message( '', 'hello', '', array() );
+				} catch ( NPA_Gateway_Exception $e ) {
+					$seen_headers = array();
+				}
+				remove_filter( 'pre_http_request', $sniff, 10 );
+
+				$checks[] = array(
+					'label' => __( 'Requests carry the API key and both origin headers', 'newtide-public-agent' ),
+					'pass'  => isset( $seen_headers['X-Api-Key'], $seen_headers['Origin'], $seen_headers['X-Embed-Origin'] )
+						&& 'https://uat-ai.newtide.ai' === $seen_headers['Origin']
+						&& 'https://example.test' === $seen_headers['X-Embed-Origin'],
+				);
+
 				// A 429 must surface as rate-limited, not a generic failure, so
 				// the widget can say "busy" rather than "something went wrong".
 				$mode      = 429;
