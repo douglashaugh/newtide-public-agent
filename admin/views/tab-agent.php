@@ -135,6 +135,15 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	<?php $npa_admin->card_close(); ?>
 
 	<div data-npa-mode="proxy" <?php echo $npa_is_embed ? 'hidden' : ''; ?>>
+	<div class="notice notice-warning inline">
+		<p>
+			<strong><?php esc_html_e( 'Proxy mode needs a gateway that is not available yet.', 'newtide-public-agent' ); ?></strong>
+			<?php esc_html_e( 'It relays messages to a server-to-server agent API. The published public-agent path is an embedded page rather than such an API, so unless NewTide has given you a gateway URL and credential, there is nothing for this mode to talk to.', 'newtide-public-agent' ); ?>
+		</p>
+		<p>
+			<?php esc_html_e( 'Without one the plugin answers from its built-in mock. An administrator sees those canned replies when previewing; visitors are shown your error message instead, so nobody is served a fake agent. Use Embed mode for a live site.', 'newtide-public-agent' ); ?>
+		</p>
+	</div>
 	<?php $npa_admin->card_open( __( 'Gateway settings', 'newtide-public-agent' ), __( 'The server-side gateway path. Used only by Proxy mode.', 'newtide-public-agent' ) ); ?>
 	<table class="form-table" role="presentation">
 		<tr>

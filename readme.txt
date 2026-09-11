@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,17 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.4.1 =
+* The built-in mock can no longer answer a real visitor. Proxy mode falls back to
+  the mock when no gateway is configured, which is useful for previewing but meant
+  a live site could tell visitors "Mock agent reply. You said: ..." in what looks
+  like the company's own support chat. Administrators still see the mock when
+  previewing; everyone else gets your configured error message.
+* The Agent tab states plainly that Proxy mode requires a server-to-server agent
+  API, and that the published public-agent path is an embedded page rather than
+  such an API — so the mode cannot be made to work by configuration alone.
+* Test: a visitor is never served a canned reply from the built-in mock.
 
 = 0.4.0 =
 The admin now tells the truth about which connection mode a setting belongs to.

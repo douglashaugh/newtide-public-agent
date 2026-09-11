@@ -1212,6 +1212,32 @@ final class NPA_Plugin {
 					'pass'  => $after === $before + 1,
 				);
 
+				/*
+				 * The mock must never answer a real visitor. With no gateway
+				 * configured the client falls back to the mock, which would
+				 * otherwise tell a visitor "Mock agent reply. You said: …" in
+				 * what looks like the company's own support chat.
+				 */
+				$saved_user = get_current_user_id();
+				wp_set_current_user( 0 );
+
+				$anon = new WP_REST_Request( 'POST', '/npa/v1/message' );
+				$anon->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$anon->set_param( 'message', 'anonymous visitor probe' );
+				$anon_res  = $server->dispatch( $anon );
+				$anon_data = $anon_res->get_data();
+
+				wp_set_current_user( $saved_user );
+
+				$leaked_mock = is_array( $anon_data )
+					&& isset( $anon_data['reply'] )
+					&& false !== stripos( (string) $anon_data['reply'], 'mock' );
+
+				$checks[] = array(
+					'label' => __( 'A visitor is never served a canned reply from the built-in mock', 'newtide-public-agent' ),
+					'pass'  => ! $leaked_mock,
+				);
+
 				// Nonce is required (send a valid message but omit the nonce so
 				// required-param validation passes and permission is what fails).
 				$no_nonce_req = new WP_REST_Request( 'POST', '/npa/v1/message' );

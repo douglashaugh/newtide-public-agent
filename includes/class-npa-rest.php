@@ -206,6 +206,34 @@ class NPA_Rest {
 		// latency average (see NPA_Store::aggregates).
 		$is_mock = $client instanceof NPA_Gateway_Client_Mock;
 
+		/*
+		 * Never let the mock answer a real visitor.
+		 *
+		 * Proxy mode falls back to the mock whenever a gateway is not configured,
+		 * which is deliberate — it lets an admin preview the widget before the
+		 * gateway exists. On a live site it also meant a visitor could be told
+		 * "Mock agent reply. You said: …" by what looks like the company's
+		 * support agent. Previewing is an admin activity, so gate it on the
+		 * capability rather than on the environment: an admin still sees the
+		 * mock, everyone else gets the configured error message.
+		 */
+		if ( $is_mock && ! current_user_can( 'manage_options' ) ) {
+			$this->plugin->logger->log(
+				array(
+					'agent_id'   => $agent_id,
+					'status'     => 503,
+					'error_code' => 'not_configured',
+					'note'       => 'mock_withheld',
+				)
+			);
+
+			return $this->error_response(
+				'not_configured',
+				(string) $this->plugin->settings->get( 'error_message' ),
+				503
+			);
+		}
+
 		$start = microtime( true );
 
 		try {
