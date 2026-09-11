@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.3.5
+Stable tag: 0.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,29 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.4.0 =
+The admin now tells the truth about which connection mode a setting belongs to.
+Embed and Proxy share almost nothing, but every screen presented both at once.
+
+* **Test connection** tests the mode you are actually in. In Embed mode it checks
+  that a publishable key is set and that this server can fetch the widget loader
+  from your platform URL — and says plainly that your key is validated in the
+  visitor's browser, which no server-side check can reproduce. Previously it
+  health-checked the gateway, which Embed never uses; with no gateway configured
+  that meant it checked the built-in mock and reported "Connected", reading as
+  confirmation the widget was live when nothing had been verified.
+* In **Proxy** mode, a reply from the built-in mock now says so instead of
+  reporting a successful connection.
+* The **Agent** tab shows only the fields the selected mode uses. Publishable key
+  and Platform URL appear for Embed; the gateway card appears for Proxy. The
+  server renders the correct state, so it is right without JavaScript, and the
+  panels switch as you change the mode.
+* **Appearance** and **Behavior** carry a notice in Embed mode explaining that the
+  embedded widget is styled in RisingTide — and, on Behavior, that the audience
+  and page rules *do* still decide where it appears. This was the July review's
+  main support-confusion warning.
+* "Proxy-mode settings" is renamed "Gateway settings".
 
 = 0.3.5 =
 Important fix — the Tests tab could overwrite your live settings:

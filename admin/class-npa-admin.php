@@ -365,6 +365,39 @@ class NPA_Admin {
 	}
 
 	/**
+	 * A standing notice for tabs whose settings the active connection mode does
+	 * not read. Echoes nothing in Proxy mode.
+	 *
+	 * The July build review called this out as the most likely source of support
+	 * confusion: in Embed mode the widget is RisingTide's, so the Appearance and
+	 * Behavior tabs quietly stop mattering, and the only mention of that was a
+	 * line of body text on a different tab.
+	 *
+	 * @param string $scope 'appearance' or 'behavior'.
+	 * @return void
+	 */
+	public function mode_scope_notice( $scope ) {
+		if ( 'embed' !== $this->plugin->settings->get_mode() ) {
+			return;
+		}
+
+		$detail = ( 'behavior' === $scope )
+			? __( 'Timing, device and memory options below do not apply — the embedded widget manages its own. <strong>Who sees it</strong> still works: the audience and page rules decide whether the widget is put on a page at all.', 'newtide-public-agent' )
+			: __( 'These options do not affect the embedded widget. Its colours, shape and wording are configured in RisingTide, on the agent itself.', 'newtide-public-agent' );
+
+		printf(
+			'<div class="notice notice-info inline"><p><strong>%s</strong> %s %s</p></div>',
+			esc_html__( 'Embed mode.', 'newtide-public-agent' ),
+			wp_kses_post( $detail ),
+			sprintf(
+				'<a href="%s">%s</a>',
+				esc_url( $this->tab_url( 'agent' ) ),
+				esc_html__( 'Switch to Proxy mode', 'newtide-public-agent' )
+			)
+		);
+	}
+
+	/**
 	 * Delete stored transcripts — either everything, or only what has aged past
 	 * the retention window. Destructive and irreversible, so it is a POST behind
 	 * a capability check and a nonce, never a link.
@@ -808,10 +841,97 @@ class NPA_Admin {
 	 *
 	 * @return void
 	 */
+	/**
+	 * What can actually be checked from the server in Embed mode: that a
+	 * publishable key is set, and that this site can fetch the loader script
+	 * from the configured platform.
+	 *
+	 * Deliberately does NOT claim the widget is working. The key is validated in
+	 * the visitor's browser against the request Origin, which a server-side call
+	 * cannot reproduce — so a pass here means "the plumbing is right", and the
+	 * message says so rather than implying a live agent.
+	 *
+	 * @return array { ok:bool, message:string, latency:int }
+	 */
+	private function check_embed_loader() {
+		$s        = $this->plugin->settings;
+		$platform = $s->get_platform_url();
+
+		if ( '' === trim( (string) $s->get_public_key() ) ) {
+			return array(
+				'ok'      => false,
+				'message' => __( 'No publishable key set. Paste the pk_ key from RisingTide above.', 'newtide-public-agent' ),
+				'latency' => 0,
+			);
+		}
+
+		if ( '' === trim( (string) $platform ) ) {
+			return array(
+				'ok'      => false,
+				'message' => __( 'No platform URL set.', 'newtide-public-agent' ),
+				'latency' => 0,
+			);
+		}
+
+		$url   = trailingslashit( $platform ) . 'agent-embed.js';
+		$start = microtime( true );
+
+		$response = wp_remote_get(
+			$url,
+			array(
+				'timeout' => defined( 'NPA_HTTP_TIMEOUT' ) ? (int) NPA_HTTP_TIMEOUT : 15,
+			)
+		);
+
+		$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
+
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'ok'      => false,
+				/* translators: %s: the loader URL that could not be reached. */
+				'message' => sprintf( __( 'Could not reach %s from this server. Check the platform URL.', 'newtide-public-agent' ), $url ),
+				'latency' => $latency,
+			);
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+
+		if ( $code < 200 || $code >= 300 ) {
+			return array(
+				'ok'      => false,
+				/* translators: 1: HTTP status code, 2: the loader URL. */
+				'message' => sprintf( __( 'The platform returned HTTP %1$d for %2$s. Check the platform URL — UAT and production are different hosts.', 'newtide-public-agent' ), $code, $url ),
+				'latency' => $latency,
+			);
+		}
+
+		return array(
+			'ok'      => true,
+			/* translators: %s: the platform host serving the widget loader. */
+			'message' => sprintf(
+				__( 'Widget loader reachable at %s, and a publishable key is set. Your key itself is checked in the visitor’s browser against the allowed-origins list, which cannot be verified from here — open a page on the live site to confirm the agent answers.', 'newtide-public-agent' ),
+				(string) wp_parse_url( $url, PHP_URL_HOST )
+			),
+			'latency' => $latency,
+		);
+	}
+
 	public function ajax_test_connection() {
 		check_ajax_referer( self::NONCE, 'nonce' );
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'newtide-public-agent' ) ), 403 );
+		}
+
+		/*
+		 * Embed mode does not use the gateway at all — the browser talks to the
+		 * platform directly. Health-checking the gateway here reported on a
+		 * subsystem the site is not using, and on an Embed site with no gateway
+		 * configured that meant checking the built-in mock and calling it
+		 * "Connected", which reads as confirmation that the widget is live.
+		 * Test what the active mode actually depends on instead.
+		 */
+		if ( 'embed' === $this->plugin->settings->get_mode() ) {
+			wp_send_json_success( $this->check_embed_loader() );
 		}
 
 		$health = $this->plugin->gateway_client()->health_check();
@@ -831,10 +951,25 @@ class NPA_Admin {
 			)
 		);
 
+		/*
+		 * Say so when the reply came from the mock. Without a gateway URL,
+		 * credential and agent, gateway_client() falls back to the in-process
+		 * mock, which answers "Connected" — indistinguishable from a live
+		 * gateway unless the message admits which one replied.
+		 */
+		$is_mock = $this->plugin->gateway_client() instanceof NPA_Gateway_Client_Mock;
+		$message = $is_mock
+			? sprintf(
+				/* translators: %s: the health message from the mock client. */
+				__( 'Built-in mock replied: %s — no gateway is configured, so this did not reach a real service.', 'newtide-public-agent' ),
+				$health->message
+			)
+			: $health->message;
+
 		wp_send_json_success(
 			array(
-				'ok'      => (bool) $health->ok,
-				'message' => $health->message,
+				'ok'      => (bool) $health->ok && ! $is_mock,
+				'message' => $message,
 				'latency' => (int) $health->latency_ms,
 			)
 		);

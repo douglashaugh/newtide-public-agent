@@ -567,3 +567,29 @@
 		} );
 	} );
 }() );
+
+/* Agent tab: show only the fields the selected connection mode actually uses.
+   Embed and Proxy share almost nothing — Embed never touches the gateway, and
+   Proxy never touches the publishable key — so showing both at once invited
+   filling in fields that could not have any effect. The server renders the
+   correct initial state; this keeps it correct as the mode changes. */
+( function () {
+	'use strict';
+
+	var select = document.getElementById( 'npa-mode' );
+	if ( ! select ) {
+		return;
+	}
+
+	var scoped = document.querySelectorAll( '[data-npa-mode]' );
+
+	function apply() {
+		var mode = select.value;
+		Array.prototype.forEach.call( scoped, function ( el ) {
+			el.hidden = el.getAttribute( 'data-npa-mode' ) !== mode;
+		} );
+	}
+
+	select.addEventListener( 'change', apply );
+	apply();
+}() );

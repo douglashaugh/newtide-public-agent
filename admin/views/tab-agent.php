@@ -22,6 +22,8 @@ $npa_pages        = get_pages(
 	)
 );
 $npa_page_scope   = (string) $settings->get( 'page_scope', 'all' );
+$npa_mode         = $settings->get_mode();
+$npa_is_embed     = ( 'embed' === $npa_mode );
 $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', array() ) );
 ?>
 <?php $npa_admin->tab_intro( 'dashicons-admin-links', __( 'Agent connection', 'newtide-public-agent' ), __( 'Link this site to your published NewTide agent and choose where it appears.', 'newtide-public-agent' ) ); ?>
@@ -56,7 +58,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			</td>
 		</tr>
 
-		<tr>
+		<tr data-npa-mode="embed" <?php echo $npa_is_embed ? '' : 'hidden'; ?>>
 			<th scope="row"><label for="npa-public-key"><?php esc_html_e( 'Publishable key', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<?php if ( defined( 'NPA_PUBLIC_KEY' ) ) : ?>
@@ -69,7 +71,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			</td>
 		</tr>
 
-		<tr>
+		<tr data-npa-mode="embed" <?php echo $npa_is_embed ? '' : 'hidden'; ?>>
 			<th scope="row"><label for="npa-platform-url"><?php esc_html_e( 'Platform URL (advanced)', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<?php if ( defined( 'NPA_PLATFORM_URL' ) ) : ?>
@@ -132,7 +134,8 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	</table>
 	<?php $npa_admin->card_close(); ?>
 
-	<?php $npa_admin->card_open( __( 'Proxy-mode settings', 'newtide-public-agent' ), __( 'Used only when Connection mode is Proxy — the server-side gateway path.', 'newtide-public-agent' ) ); ?>
+	<div data-npa-mode="proxy" <?php echo $npa_is_embed ? 'hidden' : ''; ?>>
+	<?php $npa_admin->card_open( __( 'Gateway settings', 'newtide-public-agent' ), __( 'The server-side gateway path. Used only by Proxy mode.', 'newtide-public-agent' ) ); ?>
 	<table class="form-table" role="presentation">
 		<tr>
 			<th scope="row"><label for="npa-base-url"><?php esc_html_e( 'Gateway base URL', 'newtide-public-agent' ); ?></label></th>
@@ -225,6 +228,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 		</tr>
 	</table>
 	<?php $npa_admin->card_close(); ?>
+	</div>
 	</div>
 
 	<p class="npa-actions">

@@ -55,6 +55,8 @@ if ( 'auto' !== $cur_theme ) {
 ?>
 <?php $npa_admin->tab_intro( 'dashicons-art', __( 'Appearance', 'newtide-public-agent' ), __( 'Shape the launcher and chat panel so they feel at home on your site — watch every change in the live preview.', 'newtide-public-agent' ) ); ?>
 
+<?php $npa_admin->mode_scope_notice( 'appearance' ); ?>
+
 <form method="post" action="options.php" class="npa-form npa-appearance-form">
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
 	<?php

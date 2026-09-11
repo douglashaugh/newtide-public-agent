@@ -11,6 +11,8 @@
 defined( 'ABSPATH' ) || exit;
 ?>
 <?php $npa_admin->tab_intro( 'dashicons-controls-repeat', __( 'Behavior', 'newtide-public-agent' ), __( 'Decide when the chat opens itself and who gets to see it.', 'newtide-public-agent' ) ); ?>
+
+<?php $npa_admin->mode_scope_notice( 'behavior' ); ?>
 <form method="post" action="options.php" class="npa-form">
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
 	<?php $npa_admin->present_fields( array( 'auto_open_delay', 'hide_on_mobile', 'remember_state', 'audience', 'exclude_ids' ) ); ?>
