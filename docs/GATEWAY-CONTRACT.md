@@ -135,6 +135,46 @@
 > **Rate limiting** — HTTP 429 with a `Retry-After` header in seconds. The embed UI
 > turns that into escalating copy (seconds / minutes / "daily limit").
 >
+> ### Newly created agents return "Internal error." (open, 2026-09-13)
+>
+> Only a pre-existing agent answers. Every agent created during this
+> investigation fails on first message, in both environments.
+>
+> | Agent | Created | Env | Result |
+> |---|---|---|---|
+> | TEI Info Agent | before 2026-09 | UAT | answers |
+> | Thinking On Energy Public Agent | 2026-09 | UAT | `Internal error.` |
+> | TOE agent | 2026-09 | PROD | `Internal error.` |
+>
+> **Ruled out, each by measurement rather than reasoning:**
+>
+> - *Environment* — UAT and PROD are byte-identical (see above).
+> - *Key, origin, publishing* — `/public/agent/info` returns `success: true` for
+>   the failing agents, so the key resolves and the agent is registered public.
+> - *The plugin* — the same key fails through RisingTide's own `agent-embed.js`
+>   iframe. Their client, their key, their agent.
+> - *Agent metadata* — the public payloads are structurally identical between a
+>   working and a failing agent. A populated `nickName` was the only difference;
+>   clearing it changed nothing.
+>
+> **Leading hypothesis.** New agent platform tooling went to production the week
+> of 2026-09-08. TEI predates it; every failing agent was created after. If agents
+> built with the new tooling cannot be executed by the legacy public-agent runtime
+> this API serves, the observations follow exactly: registration and metadata
+> succeed, execution fails. That would make this a migration boundary rather than
+> a bug in any one agent — and the plugin's target, not its behaviour, is what
+> needs to change.
+>
+> **Not answerable from WordPress.** The public API exposes five display fields and
+> no execution detail. The only actionable signal in the whole investigation was an
+> error string inside a 200 response. Worth raising on its own: an integrator has
+> no supported way to see why an agent is failing.
+>
+> **Next tests, all platform-side:** the Playground on a failing agent (runs as a
+> super admin; the key runs as its bound non-admin user — splits permissions from
+> configuration); a key on TEI bound to the failing key's user; and a bare agent
+> with no knowledge or tools, to see whether *any* newly created agent works.
+
 > ### Conversation continuity: none, and not for want of asking
 >
 > Measured 2026-09-11 against the live UAT agent with the plugin's conversation
