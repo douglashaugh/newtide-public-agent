@@ -661,6 +661,41 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	}
 
 	/**
+	 * The full, undigested `/public/agent/info` envelope.
+	 *
+	 * For the admin diagnostic. When one agent answers and another returns
+	 * "Internal error." with the same key handling, the difference is in the
+	 * agent's own configuration — and this endpoint is the only view of it the
+	 * plugin can reach. Comparing a working agent against a failing one is
+	 * usually faster than reasoning about what might differ.
+	 *
+	 * @return array { ok:bool, code:int, payload:array|null, raw:string, note:string }
+	 */
+	public function agent_info_raw() {
+		$attempt = $this->dispatch( '/public/agent/info' );
+
+		if ( null !== $attempt['error'] ) {
+			return array(
+				'ok'      => false,
+				'code'    => 0,
+				'payload' => null,
+				'raw'     => '',
+				'note'    => $attempt['api_message'],
+			);
+		}
+
+		$decoded = json_decode( $attempt['body'], true );
+
+		return array(
+			'ok'      => ( $attempt['code'] >= 200 && $attempt['code'] < 300 ),
+			'code'    => $attempt['code'],
+			'payload' => is_array( $decoded ) ? $decoded : null,
+			'raw'     => $attempt['body'],
+			'note'    => $attempt['api_message'],
+		);
+	}
+
+	/**
 	 * GET /public/agent/info, decoded. Null on any failure — callers decide
 	 * what an unknown agent means.
 	 *

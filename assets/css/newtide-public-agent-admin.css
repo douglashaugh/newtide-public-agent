@@ -1337,3 +1337,20 @@ body.toplevel_page_newtide-public-agent .npa-wrap {
 	min-width: 2rem;
 	text-align: right;
 }
+
+/* Diagnostic output: raw API payloads, readable and scrollable. The existing
+   .npa-guide .npa-code rule is scoped to the Publishing tab, so a standalone
+   rule is needed here. */
+.npa-form .npa-code,
+pre.npa-code {
+	max-height: 24rem;
+	overflow: auto;
+	padding: .75rem;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	font-size: 12px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	word-break: break-word;
+}

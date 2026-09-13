@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.4
+Stable tag: 0.6.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,13 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.5 =
+* Adds **Show agent details** to the Agent tab (Proxy mode, diagnostic): the full
+  response the API gives about the agent your key resolves to. When one agent
+  answers and another returns an error under identical settings, comparing the two
+  payloads is usually faster than guessing which of published state, permissions
+  or tooling differs.
 
 = 0.6.4 =
 * The agent API reports agent-side failures *inside* a successful response — an

@@ -363,6 +363,16 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			<span id="npa-probe-status" class="npa-test-result" role="status" aria-live="polite"></span>
 		</p>
 		<div id="npa-probe-results"></div>
+
+		<h4><?php esc_html_e( 'Agent details', 'newtide-public-agent' ); ?></h4>
+		<p class="description">
+			<?php esc_html_e( 'Everything the API will tell this site about the agent your key resolves to. When one agent answers and another does not, compare the two — the difference is usually visible here.', 'newtide-public-agent' ); ?>
+		</p>
+		<p class="npa-actions">
+			<button type="button" class="button" id="npa-agent-info"><?php esc_html_e( 'Show agent details', 'newtide-public-agent' ); ?></button>
+			<span id="npa-agent-info-status" class="npa-test-result" role="status" aria-live="polite"></span>
+		</p>
+		<pre id="npa-agent-info-out" class="npa-code" hidden></pre>
 		<?php $npa_admin->card_close(); ?>
 	<?php endif; ?>
 

@@ -64,6 +64,7 @@ class NPA_Admin {
 		add_action( 'wp_ajax_npa_test_connection', array( $this, 'ajax_test_connection' ) );
 		add_action( 'wp_ajax_npa_run_tests', array( $this, 'ajax_run_tests' ) );
 		add_action( 'wp_ajax_npa_probe_conversation', array( $this, 'ajax_probe_conversation' ) );
+		add_action( 'wp_ajax_npa_agent_info', array( $this, 'ajax_agent_info' ) );
 		add_action( 'admin_post_npa_export', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_npa_import', array( $this, 'handle_import' ) );
 		add_action( 'admin_post_npa_purge_transcripts', array( $this, 'handle_purge_transcripts' ) );
@@ -1101,6 +1102,50 @@ class NPA_Admin {
 					$token,
 					wp_trim_words( $turn2['text'], 24, '…' )
 				),
+			)
+		);
+	}
+
+	/**
+	 * Return what the API says about the agent this key resolves to.
+	 *
+	 * Diagnostic. When one agent answers and another returns "Internal error."
+	 * under identical key handling, the difference is in the agent, and this is
+	 * the only view of it reachable from WordPress. Comparing a working agent's
+	 * payload against a failing one's is faster than guessing which of published
+	 * state, permissions or tooling differs.
+	 *
+	 * @return void
+	 */
+	public function ajax_agent_info() {
+		check_ajax_referer( self::NONCE, 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'newtide-public-agent' ) ), 403 );
+		}
+
+		$s = $this->plugin->settings;
+		if ( ! $s->public_api_available() ) {
+			wp_send_json_error( array( 'message' => __( 'Needs a publishable key and platform URL.', 'newtide-public-agent' ) ), 400 );
+		}
+
+		$client = new NPA_Gateway_Client_Public( $s->get_public_api_base_url(), $s->get_public_key() );
+		$info   = $client->agent_info_raw();
+
+		if ( ! $info['ok'] ) {
+			wp_send_json_error(
+				array(
+					'message' => '' !== $info['note'] ? $info['note'] : sprintf( 'HTTP %d', $info['code'] ),
+				),
+				400
+			);
+		}
+
+		wp_send_json_success(
+			array(
+				'host' => (string) wp_parse_url( $s->get_public_api_base_url(), PHP_URL_HOST ),
+				'json' => null !== $info['payload']
+					? wp_json_encode( $info['payload'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )
+					: $info['raw'],
 			)
 		);
 	}

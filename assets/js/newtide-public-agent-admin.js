@@ -706,3 +706,62 @@
 		}
 	} );
 }() );
+
+/* Agent tab: dump what the API says about the agent this key resolves to.
+   Used to compare a working agent against a failing one. */
+( function () {
+	'use strict';
+
+	var cfg = window.NPA_ADMIN || {};
+
+	document.addEventListener( 'click', function ( e ) {
+		if ( ! e.target || e.target.id !== 'npa-agent-info' ) {
+			return;
+		}
+
+		var btn    = e.target;
+		var status = document.getElementById( 'npa-agent-info-status' );
+		var out    = document.getElementById( 'npa-agent-info-out' );
+
+		btn.disabled = true;
+		if ( status ) {
+			status.className = 'npa-test-result';
+			status.textContent = cfg.testingText || 'Loading…';
+		}
+
+		var body = new URLSearchParams();
+		body.set( 'action', 'npa_agent_info' );
+		body.set( 'nonce', cfg.nonce );
+
+		fetch( cfg.ajaxUrl, {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			body: body.toString()
+		} ).then( function ( r ) {
+			return r.json();
+		} ).then( function ( res ) {
+			btn.disabled = false;
+			var d = ( res && res.data ) || {};
+			if ( res && res.success ) {
+				if ( status ) {
+					status.className = 'npa-test-result is-ok';
+					status.textContent = d.host || '';
+				}
+				if ( out ) {
+					out.hidden = false;
+					out.textContent = d.json || '';
+				}
+			} else if ( status ) {
+				status.className = 'npa-test-result is-error';
+				status.textContent = d.message || cfg.errorText;
+			}
+		} ).catch( function () {
+			btn.disabled = false;
+			if ( status ) {
+				status.className = 'npa-test-result is-error';
+				status.textContent = cfg.errorText || 'Request failed.';
+			}
+		} );
+	} );
+}() );
