@@ -250,10 +250,19 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 						<?php if ( '' !== $npa_live->id ) : ?>
 							<p class="description"><code><?php echo esc_html( $npa_live->id ); ?></code></p>
 						<?php endif; ?>
-						<input type="hidden" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[agent_id]" value="<?php echo esc_attr( $npa_live->id ); ?>" />
+						<?php
+						// Only carry an id forward when the API actually supplied one;
+						// otherwise keep what is stored rather than overwriting a real
+						// value with a placeholder and breaking usage attribution.
+						$npa_carry = ( '' !== $npa_live->id ) ? $npa_live->id : $npa_current;
+						?>
+						<input type="hidden" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[agent_id]" value="<?php echo esc_attr( $npa_carry ); ?>" />
 						<p class="description">
 							<?php esc_html_e( 'Resolved from your publishable key. To use a different agent, create a key on that agent in RisingTide — there is nothing to choose here.', 'newtide-public-agent' ); ?>
-							<?php if ( '' !== $npa_current && $npa_live->id !== $npa_current ) : ?>
+							<?php if ( '' === $npa_live->id ) : ?>
+								<br /><?php esc_html_e( 'This agent’s details do not include an ID, so the stored value is left as it is — it only labels rows in Service Status.', 'newtide-public-agent' ); ?>
+							<?php endif; ?>
+							<?php if ( '' !== $npa_live->id && '' !== $npa_current && $npa_live->id !== $npa_current ) : ?>
 								<br /><strong><?php esc_html_e( 'Saving this tab will replace the stored agent ID with the one above.', 'newtide-public-agent' ); ?></strong>
 								<?php printf( /* translators: %s: the stale agent id currently stored. */ esc_html__( 'It currently reads %s, which is not the agent answering.', 'newtide-public-agent' ), '<code>' . esc_html( $npa_current ) . '</code>' ); ?>
 							<?php endif; ?>

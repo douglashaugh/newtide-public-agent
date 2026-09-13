@@ -651,9 +651,16 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 			return array();
 		}
 
+		/*
+		 * The id may genuinely be absent: /public/agent/info returns display
+		 * metadata only — name, nickname, description, sample prompts, picture —
+		 * and carries no identifier at all for some agents. Return an empty id
+		 * rather than inventing one, so callers can tell "no id offered" from a
+		 * real value and leave whatever they already store alone.
+		 */
 		return array(
 			new NPA_Gateway_Agent(
-				'' !== $id ? $id : 'public-agent',
+				$id,
 				'' !== $name ? $name : __( 'Public agent', 'newtide-public-agent' ),
 				isset( $info['description'] ) ? (string) $info['description'] : ''
 			),

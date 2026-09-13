@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.5
+Stable tag: 0.6.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,13 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.6 =
+* The Agent tab no longer overwrites your stored agent ID with a placeholder.
+  Some agents return no identifier at all from the API — it supplies display
+  metadata only — and the plugin was substituting a stand-in, which made every
+  row in Service Status attribute to it. The stored value is now left alone when
+  no real ID is offered, and the panel says so.
 
 = 0.6.5 =
 * Adds **Show agent details** to the Agent tab (Proxy mode, diagnostic): the full
