@@ -103,6 +103,13 @@
 >                                  -> text/event-stream
 > ```
 >
+> **UAT and PROD share one contract** (verified 2026-09-13). `agent-embed.js` is
+> byte-identical between hosts, and the two `PublicChatEmbed` chunks differ by
+> four bytes — the length of the hostname string. Same endpoints, same
+> `{message}` body, same headers. So an agent that works in UAT and fails in PROD
+> is an agent or permissions difference, never a protocol one; do not go looking
+> for a second contract.
+>
 > **Errors arrive inside a 200.** An agent-side failure is reported as a frame in
 > the stream, not as an HTTP status:
 >
