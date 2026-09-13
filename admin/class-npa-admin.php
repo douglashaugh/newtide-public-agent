@@ -1140,9 +1140,22 @@ class NPA_Admin {
 			);
 		}
 
+		/*
+		 * Name the key that produced this. The output is meant to be compared
+		 * between agents, and two runs are indistinguishable without it — a
+		 * comparison was already drawn between two payloads that turned out to be
+		 * the same agent twice, because the key had not actually been swapped.
+		 * A prefix is enough to tell keys apart, and the key is publishable
+		 * anyway.
+		 */
+		$key    = (string) $s->get_public_key();
+		$masked = strlen( $key ) > 10 ? substr( $key, 0, 10 ) . '…' : $key;
+
 		wp_send_json_success(
 			array(
 				'host' => (string) wp_parse_url( $s->get_public_api_base_url(), PHP_URL_HOST ),
+				'key'  => $masked,
+				'name' => isset( $info['payload']['data']['agentName'] ) ? (string) $info['payload']['data']['agentName'] : '',
 				'json' => null !== $info['payload']
 					? wp_json_encode( $info['payload'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )
 					: $info['raw'],

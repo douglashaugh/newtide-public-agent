@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.6
+Stable tag: 0.6.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,12 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.7 =
+* Show agent details now names the agent and the key that produced the output.
+  The results are meant to be compared between agents, and two runs were
+  otherwise indistinguishable — easy to compare the same agent twice without
+  noticing the key had not been swapped.
 
 = 0.6.6 =
 * The Agent tab no longer overwrites your stored agent ID with a placeholder.

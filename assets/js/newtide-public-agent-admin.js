@@ -745,8 +745,11 @@
 			var d = ( res && res.data ) || {};
 			if ( res && res.success ) {
 				if ( status ) {
+					// Name the agent and the key, so two runs can be told apart.
 					status.className = 'npa-test-result is-ok';
-					status.textContent = d.host || '';
+					status.textContent = [ d.name, d.key, d.host ]
+						.filter( function ( v ) { return v; } )
+						.join( '  ·  ' );
 				}
 				if ( out ) {
 					out.hidden = false;
