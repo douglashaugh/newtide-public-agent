@@ -428,14 +428,12 @@ class NPA_Settings {
 				continue;
 			}
 
-			$mode = ( isset( $row['mode'] ) && in_array( $row['mode'], self::MODES, true ) ) ? $row['mode'] : 'proxy';
 
 			$page_ids = ( isset( $row['page_ids'] ) && is_array( $row['page_ids'] ) )
 				? array_values( array_unique( array_filter( array_map( 'absint', $row['page_ids'] ) ) ) )
 				: array();
 
 			$name       = isset( $row['name'] ) ? sanitize_text_field( $row['name'] ) : '';
-			$agent_id   = isset( $row['agent_id'] ) ? sanitize_text_field( $row['agent_id'] ) : '';
 			$public_key = isset( $row['public_key'] ) ? sanitize_text_field( $row['public_key'] ) : '';
 			$greeting   = isset( $row['greeting'] ) ? sanitize_text_field( $row['greeting'] ) : '';
 			$label      = isset( $row['label'] ) ? sanitize_text_field( $row['label'] ) : '';
@@ -455,16 +453,13 @@ class NPA_Settings {
 
 			$icon_builtin = ( isset( $row['icon_builtin'] ) && NPA_Icons::is_valid( $row['icon_builtin'] ) ) ? $row['icon_builtin'] : 'chat';
 
-			// Drop rows with no name, no target, and no pages — an empty add.
-			$has_target = ( 'embed' === $mode ) ? ( '' !== $public_key ) : ( '' !== $agent_id );
-			if ( '' === $name && ! $has_target && empty( $page_ids ) ) {
+			// Drop rows with no name, no key and no pages — an empty add.
+			if ( '' === $name && '' === $public_key && empty( $page_ids ) ) {
 				continue;
 			}
 
 			$out[] = array(
 				'name'         => $name,
-				'mode'         => $mode,
-				'agent_id'     => $agent_id,
 				'public_key'   => $public_key,
 				'page_ids'     => $page_ids,
 				'accent'       => $accent,
@@ -489,6 +484,63 @@ class NPA_Settings {
 	 *
 	 * @return array<int,array>
 	 */
+	/**
+	 * Find a configured agent by the fingerprint of its publishable key.
+	 *
+	 * The widget has to tell the proxy which agent it is, and the proxy has to
+	 * resolve that to a key without the browser ever choosing one. A fingerprint
+	 * is a one-way reference: it names a row, and only a row this site has stored
+	 * can be named. Returns the global agent for the site's own key.
+	 *
+	 * @param string $fingerprint Value from key_fingerprint().
+	 * @return array|null { key:string, label:string } or null when unknown.
+	 */
+	public function agent_by_fingerprint( $fingerprint ) {
+		$fingerprint = (string) $fingerprint;
+
+		if ( '' === $fingerprint ) {
+			return null;
+		}
+
+		$global = (string) $this->get_public_key();
+
+		if ( '' !== $global && self::key_fingerprint( $global ) === $fingerprint ) {
+			return array(
+				'key'   => $global,
+				'label' => (string) $this->get_agent_id(),
+			);
+		}
+
+		foreach ( $this->get_agents() as $agent ) {
+			$key = isset( $agent['public_key'] ) ? trim( (string) $agent['public_key'] ) : '';
+
+			if ( '' !== $key && self::key_fingerprint( $key ) === $fingerprint ) {
+				return array(
+					'key'   => $key,
+					'label' => '' !== $agent['name'] ? $agent['name'] : $fingerprint,
+				);
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * A short, stable reference to a publishable key.
+	 *
+	 * Used in page markup instead of the key itself. The key is publishable, so
+	 * this is not secrecy — it is so the browser names a configured agent rather
+	 * than supplying credentials of its own choosing.
+	 *
+	 * @param string $key Publishable key.
+	 * @return string
+	 */
+	public static function key_fingerprint( $key ) {
+		$key = trim( (string) $key );
+
+		return '' === $key ? '' : substr( md5( $key ), 0, 16 );
+	}
+
 	public function get_agents() {
 		$rows = $this->get( 'agents', array() );
 		return is_array( $rows ) ? self::sanitize_agents( $rows ) : array();

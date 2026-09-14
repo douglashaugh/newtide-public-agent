@@ -32,8 +32,6 @@ $render_row = function ( $i, array $row ) use ( $option, $all_pages, $builtin_ch
 		$row,
 		array(
 			'name'         => '',
-			'mode'         => 'proxy',
-			'agent_id'     => '',
 			'public_key'   => '',
 			'page_ids'     => array(),
 			'accent'       => '',
@@ -63,21 +61,9 @@ $render_row = function ( $i, array $row ) use ( $option, $all_pages, $builtin_ch
 			</p>
 
 			<p class="npa-field">
-				<label><?php esc_html_e( 'Connection mode', 'newtide-public-agent' ); ?></label>
-				<select name="<?php echo esc_attr( $base ); ?>[mode]" data-agent-mode-select>
-					<option value="proxy" <?php selected( $row['mode'], 'proxy' ); ?>><?php esc_html_e( 'Proxy (plugin widget)', 'newtide-public-agent' ); ?></option>
-					<option value="embed" <?php selected( $row['mode'], 'embed' ); ?>><?php esc_html_e( 'Embed (publishable key)', 'newtide-public-agent' ); ?></option>
-				</select>
-			</p>
-
-			<p class="npa-field" data-agent-mode="proxy" <?php echo 'embed' === $row['mode'] ? 'hidden' : ''; ?>>
-				<label><?php esc_html_e( 'Agent ID', 'newtide-public-agent' ); ?></label>
-				<input type="text" class="regular-text" name="<?php echo esc_attr( $base ); ?>[agent_id]" value="<?php echo esc_attr( $row['agent_id'] ); ?>" placeholder="<?php esc_attr_e( 'Published agent ID', 'newtide-public-agent' ); ?>" />
-			</p>
-
-			<p class="npa-field" data-agent-mode="embed" <?php echo 'embed' === $row['mode'] ? '' : 'hidden'; ?>>
 				<label><?php esc_html_e( 'Publishable key', 'newtide-public-agent' ); ?></label>
 				<input type="text" class="regular-text" name="<?php echo esc_attr( $base ); ?>[public_key]" value="<?php echo esc_attr( $row['public_key'] ); ?>" placeholder="pk_…" />
+				<span class="description"><?php esc_html_e( 'This agent’s own key, created on that agent in RisingTide. The key is what selects the agent, so each one needs its own — and its allowed origins must include this site.', 'newtide-public-agent' ); ?></span>
 			</p>
 
 			<p class="npa-field npa-field--wide">
@@ -111,7 +97,7 @@ $render_row = function ( $i, array $row ) use ( $option, $all_pages, $builtin_ch
 				<input type="text" class="regular-text" name="<?php echo esc_attr( $base ); ?>[greeting]" value="<?php echo esc_attr( $row['greeting'] ); ?>" placeholder="<?php esc_attr_e( 'Inherit', 'newtide-public-agent' ); ?>" />
 			</p>
 
-			<div class="npa-field npa-field--wide npa-agent-icon" data-agent-mode="proxy" <?php echo 'embed' === $row['mode'] ? 'hidden' : ''; ?>>
+			<div class="npa-field npa-field--wide npa-agent-icon">
 				<label><?php esc_html_e( 'Launcher icon', 'newtide-public-agent' ); ?></label>
 				<div class="npa-agent-icon__controls">
 					<select class="npa-agent-icon-type" name="<?php echo esc_attr( $base ); ?>[icon_type]" data-agent-icon-select>
@@ -147,6 +133,15 @@ $render_row = function ( $i, array $row ) use ( $option, $all_pages, $builtin_ch
 };
 ?>
 <?php $npa_admin->tab_intro( 'dashicons-groups', __( 'Additional Agents', 'newtide-public-agent' ), __( 'Run more than one agent — each on the pages you choose.', 'newtide-public-agent' ) ); ?>
+
+<div class="notice notice-info inline">
+	<p>
+		<?php esc_html_e( 'An agent listed here takes over on the pages you give it — including when the main agent is set to appear on every page. Everywhere else, the main agent answers as usual.', 'newtide-public-agent' ); ?>
+	</p>
+	<p>
+		<?php esc_html_e( 'Each agent needs its own publishable key, created on that agent in RisingTide, because the key is what decides which agent answers. If two rows list the same page, the first one wins.', 'newtide-public-agent' ); ?>
+	</p>
+</div>
 
 <div class="npa-card npa-explain">
 	<div class="npa-card__head">

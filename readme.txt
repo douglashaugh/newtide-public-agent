@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.7.0
+Stable tag: 0.7.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,20 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.7.1 =
+Additional Agents, brought in line with how agents are actually selected:
+* **Each additional agent now takes its own publishable key.** The key is what
+  decides which agent answers, so a row needs one of its own — the agent ID field
+  and the per-row connection mode are gone, since neither selected anything.
+* In Proxy mode the relay now calls with **that agent's key**, so a page-targeted
+  agent genuinely answers as itself. The browser names a configured row by a
+  fingerprint of its key, signed by this site, so it can only ever name an agent
+  you have set up — never supply one.
+* The tab now states the rules it follows: an agent listed here takes over on its
+  pages **even when the main agent is set to all pages**, the main agent answers
+  everywhere else, and if two rows list the same page the first wins. That was
+  always the behaviour; now it is written down and covered by a test.
 
 = 0.7.0 =
 Admin tidy-up ahead of a client pilot. **No settings are lost** — everything moved

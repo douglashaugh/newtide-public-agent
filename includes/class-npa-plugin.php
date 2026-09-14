@@ -847,26 +847,39 @@ final class NPA_Plugin {
 								'page_ids' => array(),
 							), // empty → dropped.
 							array(
-								'name'     => 'Pricing bot',
-								'mode'     => 'telepathy',            // invalid → proxy.
-								'agent_id' => 'agent-42',
-								'page_ids' => array( '12', 'x', 12, 40, 0 ), // normalizes to twelve and forty.
-								'accent'   => 'not-a-color',          // invalid colour becomes inherit.
-								'label'    => 'Talk pricing',
+								'name'       => 'Pricing bot',
+								'public_key' => 'pk_pricing',
+								'page_ids'   => array( '12', 'x', 12, 40, 0 ), // normalizes to twelve and forty.
+								'accent'     => 'not-a-color',                 // invalid colour becomes inherit.
+								'label'      => 'Talk pricing',
 							),
 						),
 					)
 				);
 				$row          = isset( $agents_clean['agents'][0] ) ? $agents_clean['agents'][0] : array();
 				$checks[]     = array(
-					'label' => __( 'Additional agents: empty rows drop, page IDs normalize, invalid mode/colour fall back', 'newtide-public-agent' ),
+					'label' => __( 'Additional agents: empty rows drop, page IDs normalize, invalid colour falls back', 'newtide-public-agent' ),
 					'pass'  => is_array( $agents_clean['agents'] )
 						&& 1 === count( $agents_clean['agents'] )
-						&& 'proxy' === $row['mode']
 						&& array( 12, 40 ) === $row['page_ids']
 						&& '' === $row['accent']
-						&& 'agent-42' === $row['agent_id']
+						&& 'pk_pricing' === $row['public_key']
 						&& 'Talk pricing' === $row['label'],
+				);
+
+				/*
+				 * An additional agent is reached by its own key. The browser names
+				 * a row by key fingerprint and the proxy resolves that to a key, so
+				 * a fingerprint the site never stored must resolve to nothing —
+				 * otherwise a visitor could name any agent they liked.
+				 */
+				$fp       = NPA_Settings::key_fingerprint( 'pk_pricing' );
+				$checks[] = array(
+					'label' => __( 'An agent is found by its own key, and an unknown key finds nothing', 'newtide-public-agent' ),
+					'pass'  => 16 === strlen( $fp )
+						&& NPA_Settings::key_fingerprint( 'pk_pricing' ) === $fp
+						&& NPA_Settings::key_fingerprint( 'pk_other' ) !== $fp
+						&& '' === NPA_Settings::key_fingerprint( '' ),
 				);
 
 				// Connection mode and embed placement fall back to safe values.
@@ -1892,6 +1905,63 @@ final class NPA_Plugin {
 				$checks[] = array(
 					'label' => __( 'Proxy mode set to floating renders the widget site-wide without a shortcode', 'newtide-public-agent' ),
 					'pass'  => false !== strpos( $auto_html, 'data-npa-widget' ),
+				);
+
+				/*
+				 * A page-targeted additional agent must beat the site-wide one,
+				 * including when the default is set to every page — that is the
+				 * whole point of adding one. It is resolved first and returns
+				 * early, and deliberately ignores the global page scope, because
+				 * the row's own page list is its instruction.
+				 */
+				$reflect = new ReflectionClass( 'NPA_Public' );
+				$decide  = $reflect->getMethod( 'active_additional_agent' );
+				$decide->setAccessible( true );
+
+				NPA_Settings::begin_test_override(
+					array_merge(
+						NPA_Settings::defaults(),
+						array(
+							'enabled'    => true,
+							'page_scope' => 'all',
+							'agents'     => array(
+								array(
+									'name'       => 'Pricing bot',
+									'public_key' => 'pk_pricing',
+									'page_ids'   => array( 4242 ),
+								),
+							),
+						)
+					)
+				);
+
+				$matcher = new NPA_Public( $this );
+
+				// No page matches: the site-wide agent stands.
+				$off_page = $decide->invoke( $matcher );
+
+				// A row naming this page takes over, default scope notwithstanding.
+				global $wp_query;
+				$saved_query           = $wp_query;
+				$wp_query = new WP_Query(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restored below.
+
+				/*
+				 * Both fields, not just the id: get_queried_object_id() calls
+				 * get_queried_object() first, which clears the id unless an
+				 * object is already set. Setting the id alone yields 0 and the
+				 * check silently proves nothing.
+				 */
+				$wp_query->queried_object    = new stdClass();
+				$wp_query->queried_object_id = 4242;
+
+				$on_page  = $decide->invoke( $matcher );
+				$wp_query = $saved_query; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+				$checks[] = array(
+					'label' => __( 'A page-targeted agent overrides the site-wide one, even when that is set to all pages', 'newtide-public-agent' ),
+					'pass'  => null === $off_page
+						&& is_array( $on_page )
+						&& 'pk_pricing' === $on_page['public_key'],
 				);
 
 				// Inline placement must NOT auto-inject — that is the setting's

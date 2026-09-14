@@ -387,16 +387,6 @@
 		}
 	}
 
-	function toggleMode( row ) {
-		var sel = row.querySelector( '[data-agent-mode-select]' );
-		if ( ! sel ) {
-			return;
-		}
-		row.querySelectorAll( '[data-agent-mode]' ).forEach( function ( el ) {
-			el.hidden = el.getAttribute( 'data-agent-mode' ) !== sel.value;
-		} );
-	}
-
 	function toggleIcon( row ) {
 		var sel = row.querySelector( '[data-agent-icon-select]' );
 		if ( ! sel ) {
@@ -408,10 +398,6 @@
 	}
 
 	function wireRow( row ) {
-		var modeSel = row.querySelector( '[data-agent-mode-select]' );
-		if ( modeSel ) {
-			modeSel.addEventListener( 'change', function () { toggleMode( row ); } );
-		}
 		var iconSel = row.querySelector( '[data-agent-icon-select]' );
 		if ( iconSel ) {
 			iconSel.addEventListener( 'change', function () { toggleIcon( row ); } );
@@ -477,7 +463,6 @@
 			}
 			list.appendChild( row );
 			wireRow( row );
-			toggleMode( row );
 			toggleIcon( row );
 			renumber();
 			var n = row.querySelector( '.npa-agent-name-input' );

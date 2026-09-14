@@ -161,17 +161,46 @@ class NPA_Rest {
 	 * @param WP_REST_Request $request Request.
 	 * @return string Agent id.
 	 */
-	private function resolve_agent_id( $request ) {
-		$default = $this->plugin->settings->get_agent_id();
+	private function resolve_agent( $request ) {
+		$settings = $this->plugin->settings;
 
-		$agent_id = trim( (string) $request->get_param( 'agent_id' ) );
-		$token    = (string) $request->get_param( 'agent_token' );
+		$default = array(
+			'label'  => $settings->get_agent_id(),
+			'client' => null,
+		);
 
-		if ( '' === $agent_id || '' === $token ) {
+		$named = trim( (string) $request->get_param( 'agent_id' ) );
+		$token = (string) $request->get_param( 'agent_token' );
+
+		if ( '' === $named || '' === $token ) {
 			return $default;
 		}
 
-		return hash_equals( self::agent_token( $agent_id ), $token ) ? $agent_id : $default;
+		if ( ! hash_equals( self::agent_token( $named ), $token ) ) {
+			return $default;
+		}
+
+		$agent = $settings->agent_by_fingerprint( $named );
+
+		if ( null === $agent ) {
+			return $default;
+		}
+
+		/*
+		 * An additional agent answers with its own key, so the call has to be
+		 * made with that key rather than the site's. The signature above proves
+		 * the browser named a row this site rendered; the lookup proves the row
+		 * still exists. Only then is a client built for it.
+		 */
+		$client = null;
+		if ( $settings->public_api_available() && $agent['key'] !== $settings->get_public_key() ) {
+			$client = new NPA_Gateway_Client_Public( $settings->get_public_api_base_url(), $agent['key'] );
+		}
+
+		return array(
+			'label'  => $agent['label'],
+			'client' => $client,
+		);
 	}
 
 	/**
@@ -230,9 +259,11 @@ class NPA_Rest {
 			$outbound = $message;
 		}
 		$context         = $this->sanitize_context( (array) $request->get_param( 'context' ) );
-		$agent_id        = $this->resolve_agent_id( $request );
+		$resolved        = $this->resolve_agent( $request );
+		$agent_id        = $resolved['label'];
 
-		$client = $this->plugin->gateway_client();
+		// A page-targeted agent brings its own client, keyed to its own agent.
+		$client = ( null !== $resolved['client'] ) ? $resolved['client'] : $this->plugin->gateway_client();
 		// Mock-served calls are flagged so their ~0 ms timings stay out of the
 		// latency average (see NPA_Store::aggregates).
 		$is_mock = $client instanceof NPA_Gateway_Client_Mock;

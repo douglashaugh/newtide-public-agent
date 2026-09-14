@@ -294,11 +294,18 @@ class NPA_Public {
 	 * @return void
 	 */
 	private function inject_additional_agent( array $agent ) {
-		$s = $this->plugin->settings;
+		$s   = $this->plugin->settings;
+		$key = isset( $agent['public_key'] ) ? trim( (string) $agent['public_key'] ) : '';
 
-		if ( 'embed' === $agent['mode'] ) {
-			if ( '' !== trim( (string) $agent['public_key'] ) && '' !== $s->get_platform_url() ) {
-				$this->active_public_key = (string) $agent['public_key'];
+		// A row without its own key cannot reach an agent: the key is what
+		// selects one, in both transports.
+		if ( '' === $key ) {
+			return;
+		}
+
+		if ( 'embed' === $s->get_mode() ) {
+			if ( '' !== $s->get_platform_url() ) {
+				$this->active_public_key = $key;
 				$this->enqueue_embed( '' );
 			}
 			return;
@@ -321,8 +328,9 @@ class NPA_Public {
 	private function resolve_agent_config( array $agent ) {
 		$config = $this->resolve_config( array() );
 
-		if ( '' !== trim( (string) $agent['agent_id'] ) ) {
-			$config['agent'] = sanitize_text_field( (string) $agent['agent_id'] );
+		$key = isset( $agent['public_key'] ) ? trim( (string) $agent['public_key'] ) : '';
+		if ( '' !== $key ) {
+			$config['agent'] = NPA_Settings::key_fingerprint( $key );
 		}
 		if ( '' !== trim( (string) $agent['greeting'] ) ) {
 			$config['greeting'] = sanitize_text_field( (string) $agent['greeting'] );
@@ -471,8 +479,16 @@ class NPA_Public {
 	private function resolve_config( array $overrides ) {
 		$s = $this->plugin->settings;
 
+		/*
+		 * 'agent' is a reference to a configured agent, not an id the API uses:
+		 * the publishable key selects the agent upstream. Naming the key by
+		 * fingerprint lets the proxy look up which key to call with, while the
+		 * browser only ever names a row this site has stored.
+		 */
+		$own_key = (string) $s->get_public_key();
+
 		$defaults = array(
-			'agent'    => $s->get_agent_id(),
+			'agent'    => '' !== $own_key ? NPA_Settings::key_fingerprint( $own_key ) : $s->get_agent_id(),
 			'greeting' => $s->get( 'greeting' ),
 			'label'    => $s->get( 'launcher_label' ),
 			'position' => $s->get( 'position' ),
