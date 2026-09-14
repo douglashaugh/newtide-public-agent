@@ -22,10 +22,11 @@ $npa_agent_id = $settings->get_agent_id();
 
 	<p class="npa-guide__lead"><?php echo esc_html__( 'Publishing an agent puts a chat widget on a website that anyone can use — no login required. You build the agent in RisingTide, turn on public access, create a key tied to your site, then connect it here. This mirrors the "Making an Agent Public on RisingTide" guide, kept next to the settings so everything is in one place.', 'newtide-public-agent' ); ?></p>
 
-	<?php $npa_admin->card_open( __( 'Before you start', 'newtide-public-agent' ), __( 'Three things to have in place first.', 'newtide-public-agent' ) ); ?>
+	<?php $npa_admin->card_open( __( 'Before you start', 'newtide-public-agent' ), __( 'What to have in place first.', 'newtide-public-agent' ) ); ?>
 	<ul class="npa-checklist">
 		<li><?php echo wp_kses_post( __( '<strong>Company Super Admin access.</strong> Only super admins can publish an agent or create keys. No <em>Public Agent</em> section under Advanced Settings means you need a super admin to grant access or run the step.', 'newtide-public-agent' ) ); ?></li>
 		<li><?php echo wp_kses_post( __( '<strong>Save the agent once first.</strong> The publishing controls live under <em>Advanced Settings</em>, which only appears after the agent has been saved at least once.', 'newtide-public-agent' ) ); ?></li>
+		<li><?php echo wp_kses_post( __( '<strong>A non-admin user account to bind the key to.</strong> The chat runs as this user, so create or pick one scoped to exactly what should be public. Admin accounts are rejected by the server.', 'newtide-public-agent' ) ); ?></li>
 		<li><?php echo wp_kses_post( __( '<strong>Use an incognito window</strong> if you are logged into more than one environment (PROD + UAT), so you do not end up signed in as the wrong user.', 'newtide-public-agent' ) ); ?></li>
 	</ul>
 	<?php $npa_admin->card_close(); ?>
@@ -49,17 +50,39 @@ $npa_agent_id = $settings->get_agent_id();
 				<?php esc_html_e( 'In the “Create public key” dialog:', 'newtide-public-agent' ); ?>
 				<ul class="ul-disc" style="margin-top:0.4rem;">
 					<li><?php echo wp_kses_post( __( '<strong>Name</strong> — anything you will recognize.', 'newtide-public-agent' ) ); ?></li>
-					<li><?php echo wp_kses_post( __( '<strong>Allowed origins</strong> — the real site URL(s), one per line, starting with <code>https://</code>. The widget only works on these domains — use the actual site, not a placeholder. Match the origin exactly as browsers send it: if both <code>https://example.com</code> and <code>https://www.example.com</code> resolve, list both. A local development site (<code>http://…</code>, or a <code>.local</code> domain) is not a valid origin, so test Embed mode on the real site — or use Proxy mode locally, which calls the gateway server-side and has no origin check.', 'newtide-public-agent' ) ); ?></li>
-					<li><?php echo wp_kses_post( __( '<strong>Bind to user</strong> — a <strong>non-admin</strong> user. The chat runs with this user’s permissions. Admin accounts are rejected.', 'newtide-public-agent' ) ); ?></li>
-					<li><?php echo wp_kses_post( __( '<strong>Expected traffic</strong> — Small / Medium / Large for rate limits. Small is fine for testing.', 'newtide-public-agent' ) ); ?></li>
+					<li><?php echo wp_kses_post( __( '<strong>Allowed origins</strong> — the real site URL(s), one per line or comma-separated, starting with <code>https://</code>. The widget only works on these domains — use the actual site, not a placeholder. Match the origin exactly as browsers send it: if both <code>https://example.com</code> and <code>https://www.example.com</code> resolve, list both. A local development site (<code>http://…</code>, or a <code>.local</code> domain) is not a valid origin, so test Embed mode on the real site — or use Proxy mode locally, which calls the gateway server-side and has no origin check.', 'newtide-public-agent' ) ); ?></li>
+					<li><?php echo wp_kses_post( __( '<strong>Bind to user</strong> — a deliberately scoped <strong>non-admin</strong> user; admin accounts are rejected by the server. The chat runs with this user’s permissions, so whatever data groups, tools and capabilities they can reach is what anonymous visitors can reach. <strong>Binding here grants nothing on its own</strong> — you must also give this user <em>Use</em> on the agent’s <em>Permissions</em> tab, which is the next card.', 'newtide-public-agent' ) ); ?></li>
+					<li><?php echo wp_kses_post( __( '<strong>Expected traffic</strong> — a rate-limit preset: <em>Small</em> (~10 visitors/day), <em>Medium</em> (~100), <em>Large</em> (~1,000). Exceeding any cap returns 429 and the widget tells the visitor it is busy. <em>Small</em> is right for testing; <em>Customize values</em> opens the individual limits. This can be changed later by issuing a new key.', 'newtide-public-agent' ) ); ?></li>
 				</ul>
 				<?php echo wp_kses_post( __( 'Then click <em>Create key</em>.', 'newtide-public-agent' ) ); ?>
 			</li>
 		</ol>
 		<?php $npa_admin->card_close(); ?>
 
-		<?php $npa_admin->card_open( __( 'Copy & connect', 'newtide-public-agent' ), __( 'Grab the key — it is shown only once.', 'newtide-public-agent' ) ); ?>
+		<?php $npa_admin->card_open( __( 'Grant the bound user access', 'newtide-public-agent' ), __( 'The step that is easy to miss — binding a user is not the same as permitting one.', 'newtide-public-agent' ) ); ?>
+		<div class="notice notice-warning inline">
+			<p>
+				<?php echo wp_kses_post( __( '<strong>Binding a user in the key dialog does not grant that user any access.</strong> They are two separate screens. Skip this and the widget appears, connects, and answers every message with an error — the agent runs as a user that is not allowed to use it.', 'newtide-public-agent' ) ); ?>
+			</p>
+		</div>
 		<ol class="npa-steps" style="counter-reset: npa-step 6;">
+			<li>
+				<strong><?php esc_html_e( 'Open the agent’s Permissions tab', 'newtide-public-agent' ); ?></strong>
+				<?php echo wp_kses_post( __( 'Back on <em>Agent Settings</em>, switch from <em>Settings</em> to the <em>Permissions</em> tab.', 'newtide-public-agent' ) ); ?>
+			</li>
+			<li>
+				<strong><?php esc_html_e( 'Add the bound user and tick “Use”', 'newtide-public-agent' ); ?></strong>
+				<?php echo wp_kses_post( __( 'Search for the same user you bound the key to, add them, and tick <strong>Use</strong>. Leave <em>Manage</em> and <em>Own</em> unticked — a public visitor needs neither. Press <em>Save</em>.', 'newtide-public-agent' ) ); ?>
+			</li>
+			<li>
+				<strong><?php esc_html_e( 'Give them the data the agent reads', 'newtide-public-agent' ); ?></strong>
+				<?php echo wp_kses_post( __( 'If the agent uses files, knowledge or a Data Helm source, that same user needs access to each one. The agent can only reach what the bound user can reach — which is also the safety boundary, so grant exactly what should be public and nothing more.', 'newtide-public-agent' ) ); ?>
+			</li>
+		</ol>
+		<?php $npa_admin->card_close(); ?>
+
+		<?php $npa_admin->card_open( __( 'Copy & connect', 'newtide-public-agent' ), __( 'Grab the key — it is shown only once.', 'newtide-public-agent' ) ); ?>
+		<ol class="npa-steps" style="counter-reset: npa-step 9;">
 			<li>
 				<strong><?php esc_html_e( 'Copy the key right away', 'newtide-public-agent' ); ?></strong>
 				<?php echo wp_kses_post( __( 'RisingTide shows the API key and an embed snippet. <strong>Copy the key immediately — the full key is shown only once.</strong> Lose it and you will have to create a new one.', 'newtide-public-agent' ) ); ?>
@@ -109,8 +132,20 @@ $npa_agent_id = $settings->get_agent_id();
 		<?php endif; ?>
 		<?php $npa_admin->card_close(); ?>
 
-		<?php $npa_admin->card_open( __( 'If the chat won’t answer', 'newtide-public-agent' ), __( 'Loads but errors out? Check permissions.', 'newtide-public-agent' ) ); ?>
-		<p><?php echo wp_kses_post( __( 'Because the widget runs as the bound non-admin user, that user needs the agent’s <strong>“use”</strong> permission (on the agent’s <em>Permissions</em> tab in RisingTide), plus access to any data group the agent relies on. If the widget appears but the agent errors out, check this first.', 'newtide-public-agent' ) ); ?></p>
+		<?php $npa_admin->card_open( __( 'If the chat won’t answer', 'newtide-public-agent' ), __( 'It loads, connects, and then errors on every message.', 'newtide-public-agent' ) ); ?>
+		<p><?php echo wp_kses_post( __( '<strong>Check the Permissions tab first.</strong> This is by far the most common cause, and everything else looks healthy while it is wrong: the key resolves, <em>Test connection</em> passes, the agent reports its details — and every message comes back as an error, because the widget is running as a user who is not allowed to use the agent.', 'newtide-public-agent' ) ); ?></p>
+		<p><?php echo wp_kses_post( __( 'The bound user needs <strong>Use</strong> on the agent’s <em>Permissions</em> tab, plus access to every file, knowledge source or data group the agent reads. Binding the key to a user does not grant either.', 'newtide-public-agent' ) ); ?></p>
+		<p>
+		<?php
+		echo wp_kses_post(
+			sprintf(
+				/* translators: %s: link to the Service Status tab. */
+				__( 'The %s tab shows the last upstream error with the likely cause named. A quick way to tell permissions apart from a broken agent: try the agent in RisingTide’s own <em>Playground</em>, which runs as you rather than as the bound user. If it answers there but not through the widget, it is permissions.', 'newtide-public-agent' ),
+				'<a href="' . esc_url( $npa_admin->tab_url( 'status' ) ) . '">' . esc_html__( 'Service Status', 'newtide-public-agent' ) . '</a>'
+			)
+		);
+		?>
+		</p>
 		<?php $npa_admin->card_close(); ?>
 	</div>
 

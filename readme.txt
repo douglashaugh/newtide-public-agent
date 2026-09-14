@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.8
+Stable tag: 0.6.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,20 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.9 =
+Publishing guide corrected — it was missing a required step:
+* **Granting the bound user access is now its own step**, with the warning that
+  binding a user in the key dialog grants that user nothing. They are two separate
+  screens, and skipping the second produces a widget that appears, connects, and
+  errors on every message. Covers ticking **Use** on the agent's Permissions tab
+  and giving that user access to the files and data the agent reads.
+* "Before you start" now lists needing a non-admin user account to bind to.
+* The key dialog walkthrough matches the current UI: origins accept comma-separated
+  values, and the traffic presets name their actual limits and what a 429 does.
+* "If the chat won't answer" now describes the symptom people actually see —
+  everything healthy except the answers — and points at Service Status and the
+  RisingTide Playground as the way to separate permissions from a broken agent.
 
 = 0.6.8 =
 * Service Status now names the likely cause of an upstream failure. An agent that
