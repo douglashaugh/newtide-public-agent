@@ -523,7 +523,8 @@ final class NPA_Plugin {
 				}
 
 				return $checks;
-			}
+			},
+			'user'
 		);
 	}
 
@@ -1224,6 +1225,29 @@ final class NPA_Plugin {
 					'pass'  => ! $leaks,
 				);
 
+				/*
+				 * Declare the capability rather than inherit it. Without a
+				 * gateway the client is the mock, and the proxy withholds a mock
+				 * reply from anyone who cannot manage_options — correct
+				 * behaviour, but it makes the result depend on who ran the
+				 * battery. A "trust artifact" that passes for an administrator
+				 * and fails from WP-CLI is not one.
+				 */
+				$grant_admin = static function ( $caps ) {
+					$caps['manage_options'] = true;
+					return $caps;
+				};
+				add_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+
+				/*
+				 * Clear the courtesy throttle first. These dispatches count
+				 * against the same per-IP limit a visitor does, so running the
+				 * battery twice inside the window made it fail on the second
+				 * click — the tests reporting a fault they had caused.
+				 */
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+				delete_transient( 'npa_rl_' . md5( isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown' ) );
+
 				// Real dispatch with a sentinel agent id; assert + clean up.
 				global $wpdb;
 				NPA_Settings::begin_test_override( array( 'agent_id' => '__npa_rest_test__' ) );
@@ -1252,6 +1276,8 @@ final class NPA_Plugin {
 				 * otherwise tell a visitor "Mock agent reply. You said: …" in
 				 * what looks like the company's own support chat.
 				 */
+				remove_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+
 				$saved_user = get_current_user_id();
 				wp_set_current_user( 0 );
 
@@ -1288,7 +1314,34 @@ final class NPA_Plugin {
 				 * must never be honoured, or a visitor could address any agent the
 				 * credential can reach just by editing the request.
 				 */
-				$routed = '__npa_routed_agent__';
+				/*
+				 * Back to an administrator: the visitor check above dropped the
+				 * grant deliberately, and the routing checks below need a reply
+				 * to inspect. Without this they measure the withheld-mock path
+				 * instead of the routing they name.
+				 */
+				add_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+
+				/*
+				 * A page-targeted agent is named by the fingerprint of its own
+				 * key, and answers under its own name. Signing alone is not
+				 * enough — the row has to exist, or the browser could name an
+				 * agent this site never configured.
+				 */
+				NPA_Settings::begin_test_override(
+					array(
+						'agent_id' => '__npa_rest_test__',
+						'agents'   => array(
+							array(
+								'name'       => 'Pricing bot',
+								'public_key' => 'pk_rest_probe',
+								'page_ids'   => array( 4242 ),
+							),
+						),
+					)
+				);
+
+				$routed = NPA_Settings::key_fingerprint( 'pk_rest_probe' );
 
 				$signed = new WP_REST_Request( 'POST', '/npa/v1/message' );
 				$signed->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
@@ -1299,8 +1352,13 @@ final class NPA_Plugin {
 
 				$last     = $this->store->recent( 1 );
 				$checks[] = array(
-					'label' => __( 'A signed agent id is routed to that agent, not the site default', 'newtide-public-agent' ),
-					'pass'  => isset( $last[0]['agent_id'] ) && $routed === $last[0]['agent_id'],
+					'label' => __( 'A page-targeted agent answers as itself, not as the site default', 'newtide-public-agent' ),
+					'pass'  => isset( $last[0]['agent_id'] ) && 'Pricing bot' === $last[0]['agent_id'],
+				);
+
+				$checks[] = array(
+					'label' => __( 'A signed name for an agent that is not configured is refused', 'newtide-public-agent' ),
+					'pass'  => null === $this->settings->agent_by_fingerprint( NPA_Settings::key_fingerprint( 'pk_never_configured' ) ),
 				);
 
 				$forged = new WP_REST_Request( 'POST', '/npa/v1/message' );
@@ -1316,15 +1374,18 @@ final class NPA_Plugin {
 					'pass'  => isset( $last[0]['agent_id'] ) && '__npa_rest_test__' === $last[0]['agent_id'],
 				);
 
+				remove_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+
 				// Cleanup — leave no test data behind.
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => $routed ), array( '%s' ) );
+				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => 'Pricing bot' ), array( '%s' ) );
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_rest_test__' ), array( '%s' ) );
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
 
 				return $checks;
-			}
+			},
+			'user'
 		);
 	}
 
@@ -1428,7 +1489,8 @@ final class NPA_Plugin {
 				);
 
 				return $checks;
-			}
+			},
+			'user'
 		);
 	}
 
@@ -1576,8 +1638,9 @@ final class NPA_Plugin {
 					$sent            = isset( $args['headers']['Origin'] ) ? $args['headers']['Origin'] : '';
 					$origins_tried[] = $sent;
 
-					// Refuse everything except the site origin.
-					if ( 'https://example.test' !== $sent ) {
+					// Refuse the first candidate (the site origin) so the retry
+					// path is the one under test; accept the platform origin.
+					if ( 'https://uat-ai.newtide.ai' !== $sent ) {
 						return array(
 							'headers'  => array(),
 							'body'     => '{"success":false,"message":"Origin not permitted for this API key."}',
@@ -1651,7 +1714,8 @@ final class NPA_Plugin {
 				);
 
 				return $checks;
-			}
+			},
+			'user'
 		);
 	}
 
@@ -1684,6 +1748,18 @@ final class NPA_Plugin {
 					'label' => __( 'Transcript table exists', 'newtide-public-agent' ),
 					'pass'  => $found === $table,
 				);
+
+				// Same reason as the message-proxy suite: the mock is withheld
+				// from non-administrators, so state the capability.
+				$grant_admin = static function ( $caps ) {
+					$caps['manage_options'] = true;
+					return $caps;
+				};
+				add_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+
+				// Same reason as the message-proxy suite.
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+				delete_transient( 'npa_rl_' . md5( isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown' ) );
 
 				$secret = 'npa-transcript-probe-' . wp_generate_password( 8, false );
 
@@ -1779,6 +1855,8 @@ final class NPA_Plugin {
 					'pass'  => (bool) wp_next_scheduled( self::PURGE_HOOK ),
 				);
 
+				remove_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+
 				// Cleanup — never leave probe content behind.
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->delete( $table, array( 'agent_id' => '__npa_t_test__' ), array( '%s' ) );
@@ -1787,7 +1865,8 @@ final class NPA_Plugin {
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
 
 				return $checks;
-			}
+			},
+			'user'
 		);
 	}
 
@@ -2007,7 +2086,8 @@ final class NPA_Plugin {
 
 
 				return $checks;
-			}
+			},
+			'user'
 		);
 	}
 
@@ -2089,7 +2169,8 @@ final class NPA_Plugin {
 
 
 				return $checks;
-			}
+			},
+			'user'
 		);
 	}
 }

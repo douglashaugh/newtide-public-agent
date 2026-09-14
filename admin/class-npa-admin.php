@@ -814,35 +814,109 @@ class NPA_Admin {
 			return '<p>' . esc_html__( 'No test results yet. Click “Run tests”.', 'newtide-public-agent' ) . '</p>';
 		}
 
+		/*
+		 * Everything runs and everything counts, but the two halves answer
+		 * different questions. A site owner debugging a chat wants the suites
+		 * that describe THEIR setup — can this site reach the agent, does the
+		 * widget render, is the key kept out of the page. The rest is the plugin
+		 * proving its own internals, which is worth having and worth not leading
+		 * with: twenty-one sanitiser assertions bury the one line that says the
+		 * agent is unreachable.
+		 */
+		$mine  = array();
+		$inner = array();
+
+		foreach ( $snapshot['suites'] as $suite ) {
+			if ( isset( $suite['audience'] ) && 'user' === $suite['audience'] ) {
+				$mine[] = $suite;
+			} else {
+				$inner[] = $suite;
+			}
+		}
+
+		// A snapshot taken before suites declared an audience has none at all.
+		if ( empty( $mine ) ) {
+			$mine  = $inner;
+			$inner = array();
+		}
+
+		$failed = (int) $snapshot['total'] - (int) $snapshot['passed'];
+
 		$out = sprintf(
 			'<p class="npa-tests-summary">%s</p>',
 			esc_html(
-				sprintf(
-					/* translators: 1: passed checks, 2: total checks. */
-					__( 'Passed %1$d of %2$d checks.', 'newtide-public-agent' ),
-					(int) $snapshot['passed'],
-					(int) $snapshot['total']
-				)
+				$failed > 0
+					? sprintf(
+						/* translators: 1: failed checks, 2: total checks. */
+						_n( '%1$d of %2$d checks failed.', '%1$d of %2$d checks failed.', $failed, 'newtide-public-agent' ),
+						$failed,
+						(int) $snapshot['total']
+					)
+					: sprintf(
+						/* translators: %d: total checks. */
+						__( 'All %d checks passed.', 'newtide-public-agent' ),
+						(int) $snapshot['total']
+					)
 			)
 		);
 
-		foreach ( $snapshot['suites'] as $suite ) {
-			$all_pass = (int) $suite['passed'] === (int) $suite['total'];
-			$pill     = $all_pass ? 'npa-pill--ok' : 'npa-pill--warn';
-
-			$out .= '<div class="npa-suite">';
-			$out .= '<h3>' . esc_html( $suite['label'] );
-			$out .= ' <span class="npa-pill ' . esc_attr( $pill ) . '">' . esc_html( $suite['passed'] . '/' . $suite['total'] ) . '</span></h3>';
-			$out .= '<p class="description">' . esc_html( $suite['why'] ) . '</p>';
-			$out .= '<ul class="npa-checks">';
-			foreach ( $suite['checks'] as $check ) {
-				$pass  = ! empty( $check['pass'] );
-				$mark  = $pass ? '✓' : '✕';
-				$class = $pass ? 'npa-check--pass' : 'npa-check--fail';
-				$out  .= '<li class="' . esc_attr( $class ) . '"><span class="npa-check-mark">' . esc_html( $mark ) . '</span> ' . esc_html( $check['label'] ) . '</li>';
-			}
-			$out .= '</ul></div>';
+		foreach ( $mine as $suite ) {
+			$out .= $this->suite_html( $suite );
 		}
+
+		if ( ! empty( $inner ) ) {
+			$inner_pass  = 0;
+			$inner_total = 0;
+			foreach ( $inner as $suite ) {
+				$inner_pass  += (int) $suite['passed'];
+				$inner_total += (int) $suite['total'];
+			}
+
+			$out .= '<details class="npa-suite-group">';
+			$out .= '<summary>' . esc_html(
+				sprintf(
+					/* translators: 1: passed checks, 2: total checks. */
+					__( 'Internal checks — the plugin testing itself (%1$d/%2$d)', 'newtide-public-agent' ),
+					$inner_pass,
+					$inner_total
+				)
+			) . '</summary>';
+			$out .= '<p class="description">' . esc_html__( 'These prove the plugin’s own logic against fixtures. They say nothing about your agent or your site, and are here for completeness.', 'newtide-public-agent' ) . '</p>';
+
+			foreach ( $inner as $suite ) {
+				$out .= $this->suite_html( $suite );
+			}
+
+			$out .= '</details>';
+		}
+
+		return $out;
+	}
+
+	/**
+	 * One suite's results block.
+	 *
+	 * @param array $suite Suite results from the snapshot.
+	 * @return string
+	 */
+	private function suite_html( $suite ) {
+		$all_pass = (int) $suite['passed'] === (int) $suite['total'];
+		$pill     = $all_pass ? 'npa-pill--ok' : 'npa-pill--warn';
+
+		$out  = '<div class="npa-suite">';
+		$out .= '<h3>' . esc_html( $suite['label'] );
+		$out .= ' <span class="npa-pill ' . esc_attr( $pill ) . '">' . esc_html( $suite['passed'] . '/' . $suite['total'] ) . '</span></h3>';
+		$out .= '<p class="description">' . esc_html( $suite['why'] ) . '</p>';
+		$out .= '<ul class="npa-checks">';
+
+		foreach ( $suite['checks'] as $check ) {
+			$pass  = ! empty( $check['pass'] );
+			$mark  = $pass ? '✓' : '✕';
+			$class = $pass ? 'npa-check--pass' : 'npa-check--fail';
+			$out  .= '<li class="' . esc_attr( $class ) . '"><span class="npa-check-mark">' . esc_html( $mark ) . '</span> ' . esc_html( $check['label'] ) . '</li>';
+		}
+
+		$out .= '</ul></div>';
 
 		return $out;
 	}

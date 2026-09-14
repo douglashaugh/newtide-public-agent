@@ -40,12 +40,18 @@ class NPA_Test_Runner {
 	 * @param string   $why      Plain-language "why this matters" copy.
 	 * @param callable $callback Returns an array of checks, each:
 	 *                           { label:string, pass:bool }.
+	 * @param string   $audience 'user' for suites that tell a site owner
+	 *                           something about their own setup; 'internal' for
+	 *                           the plugin proving its own correctness. Both run
+	 *                           and both count — this only decides what the Tests
+	 *                           tab shows first.
 	 * @return void
 	 */
-	public function register_suite( $id, $label, $why, callable $callback ) {
+	public function register_suite( $id, $label, $why, callable $callback, $audience = 'internal' ) {
 		$this->suites[ sanitize_key( $id ) ] = array(
 			'label'    => $label,
 			'why'      => $why,
+			'audience' => ( 'user' === $audience ) ? 'user' : 'internal',
 			'callback' => $callback,
 		);
 	}
@@ -85,8 +91,9 @@ class NPA_Test_Runner {
 			}
 
 			$results[ $id ] = array(
-				'label'  => $suite['label'],
-				'why'    => $suite['why'],
+				'label'    => $suite['label'],
+				'why'      => $suite['why'],
+				'audience' => $suite['audience'],
 				'checks' => $checks,
 				'passed' => $suite_pass,
 				'total'  => count( $checks ),

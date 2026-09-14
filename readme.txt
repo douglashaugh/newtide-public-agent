@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.7.1
+Stable tag: 0.7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,23 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.7.2 =
+The Tests tab works again, and shows you the half that is about your site.
+* **Fixed three failing checks**, all of them stale tests rather than broken
+  behaviour: two written before Proxy mode moved onto the public agent API, and
+  one before agents were selected by key.
+* **The battery no longer depends on who runs it.** Its own calls were being
+  withheld the way a visitor's are — correct behaviour, wrong context — so the
+  result differed between an administrator and anything else. Suites now state
+  the capability they need. They also clear the courtesy rate limit first, since
+  their own requests counted against it and a second run inside the minute could
+  fail on a limit the tests themselves had reached.
+* **Results are split in two.** The suites that describe your setup — environment,
+  agent API, message proxy, conversation memory, transcripts, widget, embed — are
+  shown. The plugin's own internal checks are collapsed underneath. Everything
+  still runs and still counts; twenty-one sanitiser assertions just should not
+  bury the one line saying the agent is unreachable.
 
 = 0.7.1 =
 Additional Agents, brought in line with how agents are actually selected:

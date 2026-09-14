@@ -1354,3 +1354,16 @@ pre.npa-code {
 	white-space: pre-wrap;
 	word-break: break-word;
 }
+
+/* Tests tab: the internal half, collapsed by default. */
+.npa-suite-group {
+	margin-top: 1.5rem;
+	padding-top: .5rem;
+	border-top: 1px solid #dcdcde;
+}
+
+.npa-suite-group > summary {
+	cursor: pointer;
+	font-weight: 600;
+	padding: .35rem 0;
+}
