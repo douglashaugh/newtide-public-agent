@@ -911,11 +911,16 @@ final class NPA_Plugin {
 					'pass'  => $delay['auto_open_delay'] <= 600,
 				);
 
-				// Exclude-IDs are normalized: non-numeric dropped, duplicates removed.
-				$ids      = $settings->sanitize( array( 'exclude_ids' => '12, abc, 40, 40' ) );
+				/*
+				 * Retiring a setting has to retire its effect too. A stored
+				 * exclude_ids used to suppress the widget on listed pages; with
+				 * the field gone, a leftover value must not still be hiding the
+				 * widget from a control nobody can see.
+				 */
 				$checks[] = array(
-					'label' => __( 'Exclude-page IDs are normalized to a clean integer list', 'newtide-public-agent' ),
-					'pass'  => '12,40' === $ids['exclude_ids'],
+					'label' => __( 'A removed hide-on-pages list no longer suppresses the widget', 'newtide-public-agent' ),
+					'pass'  => ! array_key_exists( 'exclude_ids', NPA_Settings::defaults() )
+						&& ! array_key_exists( 'exclude_ids', $settings->sanitize( array( 'exclude_ids' => '12,40' ) ) ),
 				);
 
 				// Suggested prompts are capped and blank lines dropped.

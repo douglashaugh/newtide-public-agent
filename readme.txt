@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.9
+Stable tag: 0.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,7 +20,7 @@ It is a **thin client**. The Public Agent Gateway owns identity, safety, rate-li
 
 * Shortcode and Gutenberg block, with per-placement overrides (agent, greeting, label, position, accent).
 * Server-side REST proxy (`/wp-json/npa/v1/message`) — the credential never leaves your server.
-* Admin screen with tabs: General, Agent, Service Status, Tests.
+* Admin screen with tabs: Agent, Appearance, Behavior, Additional Agents, Publishing, Service Status, Tests.
 * Durable usage history (metadata only — no message content), powering a status panel and a courtesy daily budget cap.
 * Accessible widget: keyboard-operable, focus management, screen-reader announcements, respects reduced motion.
 * Built to run fully against a deterministic mock, so it works before your gateway is live.
@@ -92,14 +92,31 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 == Screenshots ==
 
 1. Home — the setup checklist, with each step linking to the tab that satisfies it.
-2. Agent — connection mode, publishable key or gateway credential, agent picker, and placement.
-3. Appearance — launcher shape, size, colour and icon, with a live preview that updates as you type.
+2. Agent — connection mode, publishable key, placement, and which pages the chat appears on.
+3. Appearance — launcher shape, size, colour and icon plus all the widget's wording, with a live preview that updates as you type.
 4. Additional Agents — route a different agent to specific pages, no shortcode required.
 5. Service Status — usage over the last 14 days, health roll-up, and transcript retention.
 6. Tests — the built-in battery, run from the admin, against fixtures and the mock gateway.
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.7.0 =
+Admin tidy-up ahead of a client pilot. **No settings are lost** — everything moved
+rather than went away, apart from one control that was actively harmful.
+
+* **The General tab is gone.** Its wording — greeting, input placeholder,
+  suggested prompts, error message — now lives on **Appearance**, beside the live
+  preview that shows it. The launcher label was already on both tabs, which was
+  the redundancy that prompted this. **Enable widget** moves to **Agent**, next to
+  the placement and page rules it governs.
+* **Agent takes General's place in the tab order**, so you connect an agent before
+  styling it.
+* **"Hide on these pages" is removed.** The Agent tab already chooses which pages
+  the chat appears on, and two rules deciding the same thing could disagree with
+  nothing on screen explaining which won. The suppression it applied is removed
+  with it, so a previously saved list cannot keep hiding the widget from a control
+  that is no longer there.
 
 = 0.6.9 =
 Publishing guide corrected — it was missing a required step:

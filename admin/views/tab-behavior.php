@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 <?php $npa_admin->mode_scope_notice( 'behavior' ); ?>
 <form method="post" action="options.php" class="npa-form">
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
-	<?php $npa_admin->present_fields( array( 'auto_open_delay', 'hide_on_mobile', 'remember_state', 'audience', 'exclude_ids' ) ); ?>
+	<?php $npa_admin->present_fields( array( 'auto_open_delay', 'hide_on_mobile', 'remember_state', 'audience' ) ); ?>
 
 	<div class="npa-columns">
 		<?php $npa_admin->card_open( __( 'Timing', 'newtide-public-agent' ), __( 'When the panel opens on its own.', 'newtide-public-agent' ) ); ?>
@@ -64,13 +64,7 @@ defined( 'ABSPATH' ) || exit;
 						<option value="logged_in" <?php selected( $settings->get( 'audience' ), 'logged_in' ); ?>><?php esc_html_e( 'Logged-in users only', 'newtide-public-agent' ); ?></option>
 						<option value="anonymous" <?php selected( $settings->get( 'audience' ), 'anonymous' ); ?>><?php esc_html_e( 'Logged-out visitors only', 'newtide-public-agent' ); ?></option>
 					</select>
-				</td>
-			</tr>
-			<tr>
-				<th scope="row"><label for="npa-exclude-ids"><?php esc_html_e( 'Hide on these pages', 'newtide-public-agent' ); ?></label></th>
-				<td>
-					<input type="text" id="npa-exclude-ids" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[exclude_ids]" value="<?php echo esc_attr( $settings->get( 'exclude_ids' ) ); ?>" />
-					<p class="description"><?php esc_html_e( 'Comma-separated page or post IDs where the widget should not appear (e.g. 12, 40, 105).', 'newtide-public-agent' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Which visitors see the widget at all. Which pages it appears on is set on the Agent tab.', 'newtide-public-agent' ); ?></p>
 				</td>
 			</tr>
 		</table>

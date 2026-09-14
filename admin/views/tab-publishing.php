@@ -110,9 +110,9 @@ $npa_agent_id = $settings->get_agent_id();
 		echo wp_kses_post(
 			sprintf(
 				/* translators: 1: Agent tab link, 2: General tab link. */
-				__( 'On the %1$s tab set <strong>Connection mode</strong> to <strong>Embed</strong> and paste the <code>pk_</code> key into <strong>Publishable key</strong> (or define <code>NPA_PUBLIC_KEY</code> in <code>wp-config.php</code>). The key selects the agent, so no agent ID is needed in this mode. Leave <strong>Platform URL</strong> at the production default. Then set <strong>Placement</strong> — <em>Floating</em> puts the chat on every allowed page with no shortcode, or <em>Inline</em> mounts it where you place <code>[newtide_agent]</code> or the block. Tune the wording on the %2$s tab.', 'newtide-public-agent' ),
+				__( 'On the %1$s tab set <strong>Connection mode</strong> to <strong>Embed</strong> and paste the <code>pk_</code> key into <strong>Publishable key</strong> (or define <code>NPA_PUBLIC_KEY</code> in <code>wp-config.php</code>). The key selects the agent, so no agent ID is needed in this mode. Leave <strong>Platform URL</strong> at the production default. Then set <strong>Placement</strong> — <em>Floating</em> puts the chat on every allowed page with no shortcode, or <em>Inline</em> mounts it where you place <code>[newtide_agent]</code> or the block. Tune the wording and styling on the %2$s tab.', 'newtide-public-agent' ),
 				'<a href="' . esc_url( $npa_admin->tab_url( 'agent' ) ) . '">' . esc_html__( 'Agent', 'newtide-public-agent' ) . '</a>',
-				'<a href="' . esc_url( $npa_admin->tab_url( 'general' ) ) . '">' . esc_html__( 'General', 'newtide-public-agent' ) . '</a>'
+				'<a href="' . esc_url( $npa_admin->tab_url( 'appearance' ) ) . '">' . esc_html__( 'Appearance', 'newtide-public-agent' ) . '</a>'
 			)
 		);
 		?>

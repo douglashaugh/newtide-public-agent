@@ -163,7 +163,6 @@ class NPA_Settings {
 			'hide_on_mobile'            => false,
 			'remember_state'            => false,
 			'audience'                  => 'everyone',
-			'exclude_ids'               => '', // Comma-separated post/page IDs to suppress on.
 			'page_scope'                => 'all', // 'all' pages or only the 'selected' ones.
 			'page_ids'                  => array(), // Selected page IDs when page_scope = 'selected'.
 			// Additional page-targeted agents. Each entry is a map; see sanitize_agents().
@@ -315,12 +314,6 @@ class NPA_Settings {
 		}
 
 		// Exclude IDs: comma-separated positive integers, normalized.
-		if ( $has( 'exclude_ids' ) ) {
-			$ids                  = array_filter( array_map( 'absint', explode( ',', (string) $input['exclude_ids'] ) ) );
-			$clean['exclude_ids'] = implode( ',', array_unique( $ids ) );
-		} else {
-			$clean['exclude_ids'] = $existing['exclude_ids'];
-		}
 
 		// Page-targeting scope + the selected page ids (checkbox list).
 		$scope               = $has( 'page_scope' ) ? sanitize_key( $input['page_scope'] ) : $existing['page_scope'];

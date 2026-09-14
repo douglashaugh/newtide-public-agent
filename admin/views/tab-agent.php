@@ -46,7 +46,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
 	<?php
 	// Keys this form is responsible for; anything omitted keeps its stored value.
-	$npa_present = array( 'mode', 'placement', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days', 'conversation_memory' );
+	$npa_present = array( 'enabled', 'mode', 'placement', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days', 'conversation_memory' );
 	if ( ! $npa_key_constant ) {
 		$npa_present[] = 'gateway_key';
 	}
@@ -112,8 +112,18 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	</table>
 	<?php $npa_admin->card_close(); ?>
 
-	<?php $npa_admin->card_open( __( 'Pages', 'newtide-public-agent' ), __( 'Where the chat is allowed to appear across your site.', 'newtide-public-agent' ) ); ?>
+	<?php $npa_admin->card_open( __( 'Pages', 'newtide-public-agent' ), __( 'Whether the chat appears, and where.', 'newtide-public-agent' ) ); ?>
 	<table class="form-table" role="presentation">
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Enable widget', 'newtide-public-agent' ); ?></th>
+			<td>
+				<label>
+					<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[enabled]" value="1" <?php checked( (bool) $settings->get( 'enabled' ) ); ?> />
+					<?php esc_html_e( 'Show the agent widget on the front end.', 'newtide-public-agent' ); ?>
+				</label>
+				<p class="description"><?php esc_html_e( 'The master switch. With this off nothing renders, whatever the rules below say.', 'newtide-public-agent' ); ?></p>
+			</td>
+		</tr>
 		<tr>
 			<th scope="row"><?php esc_html_e( 'Show on pages', 'newtide-public-agent' ); ?></th>
 			<td>

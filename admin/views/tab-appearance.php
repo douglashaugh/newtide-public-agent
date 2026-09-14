@@ -67,6 +67,10 @@ if ( 'auto' !== $cur_theme ) {
 			'theme',
 			'header_title',
 			'launcher_label',
+			'greeting',
+			'input_placeholder',
+			'suggested_prompts',
+			'error_message',
 			'launcher_shape',
 			'launcher_size',
 			'launcher_icon_type',
@@ -80,6 +84,39 @@ if ( 'auto' !== $cur_theme ) {
 
 	<div class="npa-appearance">
 		<div class="npa-appearance__controls">
+
+			<?php $npa_admin->card_open( __( 'Messaging', 'newtide-public-agent' ), __( 'The words the widget says — greeting, prompts, and what a visitor sees if something fails.', 'newtide-public-agent' ) ); ?>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="npa-greeting"><?php esc_html_e( 'Greeting', 'newtide-public-agent' ); ?></label></th>
+					<td>
+						<textarea id="npa-greeting" class="large-text" rows="2" name="<?php echo esc_attr( $option ); ?>[greeting]"><?php echo esc_textarea( $settings->get( 'greeting' ) ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'First message shown when the chat opens.', 'newtide-public-agent' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="npa-input-placeholder"><?php esc_html_e( 'Input placeholder', 'newtide-public-agent' ); ?></label></th>
+					<td>
+						<input type="text" id="npa-input-placeholder" class="regular-text" name="<?php echo esc_attr( $option ); ?>[input_placeholder]" value="<?php echo esc_attr( $settings->get( 'input_placeholder' ) ); ?>" />
+						<p class="description"><?php esc_html_e( 'Hint text shown in the empty message box.', 'newtide-public-agent' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="npa-suggested-prompts"><?php esc_html_e( 'Suggested prompts', 'newtide-public-agent' ); ?></label></th>
+					<td>
+						<textarea id="npa-suggested-prompts" class="large-text" rows="4" name="<?php echo esc_attr( $option ); ?>[suggested_prompts]"><?php echo esc_textarea( $settings->get( 'suggested_prompts' ) ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'One per line. Shown as clickable chips when the chat opens — the first 6 are used and extra lines are ignored.', 'newtide-public-agent' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="npa-error-message"><?php esc_html_e( 'Error message', 'newtide-public-agent' ); ?></label></th>
+					<td>
+						<input type="text" id="npa-error-message" class="regular-text" name="<?php echo esc_attr( $option ); ?>[error_message]" value="<?php echo esc_attr( $settings->get( 'error_message' ) ); ?>" />
+						<p class="description"><?php esc_html_e( 'Shown to a visitor when the agent cannot answer. Keep it generic — the reason is recorded for you on Service Status, never shown to them.', 'newtide-public-agent' ); ?></p>
+					</td>
+				</tr>
+			</table>
+			<?php $npa_admin->card_close(); ?>
 
 			<?php $npa_admin->card_open( __( 'Launcher icon', 'newtide-public-agent' ), __( 'The glyph on the round bubble launcher. Upload your own, pick an emoji, or choose a built-in icon.', 'newtide-public-agent' ) ); ?>
 			<div class="npa-iconpicker">

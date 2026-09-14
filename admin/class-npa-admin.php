@@ -276,14 +276,14 @@ class NPA_Admin {
 		$items[] = array(
 			'label' => __( 'Turn the widget on', 'newtide-public-agent' ),
 			'done'  => (bool) $s->get( 'enabled' ),
-			'tab'   => 'general',
-			'hint'  => __( 'Enable the front-end widget on the General tab.', 'newtide-public-agent' ),
+			'tab'   => 'agent',
+			'hint'  => __( 'Enable the front-end widget on the Agent tab.', 'newtide-public-agent' ),
 		);
 
 		$items[] = array(
 			'label' => __( 'Write a greeting', 'newtide-public-agent' ),
 			'done'  => '' !== trim( (string) $s->get( 'greeting' ) ),
-			'tab'   => 'general',
+			'tab'   => 'appearance',
 			'hint'  => __( 'The first line visitors read when the chat opens.', 'newtide-public-agent' ),
 		);
 
@@ -622,7 +622,7 @@ class NPA_Admin {
 	public function current_tab() {
 		// Reading a tab name for display only; nonce not applicable to tab nav.
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'home'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		return array_key_exists( $tab, $this->tabs() ) ? $tab : 'general';
+		return array_key_exists( $tab, $this->tabs() ) ? $tab : 'home';
 	}
 
 	/**
@@ -633,10 +633,10 @@ class NPA_Admin {
 	public function tabs() {
 		return array(
 			'home'       => __( 'Home', 'newtide-public-agent' ),
-			'general'    => __( 'General', 'newtide-public-agent' ),
+			// Agent takes the slot General held: connect it before styling it.
+			'agent'      => __( 'Agent', 'newtide-public-agent' ),
 			'appearance' => __( 'Appearance', 'newtide-public-agent' ),
 			'behavior'   => __( 'Behavior', 'newtide-public-agent' ),
-			'agent'      => __( 'Agent', 'newtide-public-agent' ),
 			'additional' => __( 'Additional Agents', 'newtide-public-agent' ),
 			'publishing' => __( 'Publishing', 'newtide-public-agent' ),
 			'status'     => __( 'Service Status', 'newtide-public-agent' ),

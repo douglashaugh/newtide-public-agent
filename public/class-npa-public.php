@@ -263,9 +263,12 @@ class NPA_Public {
 	}
 
 	/**
-	 * The audience gate + per-page exclusion list — the checks shared by the
-	 * primary widget and every additional agent (i.e. everything except the
-	 * primary's own page allowlist).
+	 * The audience gate — the check shared by the primary widget and every
+	 * additional agent (i.e. everything except the primary's own page allowlist).
+	 *
+	 * A per-page exclusion list used to live here too. It was removed: page
+	 * targeting belongs to the Agent tab's allowlist, and two rules deciding the
+	 * same thing could disagree, with nothing on screen explaining which won.
 	 *
 	 * @return bool
 	 */
@@ -278,15 +281,6 @@ class NPA_Public {
 		}
 		if ( 'anonymous' === $audience && is_user_logged_in() ) {
 			return false;
-		}
-
-		$raw = (string) $s->get( 'exclude_ids', '' );
-		if ( '' !== $raw ) {
-			$excluded = array_filter( array_map( 'absint', explode( ',', $raw ) ) );
-			$current  = (int) get_queried_object_id();
-			if ( $current && in_array( $current, $excluded, true ) ) {
-				return false;
-			}
 		}
 
 		return true;
@@ -446,7 +440,7 @@ class NPA_Public {
 	private function should_display() {
 		$s = $this->plugin->settings;
 
-		// Audience gate + per-page exclusion list (shared with additional agents).
+		// Audience gate (shared with additional agents).
 		if ( ! $this->passes_common_gates() ) {
 			return false;
 		}
