@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.6.7
+Stable tag: 0.6.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,14 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.6.8 =
+* Service Status now names the likely cause of an upstream failure. An agent that
+  answers "Internal error." is almost always a permissions gap: a publishable key
+  runs as the non-admin user it is bound to, and that user needs the agent's
+  "use" permission plus access to every knowledge or data source it reads. A newly
+  created agent does not inherit these. The plugin now says so at the point of
+  failure instead of leaving it to the Publishing guide.
 
 = 0.6.7 =
 * Show agent details now names the agent and the key that produced the output.

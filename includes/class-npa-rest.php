@@ -434,6 +434,37 @@ class NPA_Rest {
 	}
 
 	/**
+	 * A suggestion to accompany an upstream failure, for the admin only.
+	 *
+	 * "Internal error." is what a permissions gap looks like from outside: the
+	 * agent is registered, the key resolves, `/public/agent/info` succeeds, and
+	 * then execution fails with a string that names nothing. It cost a long
+	 * investigation to land on the cause the Publishing tab already warns about,
+	 * so say it at the point of failure rather than leaving it in a guide.
+	 *
+	 * @param string $code   Stable error code.
+	 * @param string $detail Upstream message.
+	 * @return string Suggestion, or '' when there is nothing useful to add.
+	 */
+	public static function error_hint( $code, $detail ) {
+		$detail = strtolower( (string) $detail );
+
+		if ( false !== strpos( $detail, 'internal error' ) ) {
+			return __( 'The agent itself failed — the connection, key and origin were all fine. The usual cause is permissions: a publishable key runs as the non-admin user it is bound to, and that user needs the agent’s “use” permission plus access to every knowledge or data source the agent reads. A newly created agent does not inherit these; check the agent’s Permissions tab in RisingTide.', 'newtide-public-agent' );
+		}
+
+		if ( 'unauthorized' === $code ) {
+			return __( 'Check the key was created on the platform this site points at — a UAT key cannot be used against production, or the reverse.', 'newtide-public-agent' );
+		}
+
+		if ( 'rate_limited' === $code ) {
+			return __( 'The agent API is throttling this site. It clears on its own; the expected traffic level set when the key was created governs the limit.', 'newtide-public-agent' );
+		}
+
+		return '';
+	}
+
+	/**
 	 * Generic, visitor-safe message for a gateway error code. Never leaks the
 	 * raw gateway message or the fact that a credential was rejected.
 	 *

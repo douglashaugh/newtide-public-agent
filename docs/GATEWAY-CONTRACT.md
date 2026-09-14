@@ -135,7 +135,7 @@
 > **Rate limiting** — HTTP 429 with a `Retry-After` header in seconds. The embed UI
 > turns that into escalating copy (seconds / minutes / "daily limit").
 >
-> ### Newly created agents return "Internal error." (open, 2026-09-13)
+> ### Newly created agents return "Internal error." — RESOLVED 2026-09-14
 >
 > Only a pre-existing agent answers. Every agent created during this
 > investigation fails on first message, in both environments.
@@ -157,23 +157,34 @@
 >   working and a failing agent. A populated `nickName` was the only difference;
 >   clearing it changed nothing.
 >
-> **Leading hypothesis.** New agent platform tooling went to production the week
-> of 2026-09-08. TEI predates it; every failing agent was created after. If agents
-> built with the new tooling cannot be executed by the legacy public-agent runtime
-> this API serves, the observations follow exactly: registration and metadata
-> succeed, execution fails. That would make this a migration boundary rather than
-> a bug in any one agent — and the plugin's target, not its behaviour, is what
-> needs to change.
+> **Cause: permissions in RisingTide.** A publishable key runs as the non-admin
+> user it is bound to. That user needs the agent's **"use"** permission plus
+> access to every knowledge or data source the agent reads. A newly created agent
+> does not inherit these, so registration and metadata succeed while execution
+> fails — `Internal error.` is what a permissions gap looks like from outside.
+> The Publishing tab has warned about this since 0.1.0: *"If the widget appears
+> but the agent errors out, check this first."* It was right.
+>
+> **A hypothesis that was wrong, recorded so it is not revisited:** that agents
+> built with the new agent tooling (production, week of 2026-09-08) could not be
+> executed by the legacy public-agent runtime, TEI predating it and every failing
+> agent postdating it. It fitted every observation and was still false. The
+> correlation was real — the new agents were new, and nobody had granted their
+> permissions — but the cause was setup, not a migration boundary.
 >
 > **Not answerable from WordPress.** The public API exposes five display fields and
 > no execution detail. The only actionable signal in the whole investigation was an
 > error string inside a 200 response. Worth raising on its own: an integrator has
 > no supported way to see why an agent is failing.
 >
-> **Next tests, all platform-side:** the Playground on a failing agent (runs as a
-> super admin; the key runs as its bound non-admin user — splits permissions from
-> configuration); a key on TEI bound to the failing key's user; and a bare agent
-> with no knowledge or tools, to see whether *any* newly created agent works.
+> **The test that would have found it fastest** was the Playground on a failing
+> agent: it runs as a super admin while the key runs as its bound non-admin user,
+> so a Playground that answers while the key does not isolates permissions in one
+> click. Reach for that before comparing metadata — the public payload cannot show
+> the cause, and two structurally identical payloads say nothing about it.
+>
+> Since 0.6.8 the plugin says this itself: an upstream "Internal error." is
+> reported in Service Status with permissions named as the likely cause.
 
 > ### Conversation continuity: none, and not for want of asking
 >

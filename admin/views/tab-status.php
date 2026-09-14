@@ -58,6 +58,12 @@ echo $npa_admin->status_html(); // phpcs:ignore WordPress.Security.EscapeOutput.
 				<?php if ( '' !== $npa_last_error['detail'] ) : ?>
 					<p class="description"><?php echo esc_html( $npa_last_error['detail'] ); ?></p>
 				<?php endif; ?>
+				<?php
+				$npa_hint = NPA_Rest::error_hint( $npa_last_error['code'], $npa_last_error['detail'] );
+				if ( '' !== $npa_hint ) :
+					?>
+					<p class="description"><strong><?php esc_html_e( 'Likely cause:', 'newtide-public-agent' ); ?></strong> <?php echo esc_html( $npa_hint ); ?></p>
+				<?php endif; ?>
 				<p class="description">
 					<?php
 					printf(
