@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.8.3
+Stable tag: 0.8.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,18 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.8.4 =
+**Test connection now finds the right origin for you.** The Agent API matches
+the origin exactly, so `https://example.com`, `http://example.com` and the two
+`www.` forms are four different entries and a key holds one of them. When a key
+is refused, the plugin now retries the other spellings of your own address and
+names the one that works.
+
+* An address typed without `https://` is stored as https. WordPress's URL
+  sanitizer treats a bare host as `http://`, which is a different origin and
+  fails with nothing on screen to explain why.
+* The Announced origin field always shows the exact string being sent.
 
 = 0.8.3 =
 **Fixes the Announced origin field not saving.** The Agent tab declares which

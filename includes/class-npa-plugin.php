@@ -1612,6 +1612,50 @@ final class NPA_Plugin {
 					'pass'  => isset( $trimmed['api_origin'] ) && 'https://www.example.test' === $trimmed['api_origin'],
 				);
 
+				/*
+				 * A bare host must become https, not http. WordPress's URL
+				 * sanitizer defaults a schemeless string to http://, which is a
+				 * different origin to the exact-match check and fails in a way
+				 * the field gives no clue about. An explicit http:// is still
+				 * respected — someone testing against a local origin means it.
+				 */
+				$bare     = $this->settings->sanitize( array( 'api_origin' => 'www.example.test' ) );
+				$explicit = $this->settings->sanitize( array( 'api_origin' => 'http://local.test' ) );
+
+				/*
+				 * The sweep Test connection runs after a refusal. It must cover
+				 * both axes that fail invisibly, prefer https, and never wander
+				 * off the site's own host.
+				 */
+				$cand = NPA_Gateway_Client_Agent_Api::origin_candidates( 'https://thinkingonenergy.com/some/page/' );
+				$off  = array_filter(
+					$cand,
+					static function ( $o ) {
+						return false === strpos( $o, 'thinkingonenergy.com' );
+					}
+				);
+
+				$checks[] = array(
+					'label' => __( 'A refused origin is retried as www and https before giving up', 'newtide-public-agent' ),
+					'pass'  => array( 'https://thinkingonenergy.com', 'https://www.thinkingonenergy.com', 'http://thinkingonenergy.com', 'http://www.thinkingonenergy.com' ) === $cand
+						&& array() === $off,
+				);
+
+				// A www site should be offered its own spelling first.
+				$cand_www = NPA_Gateway_Client_Agent_Api::origin_candidates( 'https://www.example.test' );
+
+				$checks[] = array(
+					'label' => __( 'The spelling the site already uses is tried first', 'newtide-public-agent' ),
+					'pass'  => isset( $cand_www[0] ) && 'https://www.example.test' === $cand_www[0],
+				);
+
+				$checks[] = array(
+					'label' => __( 'An address typed without https:// is stored as https, not http', 'newtide-public-agent' ),
+					'pass'  => isset( $bare['api_origin'], $explicit['api_origin'] )
+						&& 'https://www.example.test' === $bare['api_origin']
+						&& 'http://local.test' === $explicit['api_origin'],
+				);
+
 				// Empty must mean "this site", so the default install needs no
 				// thought at all.
 				NPA_Settings::begin_test_override(

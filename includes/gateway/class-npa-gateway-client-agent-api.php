@@ -265,6 +265,40 @@ class NPA_Gateway_Client_Agent_Api implements NPA_Gateway_Client {
 	}
 
 	/**
+	 * The spellings of one host, in the order worth trying.
+	 *
+	 * The allow-list is matched exactly, so scheme and www are two axes that
+	 * differ invisibly: https://example.com, http://example.com and the two www
+	 * forms are four distinct entries, and a key normally holds one. https and
+	 * the form the site already uses come first, being the likely answers.
+	 *
+	 * Derived from one host, so this only ever produces spellings of an address
+	 * the caller already has.
+	 *
+	 * @param string $url A site URL, e.g. home_url().
+	 * @return string[] Candidate origins, most likely first.
+	 */
+	public static function origin_candidates( $url ) {
+		$host = (string) wp_parse_url( (string) $url, PHP_URL_HOST );
+
+		if ( '' === $host ) {
+			return array();
+		}
+
+		$bare = preg_replace( '/^www\./i', '', $host );
+		$hosts = ( 0 === strcasecmp( $host, $bare ) ) ? array( $bare, 'www.' . $bare ) : array( 'www.' . $bare, $bare );
+
+		$out = array();
+		foreach ( array( 'https', 'http' ) as $scheme ) {
+			foreach ( $hosts as $h ) {
+				$out[] = $scheme . '://' . $h;
+			}
+		}
+
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
 	 * {@inheritDoc}
 	 *
 	 * No list endpoint: one key, one agent.

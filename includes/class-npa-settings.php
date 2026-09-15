@@ -407,6 +407,20 @@ class NPA_Settings {
 			if ( '' === $raw ) {
 				$clean['api_origin'] = '';
 			} else {
+				/*
+				 * Typing the bare host is the natural thing to do, and
+				 * esc_url_raw() reads a schemeless string as http:// — a
+				 * different origin from https:// to the exact-match check on the
+				 * far side, and rejected for a reason nothing on screen would
+				 * explain. Assume https, which is what a key's allow-list holds
+				 * in practice. The field shows the stored result either way, so
+				 * a wrong assumption is visible and correctable rather than
+				 * silent.
+				 */
+				if ( ! preg_match( '#^[a-z][a-z0-9+.\-]*://#i', $raw ) ) {
+					$raw = 'https://' . ltrim( $raw, '/' );
+				}
+
 				$parts = wp_parse_url( esc_url_raw( $raw, array( 'http', 'https' ) ) );
 
 				if ( ! empty( $parts['host'] ) ) {

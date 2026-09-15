@@ -1189,6 +1189,43 @@ class NPA_Admin {
 	}
 
 	/**
+	 * Try the spellings of this site's own origin and return the first the key
+	 * accepts, or '' if none do.
+	 *
+	 * Scheme and www are the two axes that differ silently: the allow-list is
+	 * matched exactly, so https://example.com, http://example.com and the www
+	 * forms are four distinct entries and a key normally holds one of them.
+	 *
+	 * Candidates are derived from home_url() only, so this reports how to spell
+	 * an address the site already has. Each is one small completion, and the
+	 * sweep stops at the first success.
+	 *
+	 * @param NPA_Settings $s       Settings.
+	 * @param string       $already The origin already tried, skipped here.
+	 * @return string The working origin, or ''.
+	 */
+	private function find_working_origin( NPA_Settings $s, $already ) {
+		$candidates = NPA_Gateway_Client_Agent_Api::origin_candidates( home_url() );
+
+		$base = $s->get_agent_api_base_url();
+		$key  = $s->get_agent_api_key();
+
+		foreach ( $candidates as $candidate ) {
+			if ( $candidate === $already ) {
+				continue;
+			}
+
+			$health = ( new NPA_Gateway_Client_Agent_Api( $base, $key, $candidate ) )->health_check();
+
+			if ( $health->ok ) {
+				return $candidate;
+			}
+		}
+
+		return '';
+	}
+
+	/**
 	 * Return what the API says about the agent this key resolves to.
 	 *
 	 * Diagnostic. When one agent answers and another returns "Internal error."
@@ -1276,8 +1313,38 @@ class NPA_Admin {
 				);
 			}
 
-			$client = new NPA_Gateway_Client_Agent_Api( $s->get_agent_api_base_url(), $s->get_agent_api_key(), $s->get_agent_api_origin() );
-			$health = $client->health_check();
+			$configured = $s->get_agent_api_origin();
+			$client     = new NPA_Gateway_Client_Agent_Api( $s->get_agent_api_base_url(), $s->get_agent_api_key(), $configured );
+			$health     = $client->health_check();
+
+			/*
+			 * A refusal cannot say whether the key is wrong or the origin is, and
+			 * the origin is the half a site owner can be wrong about without any
+			 * way to tell: the match is exact, so www and the bare host, http and
+			 * https are four different origins. Rather than have someone change
+			 * the field and press this button four times, try the variants here
+			 * and name the one that works. Only on a refusal, and only for the
+			 * site's own host — this finds a spelling, it does not search for
+			 * someone else's origin.
+			 */
+			if ( ! $health->ok && false !== stripos( $health->message, 'allowed origins' ) ) {
+				$found = $this->find_working_origin( $s, $configured );
+
+				if ( '' !== $found ) {
+					wp_send_json_success(
+						array(
+							'ok'      => false,
+							'message' => sprintf(
+								/* translators: 1: the origin that worked, 2: the origin currently announced. */
+								__( 'The key works, but not with the address this site announces. It connected announcing %1$s, and this site announces %2$s. Put %1$s in the Announced origin field above and save.', 'newtide-public-agent' ),
+								$found,
+								$configured
+							),
+							'latency' => (int) $health->latency_ms,
+						)
+					);
+				}
+			}
 
 			wp_send_json_success(
 				array(

@@ -143,12 +143,12 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 						);
 						?>
 					</p>
-					<?php if ( $npa_is_api && $npa_sending_origin !== $npa_site_origin ) : ?>
+					<?php if ( $npa_is_api ) : ?>
 						<p class="description">
 							<?php
 							printf(
 								/* translators: %s: the origin actually sent. */
-								esc_html__( 'Currently announcing %s.', 'newtide-public-agent' ),
+								esc_html__( 'Currently announcing %s — this exact string must be on the key’s allowed-origins list.', 'newtide-public-agent' ),
 								'<code>' . esc_html( $npa_sending_origin ) . '</code>'
 							);
 							?>
