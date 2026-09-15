@@ -40,6 +40,7 @@ $npa_resolved     = $npa_public_api ? $npa_agents : array();
 $npa_unused_credential = $settings->gateway_key_is_set() && ! $npa_legacy_gw;
 $npa_is_embed     = ( 'embed' === $npa_mode );
 $npa_is_api       = ( 'api' === $npa_mode );
+$npa_is_proxy     = ( 'proxy' === $npa_mode );
 $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', array() ) );
 ?>
 <?php $npa_admin->tab_intro( 'dashicons-admin-links', __( 'Agent connection', 'newtide-public-agent' ), __( 'Link this site to your published NewTide agent and choose where it appears.', 'newtide-public-agent' ) ); ?>
@@ -70,6 +71,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			<th scope="row"><label for="npa-mode"><?php esc_html_e( 'Connection mode', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<select id="npa-mode" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[mode]">
+					<option value="api" <?php selected( $settings->get_mode(), 'api' ); ?>><?php esc_html_e( 'Agent API — the plugin’s own widget via NewTide’s OpenAI-compatible API', 'newtide-public-agent' ); ?></option>
 					<option value="proxy" <?php selected( $settings->get_mode(), 'proxy' ); ?>><?php esc_html_e( 'Proxy — the plugin’s own widget via the server-side gateway', 'newtide-public-agent' ); ?></option>
 					<option value="embed" <?php selected( $settings->get_mode(), 'embed' ); ?>><?php esc_html_e( 'Embed — RisingTide’s public widget via a publishable key', 'newtide-public-agent' ); ?></option>
 				</select>
@@ -211,7 +213,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	</table>
 	<?php $npa_admin->card_close(); ?>
 
-	<div data-npa-mode="proxy" <?php echo $npa_is_embed ? 'hidden' : ''; ?>>
+	<div data-npa-mode="proxy" <?php echo $npa_is_proxy ? '' : 'hidden'; ?>>
 	<?php if ( $settings->public_api_available() ) : ?>
 		<div class="notice notice-info inline">
 			<p>

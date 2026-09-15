@@ -1038,6 +1038,30 @@ final class NPA_Plugin {
 					'pass'  => '__npa_override_probe__' === $seen_label && $raw_before === $raw_after,
 				);
 
+				/*
+				 * Every supported mode must be offered in the Connection dropdown,
+				 * and the dropdown must offer nothing else. Agent API shipped in
+				 * 0.8.0 accepted everywhere except the <option> tag, so the mode
+				 * existed, validated and saved but could not be chosen. Reading the
+				 * view source rather than rendering it keeps this check free of the
+				 * admin bootstrap, and the failure being guarded against is a
+				 * missing line of markup.
+				 */
+				$view      = (string) @file_get_contents( NPA_PLUGIN_DIR . 'admin/views/tab-agent.php' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+				$select    = '';
+				if ( preg_match( '/<select id="npa-mode".*?<\/select>/s', $view, $m ) ) {
+					$select = $m[0];
+				}
+				preg_match_all( '/<option value="([a-z_]+)"/', $select, $found );
+				$offered = $found[1];
+
+				$checks[] = array(
+					'label' => __( 'Every connection mode can actually be selected in the admin', 'newtide-public-agent' ),
+					'pass'  => '' !== $select
+						&& array() === array_diff( NPA_Settings::MODES, $offered )
+						&& array() === array_diff( $offered, NPA_Settings::MODES ),
+				);
+
 				return $checks;
 			}
 		);

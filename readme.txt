@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.8.0
+Stable tag: 0.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,17 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.8.1 =
+**Fixes Agent API being impossible to select.** 0.8.0 added the mode everywhere
+except the dropdown itself, so it validated, saved and ran but could not be
+chosen in the admin. It is now the first option in Connection mode.
+
+* Agent API appears in the Connection mode dropdown.
+* Proxy-only fields (Gateway settings, the public-API notice) no longer show in
+  Agent API mode when JavaScript is unavailable.
+* Added a test that fails if a supported mode is ever missing from the dropdown
+  again, or if the dropdown offers one that is not supported.
 
 = 0.8.0 =
 **New connection mode: Agent API.** NewTide's documented, OpenAI-compatible
