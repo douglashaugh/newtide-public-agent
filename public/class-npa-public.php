@@ -485,10 +485,8 @@ class NPA_Public {
 		 * fingerprint lets the proxy look up which key to call with, while the
 		 * browser only ever names a row this site has stored.
 		 */
-		$own_key = (string) $s->get_public_key();
-
 		$defaults = array(
-			'agent'    => '' !== $own_key ? NPA_Settings::key_fingerprint( $own_key ) : $s->get_agent_id(),
+			'agent'    => $s->agent_reference(),
 			'greeting' => $s->get( 'greeting' ),
 			'label'    => $s->get( 'launcher_label' ),
 			'position' => $s->get( 'position' ),

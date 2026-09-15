@@ -526,6 +526,25 @@ class NPA_Settings {
 	}
 
 	/**
+	 * How this site names its own agent in page markup.
+	 *
+	 * The publishable key selects the agent upstream, so a page names the key by
+	 * fingerprint; only a site with no key falls back to a stored agent id. This
+	 * is the single definition — the renderer, the proxy and the test battery all
+	 * call it. They each used to work it out themselves, and drifted the moment
+	 * the rule changed: the mount carried a fingerprint while the test still
+	 * expected an agent id, so it passed wherever no key was set and failed on
+	 * every site that had one.
+	 *
+	 * @return string
+	 */
+	public function agent_reference() {
+		$key = trim( (string) $this->get_public_key() );
+
+		return '' !== $key ? self::key_fingerprint( $key ) : (string) $this->get_agent_id();
+	}
+
+	/**
 	 * A short, stable reference to a publishable key.
 	 *
 	 * Used in page markup instead of the key itself. The key is publishable, so

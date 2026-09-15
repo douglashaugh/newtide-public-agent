@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.7.5
+Stable tag: 0.7.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,14 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.7.6 =
+* Fixes two front-end checks failing on any site that has a publishable key set —
+  which is every configured site. Since 0.7.1 a page names its agent by a
+  fingerprint of the key, but the tests still expected the older agent ID, so they
+  passed wherever no key was configured and failed wherever one was. There is now
+  a single definition of how a page names its agent, used by the widget, the relay
+  and the tests alike, so the three cannot drift apart again.
 
 = 0.7.5 =
 * **Fixes "Run tests" failing on any site with Akismet installed** — which is most

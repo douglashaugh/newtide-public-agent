@@ -1956,9 +1956,9 @@ final class NPA_Plugin {
 				remove_filter( 'npa_gateway_key', $inject );
 
 				$checks[] = array(
-					'label' => __( 'Shortcode renders a widget mount node with the agent id', 'newtide-public-agent' ),
+					'label' => __( 'Shortcode renders a widget mount node naming this site’s agent', 'newtide-public-agent' ),
 					'pass'  => false !== strpos( $html, 'data-npa-widget' )
-						&& false !== strpos( $html, $this->settings->get_agent_id() ),
+						&& false !== strpos( $html, 'data-agent="' . $this->settings->agent_reference() . '"' ),
 				);
 
 				$checks[] = array(
@@ -1986,7 +1986,7 @@ final class NPA_Plugin {
 				// proxy will fall back to the default and per-page agents break.
 				$checks[] = array(
 					'label' => __( 'The mount node carries a valid signature for its agent id', 'newtide-public-agent' ),
-					'pass'  => false !== strpos( $html, 'data-agent-token="' . NPA_Rest::agent_token( $this->settings->get_agent_id() ) . '"' ),
+					'pass'  => false !== strpos( $html, 'data-agent-token="' . NPA_Rest::agent_token( $this->settings->agent_reference() ) . '"' ),
 				);
 
 				/*
