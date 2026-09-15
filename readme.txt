@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.7.2
+Stable tag: 0.7.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,23 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.7.3 =
+Service Status tidied:
+* **The same three figures were on the page three times** — messages, error rate
+  and average latency appeared in the analytics tiles, the health roll-up and the
+  activity table. The tiles keep them; the health line now reports health ("Last
+  12 calls succeeded", or the failure rate when there is one), and the activity
+  card becomes **Connection**: whether this site can reach an agent, and what went
+  wrong if it could not.
+* **Busiest agents reads properly.** Calls through the main agent were recorded
+  under whatever agent ID happened to be stored — a UUID, or a leftover — sitting
+  beside additional agents shown by name. The main agent is now labelled as such.
+* Running the tests no longer leaves rows behind. Test rows were identified by a
+  sentinel agent ID, which stopped matching once calls recorded a display name,
+  and matching on that name would have deleted real rows. Each suite now records
+  where the table ended and removes only what it added — verified by counting
+  rows either side of a run.
 
 = 0.7.2 =
 The Tests tab works again, and shows you the half that is about your site.

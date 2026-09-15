@@ -164,8 +164,15 @@ class NPA_Rest {
 	private function resolve_agent( $request ) {
 		$settings = $this->plugin->settings;
 
+		/*
+		 * Label, not identifier. Agents are configured by key now, so a stored
+		 * agent id is at best a UUID and at worst a leftover — and Service
+		 * Status is asking "which of my agents is busy", which only reads if
+		 * additional agents show their row name and the default shows as the
+		 * default rather than as an opaque string beside them.
+		 */
 		$default = array(
-			'label'  => $settings->get_agent_id(),
+			'label'  => __( 'Main agent', 'newtide-public-agent' ),
 			'client' => null,
 		);
 

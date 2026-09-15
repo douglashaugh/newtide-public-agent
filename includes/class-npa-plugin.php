@@ -297,25 +297,34 @@ final class NPA_Plugin {
 			__( 'Usage history', 'newtide-public-agent' ),
 			function () {
 				$agg = $this->store->aggregates( 50 );
+				$ok  = $agg['error_rate'] <= 0.10;
 
-				// Only claim a latency figure when live calls produced one.
-				$latency = $agg['live_count'] > 0
-					? sprintf(
-						/* translators: %d: average latency in milliseconds. */
-						__( '%d ms avg.', 'newtide-public-agent' ),
-						$agg['avg_latency_ms']
-					)
-					: __( 'mock only, no live latency yet.', 'newtide-public-agent' );
+				/*
+				 * A health line, not a third copy of the numbers: the analytics
+				 * tiles above already carry volume, error rate and latency. Say
+				 * whether the last calls succeeded, and quantify only the failure
+				 * — which is the part that needs acting on.
+				 */
+				if ( 0 === $agg['count'] ) {
+					$message = __( 'No calls recorded yet.', 'newtide-public-agent' );
+				} elseif ( $ok ) {
+					$message = sprintf(
+						/* translators: %d: number of recent calls. */
+						_n( 'Last %d call succeeded.', 'Last %d calls succeeded.', $agg['count'], 'newtide-public-agent' ),
+						$agg['count']
+					);
+				} else {
+					$message = sprintf(
+						/* translators: 1: error rate percent, 2: number of recent calls. */
+						__( '%1$s%% of the last %2$d calls failed. See Last error below.', 'newtide-public-agent' ),
+						number_format_i18n( $agg['error_rate'] * 100, 1 ),
+						$agg['count']
+					);
+				}
 
 				return array(
-					'ok'      => $agg['error_rate'] <= 0.10,
-					'message' => sprintf(
-						/* translators: 1: recent call count, 2: error rate percent, 3: latency phrase. */
-						__( '%1$d recent calls, %2$s%% errors, %3$s', 'newtide-public-agent' ),
-						$agg['count'],
-						number_format_i18n( $agg['error_rate'] * 100, 1 ),
-						$latency
-					),
+					'ok'      => $ok,
+					'message' => $message,
 				);
 			}
 		);
@@ -1248,9 +1257,19 @@ final class NPA_Plugin {
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
 				delete_transient( 'npa_rl_' . md5( isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown' ) );
 
-				// Real dispatch with a sentinel agent id; assert + clean up.
+				// Real dispatch; assert + clean up.
 				global $wpdb;
 				NPA_Settings::begin_test_override( array( 'agent_id' => '__npa_rest_test__' ) );
+
+				/*
+				 * Remember where the table ends, and delete past that point
+				 * afterwards. Rows used to be identified by a sentinel agent id,
+				 * which stopped working when calls began recording a readable
+				 * agent name — and deleting by that name would now take real
+				 * rows with it.
+				 */
+				$seen  = $this->store->recent( 1 );
+				$since = isset( $seen[0]['id'] ) ? (int) $seen[0]['id'] : 0;
 
 				$before  = $this->store->count_today();
 				$request = new WP_REST_Request( 'POST', '/npa/v1/message' );
@@ -1371,16 +1390,15 @@ final class NPA_Plugin {
 				$last     = $this->store->recent( 1 );
 				$checks[] = array(
 					'label' => __( 'An unsigned or forged agent id falls back to the default agent', 'newtide-public-agent' ),
-					'pass'  => isset( $last[0]['agent_id'] ) && '__npa_rest_test__' === $last[0]['agent_id'],
+					'pass'  => isset( $last[0]['agent_id'] ) && __( 'Main agent', 'newtide-public-agent' ) === $last[0]['agent_id'],
 				);
 
 				remove_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
 
-				// Cleanup — leave no test data behind.
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => 'Pricing bot' ), array( '%s' ) );
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_rest_test__' ), array( '%s' ) );
+				// Cleanup — every row this suite added, and nothing else.
+				$usage = $this->store->table_name();
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->query( $wpdb->prepare( "DELETE FROM {$usage} WHERE id > %d", $since ) );
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
 
 				return $checks;
@@ -1763,6 +1781,17 @@ final class NPA_Plugin {
 
 				$secret = 'npa-transcript-probe-' . wp_generate_password( 8, false );
 
+				/*
+				 * Watermark both tables. Turns written through the proxy are
+				 * labelled with the agent's display name now, so deleting by a
+				 * sentinel agent id no longer finds them — and deleting by the
+				 * display name would take a real visitor's transcript with it.
+				 */
+				$seen_u  = $this->store->recent( 1 );
+				$since_u = isset( $seen_u[0]['id'] ) ? (int) $seen_u[0]['id'] : 0;
+				$seen_t  = $this->store->recent_transcripts( 1 );
+				$since_t = isset( $seen_t[0]['id'] ) ? (int) $seen_t[0]['id'] : 0;
+
 				// OFF (the default): a real proxy call must persist nothing.
 				NPA_Settings::begin_test_override( array(
 						'agent_id'          => '__npa_t_test__',
@@ -1795,7 +1824,7 @@ final class NPA_Plugin {
 				$server->dispatch( $on_req );
 
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$stored   = $wpdb->get_results( $wpdb->prepare( "SELECT role FROM {$table} WHERE agent_id = %s", '__npa_t_test__' ), ARRAY_A );
+				$stored   = $wpdb->get_results( $wpdb->prepare( "SELECT role FROM {$table} WHERE content LIKE %s OR content LIKE %s", '%' . $wpdb->esc_like( $secret ) . '%', '%' . $wpdb->esc_like( 'Mock agent reply' ) . '%' ), ARRAY_A );
 				$roles    = wp_list_pluck( is_array( $stored ) ? $stored : array(), 'role' );
 				$checks[] = array(
 					'label' => __( 'With storage on, both the visitor message and the agent reply are recorded', 'newtide-public-agent' ),
@@ -1858,10 +1887,11 @@ final class NPA_Plugin {
 				remove_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
 
 				// Cleanup — never leave probe content behind.
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$wpdb->delete( $table, array( 'agent_id' => '__npa_t_test__' ), array( '%s' ) );
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-				$wpdb->delete( $this->store->table_name(), array( 'agent_id' => '__npa_t_test__' ), array( '%s' ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id > %d", $since_t ) );
+				$usage_t = $this->store->table_name();
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->query( $wpdb->prepare( "DELETE FROM {$usage_t} WHERE id > %d", $since_u ) );
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
 
 				return $checks;

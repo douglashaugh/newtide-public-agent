@@ -37,7 +37,7 @@ echo $npa_admin->status_html(); // phpcs:ignore WordPress.Security.EscapeOutput.
 ?>
 <?php $npa_admin->card_close(); ?>
 
-<?php $npa_admin->card_open( __( 'Recent activity', 'newtide-public-agent' ), __( 'Configuration state and the last 50 recorded calls.', 'newtide-public-agent' ) ); ?>
+<?php $npa_admin->card_open( __( 'Connection', 'newtide-public-agent' ), __( 'Whether this site can reach an agent, and what went wrong if it could not.', 'newtide-public-agent' ) ); ?>
 <table class="npa-status widefat striped">
 	<tbody>
 		<tr>
@@ -77,37 +77,7 @@ echo $npa_admin->status_html(); // phpcs:ignore WordPress.Security.EscapeOutput.
 		</tr>
 		<?php endif; ?>
 
-		<tr>
-			<th scope="row"><?php esc_html_e( 'Recent calls (last 50)', 'newtide-public-agent' ); ?></th>
-			<td><?php echo esc_html( (string) $npa_agg['count'] ); ?></td>
-		</tr>
-		<tr>
-			<th scope="row"><?php esc_html_e( 'Error rate', 'newtide-public-agent' ); ?></th>
-			<td><?php echo esc_html( number_format_i18n( $npa_agg['error_rate'] * 100, 1 ) . '%' ); ?></td>
-		</tr>
-		<tr>
-			<th scope="row"><?php esc_html_e( 'Average latency', 'newtide-public-agent' ); ?></th>
-			<td>
-				<?php
-				if ( $npa_agg['live_count'] > 0 ) {
-					echo esc_html( (string) $npa_agg['avg_latency_ms'] . ' ms' );
-					if ( $npa_agg['mock_count'] > 0 ) {
-						echo ' <span class="description">';
-						printf(
-							/* translators: %d: number of mock-served calls excluded from the average. */
-							esc_html( _n( '(excludes %d mock call)', '(excludes %d mock calls)', (int) $npa_agg['mock_count'], 'newtide-public-agent' ) ),
-							(int) $npa_agg['mock_count']
-						);
-						echo '</span>';
-					}
-				} else {
-					esc_html_e( 'No live calls yet — recent traffic was served by the built-in mock.', 'newtide-public-agent' );
-				}
-				?>
-			</td>
-		</tr>
-	</tbody>
-</table>
+	</table>
 <?php $npa_admin->card_close(); ?>
 
 <?php $npa_admin->card_open( __( 'Transcripts', 'newtide-public-agent' ), __( 'Stored message content, its retention window, and controls to delete it.', 'newtide-public-agent' ) ); ?>
