@@ -1056,6 +1056,31 @@ final class NPA_Plugin {
 				preg_match_all( '/<option value="([a-z_]+)"/', $select, $found );
 				$offered = $found[1];
 
+				/*
+				 * A tabbed form saves only the keys it declares in its _present
+				 * list; anything rendered but undeclared is dropped on save with
+				 * no error, and the field simply appears not to work. The
+				 * api_origin field shipped that way in 0.8.2. Compare what the
+				 * view renders against what it declares.
+				 */
+				preg_match_all( '/NPA_Settings::OPTION \); \?>\[([a-z_]+)\]/', $view, $rendered );
+				$rendered_keys = array_values( array_unique( $rendered[1] ) );
+
+				// One region covers both the literal list and the conditional
+				// appends beside it, so nothing has to match a dollar sign.
+				$declared = array();
+				if ( preg_match( '/npa_present = array\((.*?)present_fields\(/s', $view, $dm ) ) {
+					preg_match_all( "/'([a-z_]+)'/", $dm[1], $dl );
+					$declared = $dl[1];
+				}
+
+				$undeclared = array_diff( $rendered_keys, $declared );
+
+				$checks[] = array(
+					'label' => __( 'Every field on the Agent tab is one the form actually saves', 'newtide-public-agent' ),
+					'pass'  => array() !== $rendered_keys && array() === $undeclared,
+				);
+
 				$checks[] = array(
 					'label' => __( 'Every connection mode can actually be selected in the admin', 'newtide-public-agent' ),
 					'pass'  => '' !== $select

@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.8.2
+Stable tag: 0.8.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,15 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.8.3 =
+**Fixes the Announced origin field not saving.** The Agent tab declares which
+settings it is responsible for, so that saving one tab cannot clear another's.
+The new field was not on that list, so it rendered, accepted a value, and
+discarded it on save.
+
+* Announced origin now saves.
+* Added a test that fails if any field on the tab is not one the form saves.
 
 = 0.8.2 =
 **The origin announced to the Agent API can now be set.** The key's

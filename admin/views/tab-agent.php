@@ -57,6 +57,9 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	if ( ! defined( 'NPA_AGENT_API_KEY' ) ) {
 		$npa_present[] = 'api_key';
 	}
+	if ( ! defined( 'NPA_AGENT_API_ORIGIN' ) ) {
+		$npa_present[] = 'api_origin';
+	}
 	if ( ! defined( 'NPA_PUBLIC_KEY' ) ) {
 		$npa_present[] = 'public_key';
 	}
