@@ -4,6 +4,25 @@
 
 	var cfg = window.NPA_ADMIN || {};
 
+	// Like post(), but hands back status and raw body so a non-JSON reply can be
+	// reported rather than collapsing into "Request failed".
+	function postRaw( action ) {
+		var body = new URLSearchParams();
+		body.set( 'action', action );
+		body.set( 'nonce', cfg.nonce );
+
+		return fetch( cfg.ajaxUrl, {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			body: body.toString()
+		} ).then( function ( r ) {
+			return r.text().then( function ( t ) {
+				return { ok: r.ok, status: r.status, body: t };
+			} );
+		} );
+	}
+
 	function post( action ) {
 		var body = new URLSearchParams();
 		body.set( 'action', action );
@@ -59,10 +78,25 @@
 			status.textContent = cfg.runningText || 'Running…';
 		}
 
-		post( 'npa_run_tests' ).then( function ( res ) {
+		/* Read the body as text first. "Request failed" covered a stale nonce, a
+		   PHP fatal and a truncated response alike — all arriving as something
+		   that is not the JSON we expect, and all needing different fixes. */
+		postRaw( 'npa_run_tests' ).then( function ( r ) {
 			btn.disabled = false;
-			if ( res && res.success ) {
-				var d = res.data || {};
+
+			var parsed = null;
+			try {
+				parsed = JSON.parse( r.body );
+			} catch ( e ) {
+				parsed = null;
+			}
+
+			function plain( t ) {
+				return String( t ).replace( /<[^>]*>/g, ' ' ).replace( /\s+/g, ' ' ).trim().slice( 0, 200 );
+			}
+
+			if ( parsed && parsed.success ) {
+				var d = parsed.data || {};
 				if ( status ) {
 					var pass = d.passed === d.total;
 					status.className = 'npa-test-result ' + ( pass ? 'is-ok' : 'is-error' );
@@ -70,16 +104,36 @@
 				}
 				if ( results && typeof d.html === 'string' ) {
 					results.innerHTML = d.html;
+					if ( d.notice ) {
+						var warn = document.createElement( 'p' );
+						warn.className = 'npa-test-result is-error';
+						warn.textContent = d.notice;
+						results.insertBefore( warn, results.firstChild );
+					}
 				}
-			} else if ( status ) {
-				status.className = 'npa-test-result is-error';
-				status.textContent = ( res && res.data && res.data.message ) || cfg.errorText;
+				return;
 			}
-		} ).catch( function () {
+
+			if ( ! status ) {
+				return;
+			}
+
+			status.className = 'npa-test-result is-error';
+
+			if ( parsed && parsed.data && parsed.data.message ) {
+				status.textContent = parsed.data.message;
+			} else if ( parsed === -1 || r.status === 403 ) {
+				status.textContent = 'Your session expired — reload the page and try again.';
+			} else if ( ! r.ok ) {
+				status.textContent = 'The server returned HTTP ' + r.status + '. ' + plain( r.body );
+			} else {
+				status.textContent = 'Unexpected response: ' + plain( r.body );
+			}
+		} ).catch( function ( e ) {
 			btn.disabled = false;
 			if ( status ) {
 				status.className = 'npa-test-result is-error';
-				status.textContent = cfg.errorText || 'Request failed.';
+				status.textContent = 'Could not reach the server: ' + ( e && e.message ? e.message : 'network error' );
 			}
 		} );
 	}

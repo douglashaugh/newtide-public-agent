@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.7.3
+Stable tag: 0.7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,18 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.7.4 =
+* **"Run tests" now says what went wrong.** That button reported "Request failed,
+  please try again" for an expired login, a PHP error and a run that was cut short
+  alike — three different problems with three different fixes, all wearing the same
+  message. It now reports the actual one: an expired session tells you to reload,
+  a PHP error names the error, file and line, and anything else shows the server's
+  response.
+* The run itself is more robust: a longer time limit, since the battery makes real
+  requests and writes to two tables, and any stray PHP output is captured and
+  reported rather than being allowed to corrupt the response — which is one of the
+  ways the old message appeared.
 
 = 0.7.3 =
 Service Status tidied:

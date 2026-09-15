@@ -1307,13 +1307,56 @@ class NPA_Admin {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'newtide-public-agent' ) ), 403 );
 		}
 
-		$snapshot = $this->plugin->test_runner->run_all();
+		/*
+		 * The battery dispatches REST requests and writes to two tables, so give
+		 * it room: a run cut short by the default time limit returns a truncated
+		 * body, which reaches the browser as "Request failed" and says nothing.
+		 */
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 120 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- disabled on some hosts.
+		}
+
+		/*
+		 * Anything a suite prints — a notice, a stray warning — lands in the
+		 * middle of the JSON and makes the whole response unparseable. Capture it
+		 * and report it as a finding rather than letting it corrupt the reply.
+		 */
+		ob_start();
+
+		try {
+			$snapshot = $this->plugin->test_runner->run_all();
+		} catch ( Throwable $e ) {
+			$stray = ob_get_clean();
+
+			wp_send_json_error(
+				array(
+					'message' => sprintf(
+						/* translators: 1: error message, 2: file, 3: line. */
+						__( 'A test stopped the run: %1$s (%2$s line %3$d)', 'newtide-public-agent' ),
+						$e->getMessage(),
+						basename( $e->getFile() ),
+						(int) $e->getLine()
+					),
+					'stray'   => trim( (string) $stray ),
+				),
+				500
+			);
+		}
+
+		$stray = trim( (string) ob_get_clean() );
 
 		wp_send_json_success(
 			array(
 				'passed' => (int) $snapshot['passed'],
 				'total'  => (int) $snapshot['total'],
 				'html'   => $this->results_html( $snapshot ),
+				'notice' => '' !== $stray
+					? sprintf(
+						/* translators: %s: unexpected output produced during the run. */
+						__( 'PHP produced output during the run, which would otherwise have broken this response: %s', 'newtide-public-agent' ),
+						mb_substr( $stray, 0, 500 )
+					)
+					: '',
 			)
 		);
 	}
