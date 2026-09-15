@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.8.5
+Stable tag: 0.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,26 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.9.0 =
+**The agent's formatting now renders.** Replies arrive in Markdown — price
+tables, bolded figures, bulleted findings — and the widget used to print the raw
+asterisks and pipes. Tables, bold, italic, lists, headings, quotes, code and
+links now render properly, in the widget and in the admin Test drive.
+
+Rendering happens on the server, against an explicit allow-list of tags:
+
+* Text is escaped before anything is parsed, so markup in a reply is inert text
+  before rendering begins.
+* Images, iframes, styles, scripts, event handlers and every unlisted attribute
+  are excluded. A link keeps an http(s) address only, and carries
+  `rel="nofollow noopener ugc"`.
+* Other plugins cannot rewrite a reply on its way to the page.
+* Ten hostile replies are fired at the renderer on every test run.
+
+Charts remain unavailable: the agent's chart tool renders into NewTide's own
+widget and its output is not carried by the API, so there is nothing for the
+plugin to display. Embed mode still shows them.
 
 = 0.8.5 =
 **A refused key now says which of the three causes it is.** "Unauthorized" means

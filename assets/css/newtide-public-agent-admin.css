@@ -1367,3 +1367,21 @@ pre.npa-code {
 	font-weight: 600;
 	padding: .35rem 0;
 }
+
+/* Rendered Markdown in the Test drive bubble — same rules as the front end, so
+   what an admin previews matches what a visitor sees. */
+.npa-td-bubble--rich > *:first-child { margin-top: 0; }
+.npa-td-bubble--rich > *:last-child { margin-bottom: 0; }
+.npa-td-bubble--rich p { margin: 0 0 0.6em; }
+.npa-td-bubble--rich h3,
+.npa-td-bubble--rich h4 { margin: 0.8em 0 0.4em; font-size: 1em; font-weight: 700; }
+.npa-td-bubble--rich ul,
+.npa-td-bubble--rich ol { margin: 0 0 0.6em; padding-left: 1.3em; }
+.npa-td-bubble--rich blockquote { margin: 0 0 0.6em; padding-left: 0.7em; border-left: 3px solid #c3c4c7; }
+.npa-td-bubble--rich code { padding: 0.1em 0.3em; border-radius: 3px; background: rgba( 127, 127, 127, 0.18 ); }
+.npa-td-bubble--rich pre { margin: 0 0 0.6em; padding: 0.6em 0.7em; overflow-x: auto; border-radius: 4px; background: rgba( 127, 127, 127, 0.18 ); }
+.npa-td-bubble--rich pre code { padding: 0; background: none; }
+.npa-td-bubble--rich table { display: block; width: 100%; margin: 0 0 0.6em; overflow-x: auto; border-collapse: collapse; font-size: 0.95em; }
+.npa-td-bubble--rich th,
+.npa-td-bubble--rich td { padding: 0.3em 0.55em; border: 1px solid #dcdcde; text-align: left; white-space: nowrap; }
+.npa-td-bubble--rich th { font-weight: 700; background: #f6f7f7; }

@@ -250,10 +250,19 @@
 		}
 	};
 
-	Widget.prototype.addMessage = function ( who, text, announce ) {
+	/* The agent writes Markdown, so the server sends a rendered, sanitized copy
+	   alongside the plain text. Only that server-rendered HTML is ever inserted
+	   as markup; anything else — the visitor's own message, an error, a reply
+	   from a transport that sends no html — stays textContent. */
+	Widget.prototype.addMessage = function ( who, text, announce, html ) {
 		var msg = el( 'div', 'newtide-public-agent__msg newtide-public-agent__msg--' + who );
 		var bubble = el( 'div', 'newtide-public-agent__bubble' );
-		bubble.textContent = text;
+		if ( 'agent' === who && html ) {
+			bubble.innerHTML = html;
+			bubble.classList.add( 'newtide-public-agent__bubble--rich' );
+		} else {
+			bubble.textContent = text;
+		}
 		if ( announce ) {
 			var prefix = 'agent' === who ? t( 'received', 'Assistant replied' ) : t( 'sent', 'You said' );
 			bubble.setAttribute( 'aria-label', prefix + ': ' + text );
@@ -343,7 +352,7 @@
 				if ( res.data.conversation_id ) {
 					this.conversationId = res.data.conversation_id;
 				}
-				this.addMessage( 'agent', res.data.reply, true );
+				this.addMessage( 'agent', res.data.reply, true, res.data.reply_html );
 			} else {
 				var msg = ( res.data && res.data.error && res.data.error.message ) || this.errorText;
 				this.addMessage( 'agent', msg, true );

@@ -188,6 +188,7 @@ final class NPA_Plugin {
 		$this->register_public_api_tests();
 		$this->register_agent_api_tests();
 		$this->register_conversation_tests();
+		$this->register_markdown_tests();
 		$this->register_transcript_tests();
 		$this->register_widget_tests();
 		$this->register_embed_tests();
@@ -235,6 +236,7 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-store.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-budget.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-conversation.php';
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-markdown.php';
 
 		// REST proxy.
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-rest.php';
@@ -1681,6 +1683,198 @@ final class NPA_Plugin {
 				$checks[] = array(
 					'label' => __( 'Left empty, the plugin announces this site’s own address', 'newtide-public-agent' ),
 					'pass'  => $fallback === NPA_Gateway_Client_Public::site_origin() && '' !== $fallback,
+				);
+
+				return $checks;
+			},
+			'user'
+		);
+	}
+
+	/**
+	 * Register the Markdown rendering suite.
+	 *
+	 * The agent's reply is untrusted text being turned into markup, so these
+	 * checks are split in two: that the formatting a site owner expects appears,
+	 * and that nothing else does. The second half matters more — it is the only
+	 * place in this plugin where a mistake is an XSS hole rather than a
+	 * cosmetic bug.
+	 *
+	 * @return void
+	 */
+	private function register_markdown_tests() {
+		$this->test_runner->register_suite(
+			'markdown',
+			__( 'Reply formatting', 'newtide-public-agent' ),
+			__( 'The agent answers in Markdown — price tables, bolded figures, bulleted lists. These confirm that formatting is rendered rather than shown as raw asterisks and pipes, and that a reply can never inject scripts, styling or tracking into your page.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+
+				$table = "| Fuel | Price |
+|------|-------|
+| Regular | 4.319 |
+| ULSD | 6.285 |";
+				$html  = NPA_Markdown::to_html( $table );
+
+				$checks[] = array(
+					'label' => __( 'A price table is rendered as a table, not as rows of pipes', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $html, '<table>' )
+						&& false !== strpos( $html, '<th>Fuel</th>' )
+						&& false !== strpos( $html, '<td>4.319</td>' )
+						&& false === strpos( $html, '|' ),
+				);
+
+				$rich = NPA_Markdown::to_html( "**Bold** and *italic* and `code`
+
+- one
+- two
+
+1. first
+2. second" );
+
+				$checks[] = array(
+					'label' => __( 'Bold, italic, code and both kinds of list render', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $rich, '<strong>Bold</strong>' )
+						&& false !== strpos( $rich, '<em>italic</em>' )
+						&& false !== strpos( $rich, '<code>code</code>' )
+						&& false !== strpos( $rich, '<ul><li>one</li>' )
+						&& false !== strpos( $rich, '<ol><li>first</li>' ),
+				);
+
+				$link = NPA_Markdown::to_html( '[EIA report](https://www.eia.gov/petroleum/)' );
+
+				$checks[] = array(
+					'label' => __( 'A link is clickable, opens in a new tab and is not endorsed to search engines', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $link, 'href="https://www.eia.gov/petroleum/"' )
+						&& false !== strpos( $link, 'rel="nofollow noopener ugc"' )
+						&& false !== strpos( $link, 'target="_blank"' ),
+				);
+
+				/*
+				 * The injection battery. Each of these is a reply a compromised
+				 * or prompt-injected agent could plausibly send, and none may
+				 * produce live markup.
+				 */
+				$attacks = array(
+					'script tag'        => '<script>alert(1)</script>',
+					'img onerror'       => '<img src=x onerror=alert(1)>',
+					'svg onload'        => '<svg onload=alert(1)></svg>',
+					'iframe'            => '<iframe src="https://evil.test"></iframe>',
+					'javascript link'   => '[click me](javascript:alert(1))',
+					'data uri link'     => '[click me](data:text/html;base64,PHNjcmlwdD4=)',
+					'markdown image'    => '![tracker](https://evil.test/pixel.png)',
+					'style tag'         => '<style>body{display:none}</style>',
+					'event attr in text' => 'onmouseover="alert(1)"',
+					'closing bubble'    => '</div><script>alert(1)</script>',
+				);
+
+				/*
+				 * Check the tags that actually exist in the output, not the words
+				 * in it. An escaped "&lt;img ... onerror=&gt;" is inert text and
+				 * a substring search calls it a leak; only a real tag outside the
+				 * allow-list, a real attribute outside it, or a live href scheme
+				 * is a finding.
+				 */
+				$allowed = NPA_Markdown::allowed_html();
+				$leaked  = array();
+
+				foreach ( $attacks as $name => $payload ) {
+					$rendered = NPA_Markdown::to_html( $payload );
+					$bad      = false;
+
+					if ( preg_match_all( '/<\s*\/?\s*([a-z0-9]+)([^>]*)>/i', $rendered, $tags, PREG_SET_ORDER ) ) {
+						foreach ( $tags as $tag ) {
+							$tag_name = strtolower( $tag[1] );
+
+							if ( ! isset( $allowed[ $tag_name ] ) ) {
+								$bad = true;
+								break;
+							}
+
+							if ( preg_match_all( '/([a-z-]+)\s*=/i', $tag[2], $attrs ) ) {
+								foreach ( $attrs[1] as $attr ) {
+									if ( empty( $allowed[ $tag_name ][ strtolower( $attr ) ] ) ) {
+										$bad = true;
+										break 2;
+									}
+								}
+							}
+						}
+					}
+
+					// An href must be http(s); nothing else may survive.
+					if ( preg_match_all( '/href="([^"]*)"/i', $rendered, $hrefs ) ) {
+						foreach ( $hrefs[1] as $href ) {
+							if ( ! preg_match( '#^https?://#i', html_entity_decode( $href, ENT_QUOTES, 'UTF-8' ) ) ) {
+								$bad = true;
+							}
+						}
+					}
+
+					if ( $bad ) {
+						$leaked[] = $name;
+					}
+				}
+
+				$checks[] = array(
+					'label' => sprintf(
+						/* translators: %d: number of hostile replies tested. */
+						__( 'None of %d hostile replies can inject scripts, frames, images or event handlers', 'newtide-public-agent' ),
+						count( $attacks )
+					),
+					'pass'  => array() === $leaked,
+				);
+
+				/*
+				 * wp_kses runs other plugins' `pre_kses` filters, which rewrite
+				 * content on its way in — Jetpack does this. The renderer
+				 * suspends them so a reply renders as the agent wrote it and the
+				 * checks above describe the real output.
+				 */
+				$hostile = static function ( $content ) {
+					return $content . '<script>alert(1)</script><img src=x onerror=alert(1)>';
+				};
+				add_filter( 'pre_kses', $hostile, 1 );
+				$filtered = NPA_Markdown::to_html( 'Plain reply.' );
+				remove_filter( 'pre_kses', $hostile, 1 );
+
+				$checks[] = array(
+					'label' => __( 'Another plugin cannot rewrite a reply on its way to the page', 'newtide-public-agent' ),
+					'pass'  => '<p>Plain reply.</p>' === $filtered,
+				);
+
+				// A tag typed by the agent should still be readable as text.
+				$escaped = NPA_Markdown::to_html( 'Use the <script> tag carefully.' );
+
+				$checks[] = array(
+					'label' => __( 'Markup the agent mentions is shown as text rather than silently dropped', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $escaped, '&lt;script&gt;' ),
+				);
+
+				// Backticked Markdown must stay literal, or an agent explaining
+				// syntax would see its example rendered instead of shown.
+				$literal = NPA_Markdown::to_html( 'Type `**bold**` to emphasise.' );
+
+				$checks[] = array(
+					'label' => __( 'Markdown inside code formatting stays literal', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $literal, '<code>**bold**</code>' )
+						&& false === strpos( $literal, '<code><strong>' ),
+				);
+
+				// Plain prose must not acquire markup, and must not lose its
+				// line breaks.
+				$plain = NPA_Markdown::to_html( "First line.
+Second line." );
+
+				$checks[] = array(
+					'label' => __( 'An ordinary reply keeps its line breaks and gains nothing else', 'newtide-public-agent' ),
+					'pass'  => '<p>First line.<br />Second line.</p>' === $plain,
+				);
+
+				$checks[] = array(
+					'label' => __( 'An empty reply renders nothing at all', 'newtide-public-agent' ),
+					'pass'  => '' === NPA_Markdown::to_html( '' ) && '' === NPA_Markdown::to_html( "  
+  " ),
 				);
 
 				return $checks;

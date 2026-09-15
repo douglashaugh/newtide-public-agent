@@ -543,7 +543,7 @@
 
 	var conversationId = '';
 
-	function bubble( who, text, cls ) {
+	function bubble( who, text, cls, html ) {
 		var hint = log.querySelector( '.npa-testdrive__hint' );
 		if ( hint ) {
 			hint.remove();
@@ -552,7 +552,14 @@
 		row.className = 'npa-td-msg npa-td-msg--' + who + ( cls ? ' ' + cls : '' );
 		var b = document.createElement( 'div' );
 		b.className = 'npa-td-bubble';
-		b.textContent = text;
+		// Same rule as the front end: only the server-rendered, sanitized copy
+		// is inserted as markup.
+		if ( 'agent' === who && html ) {
+			b.innerHTML = html;
+			b.className += ' npa-td-bubble--rich';
+		} else {
+			b.textContent = text;
+		}
 		row.appendChild( b );
 		log.appendChild( row );
 		log.scrollTop = log.scrollHeight;
@@ -591,7 +598,7 @@
 				if ( res.data.conversation_id ) {
 					conversationId = res.data.conversation_id;
 				}
-				bubble( 'agent', res.data.reply );
+				bubble( 'agent', res.data.reply, '', res.data.reply_html );
 			} else {
 				var err = ( res.data && res.data.error ) || {};
 				// detail is only ever returned to an administrator; visitors get

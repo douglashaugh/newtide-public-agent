@@ -349,6 +349,10 @@ class NPA_Rest {
 			return new WP_REST_Response(
 				array(
 					'reply'           => $result->reply_text,
+					// Rendered here rather than in the widget: turning model
+					// output into markup is the one place a mistake is an XSS
+					// hole, and in PHP it is covered by the test battery.
+					'reply_html'      => NPA_Markdown::to_html( $result->reply_text ),
 					'conversation_id' => $result->conversation_id,
 					'finish_reason'   => $result->finish_reason,
 				),
