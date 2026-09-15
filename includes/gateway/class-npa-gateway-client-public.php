@@ -355,6 +355,17 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * No: /public/chat/stream is single-turn — measured, see docs/GATEWAY-CONTRACT.md.
+	 *
+	 * @return bool
+	 */
+	public function supports_history(): bool {
+		return false;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
 	 * The agent is resolved server-side from the key, so $agent_id and
 	 * $conversation_id are not sent — the API accepts `{message}` alone. The
 	 * conversation id is echoed back so the widget keeps threading its own view
@@ -368,7 +379,7 @@ class NPA_Gateway_Client_Public implements NPA_Gateway_Client {
 	 * @return NPA_Gateway_Result
 	 * @throws NPA_Gateway_Exception On transport or API error.
 	 */
-	public function send_message( string $agent_id, string $message, string $conversation_id, array $context ): NPA_Gateway_Result {
+	public function send_message( string $agent_id, string $message, string $conversation_id, array $context, array $history = array() ): NPA_Gateway_Result {
 		$body = array( 'message' => $message );
 
 		/**

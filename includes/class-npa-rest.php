@@ -260,10 +260,8 @@ class NPA_Rest {
 			}
 
 			$history = NPA_Conversation::load( $conversation_id );
-			$outbound = NPA_Conversation::compose( $history, $message );
 		} else {
-			$history  = array();
-			$outbound = $message;
+			$history = array();
 		}
 		$context         = $this->sanitize_context( (array) $request->get_param( 'context' ) );
 		$resolved        = $this->resolve_agent( $request );
@@ -271,6 +269,16 @@ class NPA_Rest {
 
 		// A page-targeted agent brings its own client, keyed to its own agent.
 		$client = ( null !== $resolved['client'] ) ? $resolved['client'] : $this->plugin->gateway_client();
+
+		/*
+		 * A transport that models a conversation is handed the turns and threads
+		 * them itself. One that takes a single string gets the transcript folded
+		 * into the message, which is the workaround NPA_Conversation exists for.
+		 * Asking the client which it is keeps that decision in one place.
+		 */
+		$native   = $client->supports_history();
+		$outbound = ( $remember && ! $native ) ? NPA_Conversation::compose( $history, $message ) : $message;
+		$send_history = $native ? $history : array();
 		// Mock-served calls are flagged so their ~0 ms timings stay out of the
 		// latency average (see NPA_Store::aggregates).
 		$is_mock = $client instanceof NPA_Gateway_Client_Mock;
@@ -306,7 +314,7 @@ class NPA_Rest {
 		$start = microtime( true );
 
 		try {
-			$result  = $client->send_message( $agent_id, $outbound, $conversation_id, $context );
+			$result  = $client->send_message( $agent_id, $outbound, $conversation_id, $context, $send_history );
 			$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
 
 			$this->plugin->store->record(

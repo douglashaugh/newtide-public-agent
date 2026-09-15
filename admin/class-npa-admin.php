@@ -250,8 +250,12 @@ class NPA_Admin {
 
 		$items = array();
 
+		$api = ( 'api' === $mode );
+
 		$items[] = array(
-			'label' => $embed ? __( 'Connect: publishable key & platform URL', 'newtide-public-agent' ) : __( 'Connect: gateway URL, credential & agent', 'newtide-public-agent' ),
+			'label' => $api
+				? __( 'Connect: Agent API key', 'newtide-public-agent' )
+				: ( $embed ? __( 'Connect: publishable key & platform URL', 'newtide-public-agent' ) : __( 'Connect: gateway URL, credential & agent', 'newtide-public-agent' ) ),
 			'done'  => $s->is_connection_configured(),
 			'tab'   => 'agent',
 			'hint'  => __( 'Set your connection on the Agent tab.', 'newtide-public-agent' ),
@@ -262,11 +266,13 @@ class NPA_Admin {
 		 * in the loader tag, Proxy sends it as X-Api-Key — so there is nothing to
 		 * "choose". Only a dedicated gateway still needs an agent id typed in.
 		 */
-		$by_key = $embed || $s->public_api_available();
+		$by_key = $api || $embed || $s->public_api_available();
 
 		$items[] = array(
 			'label' => $by_key ? __( 'Connect an agent with a publishable key', 'newtide-public-agent' ) : __( 'Choose an agent', 'newtide-public-agent' ),
-			'done'  => $by_key ? ( '' !== trim( (string) $s->get_public_key() ) ) : ( '' !== $s->get_agent_id() ),
+			'done'  => $api
+				? $s->agent_api_key_is_set()
+				: ( $by_key ? ( '' !== trim( (string) $s->get_public_key() ) ) : ( '' !== $s->get_agent_id() ) ),
 			'tab'   => 'agent',
 			'hint'  => $by_key
 				? __( 'The key decides which published agent answers visitors.', 'newtide-public-agent' )
@@ -390,6 +396,8 @@ class NPA_Admin {
 	 * @return void
 	 */
 	public function mode_scope_notice( $scope ) {
+		// Only Embed hands rendering to RisingTide. Agent API and Proxy both
+		// draw the plugin's own widget, so these settings apply in full.
 		if ( 'embed' !== $this->plugin->settings->get_mode() ) {
 			return;
 		}
@@ -1253,6 +1261,31 @@ class NPA_Admin {
 		 */
 		if ( 'embed' === $this->plugin->settings->get_mode() ) {
 			wp_send_json_success( $this->check_embed_loader() );
+		}
+
+		if ( 'api' === $this->plugin->settings->get_mode() ) {
+			$s = $this->plugin->settings;
+
+			if ( ! $s->is_agent_api_configured() ) {
+				wp_send_json_success(
+					array(
+						'ok'      => false,
+						'message' => __( 'Set the Agent API key above.', 'newtide-public-agent' ),
+						'latency' => 0,
+					)
+				);
+			}
+
+			$client = new NPA_Gateway_Client_Agent_Api( $s->get_agent_api_base_url(), $s->get_agent_api_key() );
+			$health = $client->health_check();
+
+			wp_send_json_success(
+				array(
+					'ok'      => (bool) $health->ok,
+					'message' => $health->message,
+					'latency' => (int) $health->latency_ms,
+				)
+			);
 		}
 
 		$health = $this->plugin->gateway_client()->health_check();

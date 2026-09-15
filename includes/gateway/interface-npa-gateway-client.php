@@ -25,12 +25,29 @@ interface NPA_Gateway_Client {
 	 * @param string $message         End-user message (already sanitized by the caller).
 	 * @param string $conversation_id Opaque session token threading turns; empty on the first turn.
 	 * @param array  $context         Optional page context (page_url, page_title, locale); send only accepted keys.
+	 * @param array  $history         Prior exchanges, oldest first, each { visitor, agent }. Only meaningful
+	 *                                to a client whose supports_history() is true; others ignore it.
 	 *
 	 * @return NPA_Gateway_Result Reply text, conversation id, finish reason, token usage, raw payload.
 	 *
 	 * @throws NPA_Gateway_Exception On transport or gateway error (carries error code + HTTP status).
 	 */
-	public function send_message( string $agent_id, string $message, string $conversation_id, array $context ): NPA_Gateway_Result;
+	public function send_message( string $agent_id, string $message, string $conversation_id, array $context, array $history = array() ): NPA_Gateway_Result;
+
+	/**
+	 * Whether this transport can carry prior turns itself.
+	 *
+	 * True means the caller hands over $history and the client threads it
+	 * natively — the upstream API models a conversation. False means the caller
+	 * must reconstruct context some other way, which is what NPA_Conversation
+	 * does for single-turn transports.
+	 *
+	 * The distinction has to be explicit: silently accepting history a transport
+	 * cannot use would drop every follow-up without an error anywhere.
+	 *
+	 * @return bool
+	 */
+	public function supports_history(): bool;
 
 	/**
 	 * List the published agents available to the configured credential.

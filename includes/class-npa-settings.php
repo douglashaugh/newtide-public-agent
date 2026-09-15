@@ -82,7 +82,7 @@ class NPA_Settings {
 	 *
 	 * @var string[]
 	 */
-	const MODES = array( 'proxy', 'embed' );
+	const MODES = array( 'api', 'proxy', 'embed' );
 
 	/**
 	 * Embed-mode placement: floating site-wide bubble, or inline via the
@@ -145,7 +145,11 @@ class NPA_Settings {
 			'accent'                    => '#2563eb',
 			// Connection (M11): transport + embed-mode config.
 			'mode'                      => 'proxy',
-			'public_key'                => '', // pk_ publishable key for embed mode (not secret).
+			'public_key'                => '', // pk_ publishable key for embed / public-API modes (not secret).
+			// Agent API (OpenAI-compatible). The wbk_ key is a secret: prefer the
+			// NPA_AGENT_API_KEY constant so it never reaches the database.
+			'api_base_url'              => NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL,
+			'api_key'                   => '',
 			'platform_url'              => 'https://ai.newtide.ai', // PROD; override with NPA_PLATFORM_URL for internal UAT testing.
 			'placement'                 => 'floating',
 			// Appearance.
@@ -388,6 +392,26 @@ class NPA_Settings {
 		$retention                          = $has( 'transcript_retention_days' ) ? absint( $input['transcript_retention_days'] ) : (int) $existing['transcript_retention_days'];
 		$clean['transcript_retention_days'] = min( 3650, max( 1, $retention ) );
 		$clean['daily_message_cap']         = $has( 'daily_message_cap' ) ? absint( $input['daily_message_cap'] ) : (int) $existing['daily_message_cap'];
+
+		// Agent API base URL — same scheme whitelist as any other stored URL.
+		if ( $has( 'api_base_url' ) ) {
+			$url                      = esc_url_raw( trim( (string) $input['api_base_url'] ), array( 'http', 'https' ) );
+			$clean['api_base_url']    = '' !== $url ? $url : NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL;
+		} else {
+			$clean['api_base_url'] = $existing['api_base_url'];
+		}
+
+		// Agent API key — write-only and constant-aware, exactly as the gateway
+		// credential is. It is a secret: origin scoping does not protect it from
+		// anyone who holds it.
+		if ( defined( 'NPA_AGENT_API_KEY' ) ) {
+			$clean['api_key'] = '';
+		} elseif ( ! $has( 'api_key' ) ) {
+			$clean['api_key'] = $existing['api_key'];
+		} else {
+			$submitted        = trim( (string) $input['api_key'] );
+			$clean['api_key'] = ( '' === $submitted ) ? $existing['api_key'] : sanitize_text_field( $submitted );
+		}
 
 		// Auto-open delay: 0–600 seconds.
 		$delay                    = $has( 'auto_open_delay' ) ? absint( $input['auto_open_delay'] ) : (int) $existing['auto_open_delay'];
@@ -706,9 +730,69 @@ class NPA_Settings {
 	 * @return bool
 	 */
 	public function is_connection_configured() {
-		return ( 'embed' === $this->get_mode() )
-			? $this->is_embed_configured()
-			: $this->is_proxy_configured();
+		switch ( $this->get_mode() ) {
+			case 'embed':
+				return $this->is_embed_configured();
+			case 'api':
+				return $this->is_agent_api_configured();
+			default:
+				return $this->is_proxy_configured();
+		}
+	}
+
+	/**
+	 * Whether the Agent API can be called: a key and a base URL.
+	 *
+	 * No agent id: the key selects the agent, as on every other transport.
+	 *
+	 * @return bool
+	 */
+	public function is_agent_api_configured() {
+		return '' !== trim( (string) $this->get_agent_api_key() )
+			&& '' !== trim( (string) $this->get_agent_api_base_url() );
+	}
+
+	/**
+	 * The Agent API key: constant first, then filter, then the write-only option.
+	 * Never rendered back to the browser.
+	 *
+	 * @return string
+	 */
+	public function get_agent_api_key() {
+		if ( defined( 'NPA_AGENT_API_KEY' ) && '' !== (string) NPA_AGENT_API_KEY ) {
+			return (string) NPA_AGENT_API_KEY;
+		}
+
+		/**
+		 * Filter the Agent API key (for hosting/enterprise injection).
+		 *
+		 * @param string $key The stored option value (may be empty).
+		 */
+		return (string) apply_filters( 'npa_agent_api_key', (string) $this->get( 'api_key', '' ) );
+	}
+
+	/**
+	 * Whether an Agent API key is set from any source.
+	 *
+	 * @return bool
+	 */
+	public function agent_api_key_is_set() {
+		return '' !== trim( (string) $this->get_agent_api_key() );
+	}
+
+	/**
+	 * The Agent API base URL, constant-overridable.
+	 *
+	 * @return string
+	 */
+	public function get_agent_api_base_url() {
+		if ( defined( 'NPA_AGENT_API_BASE_URL' ) && '' !== (string) NPA_AGENT_API_BASE_URL ) {
+			return (string) NPA_AGENT_API_BASE_URL;
+		}
+
+		$stored = trim( (string) $this->get( 'api_base_url', '' ) );
+
+		return '' !== $stored ? $stored : NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL;
 	}
 
 	/**

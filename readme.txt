@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.7.6
+Stable tag: 0.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,22 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.8.0 =
+**New connection mode: Agent API.** NewTide's documented, OpenAI-compatible
+endpoint, and the best option available.
+
+* **Real conversations.** Earlier turns are sent as turns, so the agent follows up
+  properly. The older transports are single-turn, which the plugin works around by
+  folding the transcript into one message — that workaround is not used in this
+  mode, and neither is the caveat that came with it.
+* **Token usage is recorded** for the first time, so Service Status reports what
+  each conversation actually costs.
+* The `wbk_` key is a **secret**: stored write-only, never written into your
+  pages, and best defined as `NPA_AGENT_API_KEY` in `wp-config.php`. It is also
+  tied to an allowed-origins list — the Agent tab shows the exact address your
+  server announces, which must be on that list, matched exactly.
+* Proxy and Embed are unchanged, so an existing site keeps working as it is.
 
 = 0.7.6 =
 * Fixes two front-end checks failing on any site that has a publishable key set —

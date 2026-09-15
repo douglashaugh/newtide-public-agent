@@ -186,6 +186,7 @@ final class NPA_Plugin {
 		$this->register_budget_tests();
 		$this->register_rest_tests();
 		$this->register_public_api_tests();
+		$this->register_agent_api_tests();
 		$this->register_conversation_tests();
 		$this->register_transcript_tests();
 		$this->register_widget_tests();
@@ -221,6 +222,7 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-mock.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-http.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-public.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-client-agent-api.php';
 
 		// Shared launcher-icon library (used by settings sanitize, the widget, and
 		// the admin picker/preview).
@@ -391,6 +393,14 @@ final class NPA_Plugin {
 
 			if ( $force_mock ) {
 				$default = new NPA_Gateway_Client_Mock();
+			} elseif ( 'api' === $this->settings->get_mode() && $this->settings->is_agent_api_configured() ) {
+				// The documented, OpenAI-compatible endpoint. Chosen by mode
+				// rather than by availability, so configuring it does not change
+				// what a site already running on another transport does.
+				$default = new NPA_Gateway_Client_Agent_Api(
+					$this->settings->get_agent_api_base_url(),
+					$this->settings->get_agent_api_key()
+				);
 			} elseif ( $this->settings->is_configured() ) {
 				// A dedicated gateway with its own secret credential, if a site
 				// has been given one.
@@ -1400,6 +1410,129 @@ final class NPA_Plugin {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$wpdb->query( $wpdb->prepare( "DELETE FROM {$usage} WHERE id > %d", $since ) );
 				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+
+				return $checks;
+			},
+			'user'
+		);
+	}
+
+	/**
+	 * Register the Agent API suite.
+	 *
+	 * Stubbed HTTP throughout — the live endpoint needs a secret key and an
+	 * allow-listed origin, which a battery must never depend on.
+	 *
+	 * @return void
+	 */
+	private function register_agent_api_tests() {
+		$this->test_runner->register_suite(
+			'agent_api',
+			__( 'Agent API', 'newtide-public-agent' ),
+			__( 'Confirms the OpenAI-compatible connection: that your key is sent as a bearer token with this site’s address, that earlier turns are sent as real turns rather than pasted into one prompt, and that a rejected key or origin is reported as something you can act on.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+
+				// Prior turns become alternating user/assistant messages.
+				$history  = array(
+					array(
+						'visitor' => 'first question',
+						'agent'   => 'first answer',
+					),
+				);
+				$messages = NPA_Gateway_Client_Agent_Api::build_messages( 'second question', $history );
+
+				$checks[] = array(
+					'label' => __( 'Earlier turns are sent as real conversation turns, not folded into one message', 'newtide-public-agent' ),
+					'pass'  => 3 === count( $messages )
+						&& 'user' === $messages[0]['role'] && 'first question' === $messages[0]['content']
+						&& 'assistant' === $messages[1]['role'] && 'first answer' === $messages[1]['content']
+						&& 'user' === $messages[2]['role'] && 'second question' === $messages[2]['content'],
+				);
+
+				// A half-recorded exchange must not be replayed: a user turn with
+				// no reply reads as a question the agent never answered.
+				$half     = NPA_Gateway_Client_Agent_Api::build_messages(
+					'now',
+					array(
+						array(
+							'visitor' => 'orphan',
+							'agent'   => '',
+						),
+					)
+				);
+				$checks[] = array(
+					'label' => __( 'An incomplete exchange is left out rather than replayed', 'newtide-public-agent' ),
+					'pass'  => 1 === count( $half ) && 'now' === $half[0]['content'],
+				);
+
+				$checks[] = array(
+					'label' => __( 'This transport reports that it carries conversations itself', 'newtide-public-agent' ),
+					'pass'  => ( new NPA_Gateway_Client_Agent_Api( 'https://example-api.test', 'wbk_x', 'https://example.test' ) )->supports_history()
+						&& ! ( new NPA_Gateway_Client_Mock() )->supports_history(),
+				);
+
+				// Request shape: bearer token and the origin the API requires but
+				// does not document.
+				$seen   = array();
+				$sniff  = static function ( $pre, $args, $url ) use ( &$seen ) {
+					$seen = array(
+						'headers' => isset( $args['headers'] ) ? (array) $args['headers'] : array(),
+						'url'     => $url,
+						'body'    => isset( $args['body'] ) ? json_decode( (string) $args['body'], true ) : array(),
+					);
+
+					return array(
+						'headers'  => array(),
+						'body'     => wp_json_encode(
+							array(
+								'choices' => array( array( 'message' => array( 'content' => 'ok' ), 'finish_reason' => 'stop' ) ),
+								'usage'   => array( 'prompt_tokens' => 11, 'completion_tokens' => 3 ),
+							)
+						),
+						'response' => array( 'code' => 200, 'message' => 'OK' ),
+					);
+				};
+
+				add_filter( 'pre_http_request', $sniff, 10, 3 );
+				$client = new NPA_Gateway_Client_Agent_Api( 'https://example-api.test', 'wbk_secret', 'https://example.test' );
+				$result = $client->send_message( '', 'hello', 'c-1', array(), $history );
+				remove_filter( 'pre_http_request', $sniff, 10 );
+
+				$checks[] = array(
+					'label' => __( 'Requests carry the key as a bearer token and announce this site’s address', 'newtide-public-agent' ),
+					'pass'  => isset( $seen['headers']['Authorization'], $seen['headers']['Origin'] )
+						&& 'Bearer wbk_secret' === $seen['headers']['Authorization']
+						&& 'https://example.test' === $seen['headers']['Origin']
+						&& 'https://example-api.test/v1/chat/completions' === $seen['url']
+						&& isset( $seen['body']['messages'] ) && 3 === count( $seen['body']['messages'] ),
+				);
+
+				$checks[] = array(
+					'label' => __( 'The reply and its token counts are read back correctly', 'newtide-public-agent' ),
+					'pass'  => 'ok' === $result->reply_text && 11 === $result->input_tokens && 3 === $result->output_tokens,
+				);
+
+				// A refusal must be reported as a credential problem, since that
+				// is the one thing a site owner can fix.
+				$deny = static function () {
+					return array(
+						'headers'  => array(),
+						'body'     => '{"error":"Unauthorized"}',
+						'response' => array( 'code' => 401, 'message' => 'Unauthorized' ),
+					);
+				};
+
+				add_filter( 'pre_http_request', $deny, 10, 3 );
+				$denied = ( new NPA_Gateway_Client_Agent_Api( 'https://example-api.test', 'wbk_bad', 'https://example.test' ) )->health_check();
+				remove_filter( 'pre_http_request', $deny, 10 );
+
+				$checks[] = array(
+					'label' => __( 'A rejected key or origin explains which of the two to check', 'newtide-public-agent' ),
+					'pass'  => ! $denied->ok
+						&& false !== stripos( $denied->message, 'allowed origins' )
+						&& false !== strpos( $denied->message, 'https://example.test' ),
+				);
 
 				return $checks;
 			},

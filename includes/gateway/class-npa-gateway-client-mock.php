@@ -63,6 +63,17 @@ class NPA_Gateway_Client_Mock implements NPA_Gateway_Client {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * No: the mock echoes a single message.
+	 *
+	 * @return bool
+	 */
+	public function supports_history(): bool {
+		return false;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
 	 * @param string $agent_id        Agent id.
 	 * @param string $message         User message.
 	 * @param string $conversation_id Conversation token (empty on first turn).
@@ -70,7 +81,7 @@ class NPA_Gateway_Client_Mock implements NPA_Gateway_Client {
 	 * @return NPA_Gateway_Result
 	 * @throws NPA_Gateway_Exception When the active scenario simulates an error.
 	 */
-	public function send_message( string $agent_id, string $message, string $conversation_id, array $context ): NPA_Gateway_Result {
+	public function send_message( string $agent_id, string $message, string $conversation_id, array $context, array $history = array() ): NPA_Gateway_Result {
 		$this->maybe_throw();
 
 		if ( '' === $conversation_id ) {

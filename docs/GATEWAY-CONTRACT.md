@@ -1,5 +1,37 @@
 # Public Agent Gateway — Contract (PROVISIONAL)
 
+> ## The Agent API — documented, OpenAI-compatible, multi-turn (2026-09-15)
+>
+> `POST {base}/v1/chat/completions`, bearer `wbk_` key. **Supersedes everything
+> below for new work.** Hosts: `https://myagents-api.newtide.ai` (production),
+> `https://myagents-uat-api.newtide.ai` (UAT) — note these are a different host
+> family from `ai-api.newtide.ai`, so nothing derives one from the other.
+>
+> Standard OpenAI request and response. `model` is ignored; the key selects the
+> agent. `messages` is a real role/content array, so **conversations are native** —
+> verified by planting a code in a prior turn and getting it back. Responses carry
+> `usage.prompt_tokens` / `completion_tokens`, which finally populates the usage
+> table's token columns.
+>
+> **Measured deviations from the published instructions — all cost time:**
+>
+> | Documented | Actual |
+> |---|---|
+> | `curl -H "Authorization: Bearer wbk_…"` alone | **401.** An `Origin` header is required and is not mentioned anywhere. |
+> | `X-API-Key` listed in the CORS allow-headers | Rejected. Bearer only. |
+> | — | Origin is matched **exactly** against the key's allow-list: `https://example.com` passes, `https://www.example.com` does not. |
+>
+> **The key is a secret despite the origin check.** Origin scoping stops another
+> website using the key from a browser; it stops nothing for anyone holding it,
+> because a server sets the header itself — which is how all of this was measured.
+> Keep it in `wp-config.php` (`NPA_AGENT_API_KEY`) and never in page output.
+>
+> Per-agent toggles gate two features the plugin does not use: *Accept
+> instructions* (a `system` message) and *Allow caller-provided tools*. If tools
+> are enabled and the agent asks to call one, the reply comes back empty with
+> `finish_reason: tool_calls`; the client reports that specifically rather than as
+> an empty response.
+
 > ## Finding, 2026-09-11 — the assumed API is not what the public path uses
 >
 > Confirmed by reading the live loader at `https://uat-ai.newtide.ai/agent-embed.js`

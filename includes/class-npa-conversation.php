@@ -197,6 +197,12 @@ class NPA_Conversation {
 	 * Build the message to send upstream: the prior exchanges as a quoted
 	 * transcript, then the new message.
 	 *
+	 * Only for transports that take a single string. A transport with a real
+	 * messages array is handed the history itself and never comes through here —
+	 * which is strictly better, because prior turns stay structurally separate
+	 * instead of being pasted into one prompt alongside the visitor's next
+	 * sentence.
+	 *
 	 * Returns $message untouched when there is no history, so a first turn looks
 	 * exactly like a plain single-turn call — no framing, no overhead, and
 	 * nothing different for the agent to react to.

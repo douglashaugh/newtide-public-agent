@@ -39,6 +39,7 @@ $npa_resolved     = $npa_public_api ? $npa_agents : array();
 // A credential that is stored but cannot be reached by any code path.
 $npa_unused_credential = $settings->gateway_key_is_set() && ! $npa_legacy_gw;
 $npa_is_embed     = ( 'embed' === $npa_mode );
+$npa_is_api       = ( 'api' === $npa_mode );
 $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', array() ) );
 ?>
 <?php $npa_admin->tab_intro( 'dashicons-admin-links', __( 'Agent connection', 'newtide-public-agent' ), __( 'Link this site to your published NewTide agent and choose where it appears.', 'newtide-public-agent' ) ); ?>
@@ -46,9 +47,12 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
 	<?php
 	// Keys this form is responsible for; anything omitted keeps its stored value.
-	$npa_present = array( 'enabled', 'mode', 'placement', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days', 'conversation_memory' );
+	$npa_present = array( 'enabled', 'mode', 'placement', 'api_base_url', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days', 'conversation_memory' );
 	if ( ! $npa_key_constant ) {
 		$npa_present[] = 'gateway_key';
+	}
+	if ( ! defined( 'NPA_AGENT_API_KEY' ) ) {
+		$npa_present[] = 'api_key';
 	}
 	if ( ! defined( 'NPA_PUBLIC_KEY' ) ) {
 		$npa_present[] = 'public_key';
@@ -69,7 +73,55 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 					<option value="proxy" <?php selected( $settings->get_mode(), 'proxy' ); ?>><?php esc_html_e( 'Proxy — the plugin’s own widget via the server-side gateway', 'newtide-public-agent' ); ?></option>
 					<option value="embed" <?php selected( $settings->get_mode(), 'embed' ); ?>><?php esc_html_e( 'Embed — RisingTide’s public widget via a publishable key', 'newtide-public-agent' ); ?></option>
 				</select>
-				<p class="description"><?php echo wp_kses_post( __( '<strong>Embed</strong> injects RisingTide’s official <code>agent-embed.js</code> using a publishable <code>pk_</code> key — recommended for published public agents. <strong>Proxy</strong> relays through your server to the same agent API, and renders the plugin’s own chat widget — so the Appearance and Behavior tabs apply. Both modes use the publishable key below. See the <em>Publishing</em> tab for how to get one.', 'newtide-public-agent' ) ); ?></p>
+				<p class="description"><?php echo wp_kses_post( __( '<strong>Agent API</strong> relays through your server to NewTide’s documented, OpenAI-compatible endpoint with a secret <code>wbk_</code> key. It is the only mode that carries a real conversation — the agent sees the earlier turns as turns — and it renders the plugin’s own widget, so Appearance and Behavior apply. <strong>Proxy</strong> does the same through the older public-agent API with a publishable key, and cannot follow up without the workaround below. <strong>Embed</strong> injects RisingTide’s own <code>agent-embed.js</code> widget using a publishable <code>pk_</code> key; its styling is set in RisingTide, not here.', 'newtide-public-agent' ) ); ?></p>
+			</td>
+		</tr>
+
+		<tr data-npa-mode="api" <?php echo $npa_is_api ? '' : 'hidden'; ?>>
+			<th scope="row"><?php esc_html_e( 'Agent API key', 'newtide-public-agent' ); ?></th>
+			<td>
+				<?php if ( defined( 'NPA_AGENT_API_KEY' ) ) : ?>
+					<p><span class="npa-pill npa-pill--ok"><?php esc_html_e( 'Defined in wp-config.php', 'newtide-public-agent' ); ?></span></p>
+					<p class="description"><?php esc_html_e( 'Set via the NPA_AGENT_API_KEY constant, so it never touches the database. This is the recommended setup.', 'newtide-public-agent' ); ?></p>
+				<?php else : ?>
+					<?php if ( $settings->agent_api_key_is_set() ) : ?>
+						<p><span class="npa-pill npa-pill--ok"><?php esc_html_e( 'A key is set', 'newtide-public-agent' ); ?></span></p>
+					<?php endif; ?>
+					<input type="password" id="npa-api-key" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[api_key]" value="" autocomplete="new-password" placeholder="wbk_…" />
+					<p class="description">
+						<?php echo wp_kses_post( __( 'The <code>wbk_</code> key from RisingTide. <strong>Treat it as a secret</strong> — it is a bearer token and never appears in your pages. It is also tied to an allowed-origins list, but that only stops other websites using it, not anyone who has the key. Stored write-only; the saved value is never shown again. Prefer defining <code>NPA_AGENT_API_KEY</code> in <code>wp-config.php</code>.', 'newtide-public-agent' ) ); ?>
+					</p>
+				<?php endif; ?>
+			</td>
+		</tr>
+
+		<tr data-npa-mode="api" <?php echo $npa_is_api ? '' : 'hidden'; ?>>
+			<th scope="row"><label for="npa-api-base"><?php esc_html_e( 'Agent API address', 'newtide-public-agent' ); ?></label></th>
+			<td>
+				<?php if ( defined( 'NPA_AGENT_API_BASE_URL' ) ) : ?>
+					<input type="url" id="npa-api-base" class="regular-text" value="<?php echo esc_attr( $settings->get_agent_api_base_url() ); ?>" disabled />
+					<p class="description"><?php esc_html_e( 'Defined via the NPA_AGENT_API_BASE_URL constant.', 'newtide-public-agent' ); ?></p>
+				<?php else : ?>
+					<input type="url" id="npa-api-base" class="regular-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[api_base_url]" value="<?php echo esc_attr( $settings->get( 'api_base_url' ) ); ?>" placeholder="<?php echo esc_attr( NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL ); ?>" />
+					<p class="description">
+						<?php
+						printf(
+							/* translators: 1: production host, 2: UAT host. */
+							esc_html__( 'Leave as %1$s unless NewTide tells you otherwise. Internal UAT testing uses %2$s.', 'newtide-public-agent' ),
+							'<code>' . esc_html( NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL ) . '</code>',
+							'<code>https://myagents-uat-api.newtide.ai</code>'
+						);
+						?>
+					</p>
+				<?php endif; ?>
+			</td>
+		</tr>
+
+		<tr data-npa-mode="api" <?php echo $npa_is_api ? '' : 'hidden'; ?>>
+			<th scope="row"><?php esc_html_e( 'Allowed origin', 'newtide-public-agent' ); ?></th>
+			<td>
+				<p><code><?php echo esc_html( NPA_Gateway_Client_Public::site_origin() ); ?></code></p>
+				<p class="description"><?php esc_html_e( 'This is the address your server announces when calling the API. It must appear on the key’s allowed-origins list in RisingTide, matched exactly — a www variant counts as a different origin, and a trailing slash will not match.', 'newtide-public-agent' ); ?></p>
 			</td>
 		</tr>
 
