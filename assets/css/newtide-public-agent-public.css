@@ -520,3 +520,16 @@
 	font-weight: 700;
 	background: rgba( 127, 127, 127, 0.12 );
 }
+
+/* The credit is a link as of 0.9.1. It keeps the footer's muted styling rather
+   than taking the theme's link colour, which would make a small piece of
+   chrome the loudest thing in the panel. */
+.newtide-public-agent__powered-link {
+	color: inherit;
+	text-decoration: none;
+}
+
+.newtide-public-agent__powered-link:hover,
+.newtide-public-agent__powered-link:focus {
+	text-decoration: underline;
+}

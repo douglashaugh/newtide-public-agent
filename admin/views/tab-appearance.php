@@ -291,7 +291,7 @@ if ( 'auto' !== $cur_theme ) {
 								<input class="newtide-public-agent__input" type="text" placeholder="<?php echo esc_attr( (string) $settings->get( 'input_placeholder' ) ); ?>" tabindex="-1" aria-hidden="true" />
 								<button type="button" class="newtide-public-agent__send" tabindex="-1" aria-hidden="true"><?php esc_html_e( 'Send', 'newtide-public-agent' ); ?></button>
 							</div>
-							<div class="newtide-public-agent__powered" data-npa-preview="powered" <?php echo $cur_powered ? '' : 'hidden'; ?>><?php esc_html_e( 'Powered by NewTide', 'newtide-public-agent' ); ?></div>
+							<div class="newtide-public-agent__powered" data-npa-preview="powered" <?php echo $cur_powered ? '' : 'hidden'; ?>><a class="newtide-public-agent__powered-link" href="<?php echo esc_url( apply_filters( 'npa_powered_by_url', NPA_Public::POWERED_BY_URL ) ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Powered by NewTide', 'newtide-public-agent' ); ?></a></div>
 						</div>
 						<button type="button" class="newtide-public-agent__launcher" tabindex="-1" aria-hidden="true">
 							<span class="npa-preview-icon-slot" data-npa-preview="icon"><?php echo $preview_icon; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped icon markup built above. ?></span>

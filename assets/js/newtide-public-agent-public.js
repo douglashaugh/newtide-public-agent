@@ -208,7 +208,24 @@
 
 		if ( this.powered ) {
 			var powered = el( 'div', 'newtide-public-agent__powered' );
-			powered.textContent = t( 'poweredBy', 'Powered by NewTide' );
+			var label = t( 'poweredBy', 'Powered by NewTide' );
+			var url = cfg.poweredUrl || '';
+
+			/* A new tab, so a visitor mid-conversation is never navigated off
+			   the site they are chatting with. The URL comes from the server
+			   and only an http(s) one is used. */
+			if ( url && /^https?:\/\//i.test( url ) ) {
+				var link = document.createElement( 'a' );
+				link.className = 'newtide-public-agent__powered-link';
+				link.href = url;
+				link.target = '_blank';
+				link.rel = 'noopener';
+				link.textContent = label;
+				powered.appendChild( link );
+			} else {
+				powered.textContent = label;
+			}
+
 			panel.appendChild( powered );
 		}
 

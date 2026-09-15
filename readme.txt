@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.9.0
+Stable tag: 0.9.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,13 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.9.1 =
+**The "Powered by NewTide" credit links to newtide.ai.** It opens in a new tab,
+so a visitor mid-conversation is never navigated away from your site. The credit
+can still be switched off entirely under Appearance, and the address is
+filterable via `npa_powered_by_url` — returning an empty string renders it as
+plain text.
 
 = 0.9.0 =
 **The agent's formatting now renders.** Replies arrive in Markdown — price

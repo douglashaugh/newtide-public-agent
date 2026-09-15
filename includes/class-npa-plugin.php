@@ -2404,6 +2404,21 @@ Second line." );
 				);
 
 				/*
+				 * The "Powered by" credit links out, so the address has to reach
+				 * the widget — it is built in JavaScript from this value, and an
+				 * empty one silently turns the link back into plain text. The
+				 * admin preview reads the same constant, so the two cannot drift.
+				 */
+				$powered_url = apply_filters( 'npa_powered_by_url', NPA_Public::POWERED_BY_URL );
+
+				$checks[] = array(
+					'label' => __( 'The “Powered by NewTide” credit has an address to link to', 'newtide-public-agent' ),
+					'pass'  => is_string( $powered_url )
+						&& 1 === preg_match( '#^https://#', $powered_url )
+						&& false !== strpos( $powered_url, 'newtide.ai' ),
+				);
+
+				/*
 				 * Pin proxy mode + enabled so the render check is deterministic
 				 * regardless of the site's live connection mode, but keep the
 				 * rest of the real configuration so this exercises the actual

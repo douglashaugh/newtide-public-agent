@@ -17,6 +17,16 @@ defined( 'ABSPATH' ) || exit;
 class NPA_Public {
 
 	/**
+	 * Where the "Powered by NewTide" credit points.
+	 *
+	 * One definition, used by the widget and by the Appearance preview, so the
+	 * preview cannot drift from what a visitor gets.
+	 *
+	 * @var string
+	 */
+	const POWERED_BY_URL = 'https://www.newtide.ai';
+
+	/**
 	 * Widget script/style handle.
 	 *
 	 * @var string
@@ -139,6 +149,17 @@ class NPA_Public {
 				'restUrl' => esc_url_raw( rest_url( 'npa/v1/message' ) ),
 				'nonce'   => wp_create_nonce( 'wp_rest' ),
 				'locale'  => get_locale(),
+				/**
+				 * Filter the address the "Powered by NewTide" credit links to.
+				 *
+				 * Returning '' renders the credit as plain text, which is what
+				 * it was before 0.9.1 — the credit can be switched off entirely
+				 * under Appearance, so a site that wants it without an outbound
+				 * link can have that too.
+				 *
+				 * @param string $url Destination.
+				 */
+				'poweredUrl' => apply_filters( 'npa_powered_by_url', NPA_Public::POWERED_BY_URL ),
 				'i18n'    => array(
 					'send'      => __( 'Send', 'newtide-public-agent' ),
 					'close'     => __( 'Close chat', 'newtide-public-agent' ),
