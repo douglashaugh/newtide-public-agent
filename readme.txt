@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.7.4
+Stable tag: 0.7.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,14 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.7.5 =
+* **Fixes "Run tests" failing on any site with Akismet installed** — which is most
+  of them, since it ships with WordPress. One test fired WordPress's
+  `script_loader_tag` filter with two arguments where WordPress itself passes
+  three. Other plugins listen on that filter with the full signature, so Akismet's
+  handler received two arguments, raised a fatal error, and stopped the whole run.
+  The test now matches WordPress's own call.
 
 = 0.7.4 =
 * **"Run tests" now says what went wrong.** That button reported "Request failed,

@@ -2170,15 +2170,25 @@ final class NPA_Plugin {
 
 				// The injected <script> tag carries the publishable key. The sample
 				// is a filter fixture, not a real enqueue.
-				$sample   = "<script src='https://uat-ai.newtide.ai/agent-embed.js' id='npa-embed-js'></script>"; // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- test fixture passed through the script_loader_tag filter.
-				$tagged   = apply_filters( 'script_loader_tag', $sample, NPA_Public::EMBED_HANDLE );
+				/*
+				 * Fire this the way WordPress does, with all three arguments.
+				 * Other plugins listen on script_loader_tag and register
+				 * callbacks expecting the full signature — Akismet's, which ships
+				 * with WordPress, takes three and fataled when handed two,
+				 * stopping the whole battery on any site running it. A fixture
+				 * that fires a core filter has to match core's arity, because the
+				 * callbacks it reaches are not ours.
+				 */
+				$sample     = "<script src='https://uat-ai.newtide.ai/agent-embed.js' id='npa-embed-js'></script>"; // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- test fixture passed through the script_loader_tag filter.
+				$sample_src = 'https://uat-ai.newtide.ai/agent-embed.js';
+				$tagged   = apply_filters( 'script_loader_tag', $sample, NPA_Public::EMBED_HANDLE, $sample_src );
 				$checks[] = array(
 					'label' => __( 'The embed loader tag carries the publishable key', 'newtide-public-agent' ),
 					'pass'  => false !== strpos( $tagged, 'data-api-key="pk_embed_test_123"' ),
 				);
 
 				// Non-embed script tags are untouched.
-				$other    = apply_filters( 'script_loader_tag', $sample, 'jquery-core' );
+				$other    = apply_filters( 'script_loader_tag', $sample, 'jquery-core', $sample_src );
 				$checks[] = array(
 					'label' => __( 'Other scripts’ tags are left unchanged', 'newtide-public-agent' ),
 					'pass'  => $other === $sample,
@@ -2190,7 +2200,7 @@ final class NPA_Plugin {
 					return $sentinel;
 				};
 				add_filter( 'npa_gateway_key', $inject );
-				$guard_tag = apply_filters( 'script_loader_tag', $sample, NPA_Public::EMBED_HANDLE );
+				$guard_tag = apply_filters( 'script_loader_tag', $sample, NPA_Public::EMBED_HANDLE, $sample_src );
 				remove_filter( 'npa_gateway_key', $inject );
 				$checks[] = array(
 					'label' => __( 'The secret gateway credential never appears in the embed tag', 'newtide-public-agent' ),
