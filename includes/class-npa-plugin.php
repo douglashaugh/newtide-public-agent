@@ -399,7 +399,8 @@ final class NPA_Plugin {
 				// what a site already running on another transport does.
 				$default = new NPA_Gateway_Client_Agent_Api(
 					$this->settings->get_agent_api_base_url(),
-					$this->settings->get_agent_api_key()
+					$this->settings->get_agent_api_key(),
+					$this->settings->get_agent_api_origin()
 				);
 			} elseif ( $this->settings->is_configured() ) {
 				// A dedicated gateway with its own secret credential, if a site
@@ -1556,6 +1557,47 @@ final class NPA_Plugin {
 					'pass'  => ! $denied->ok
 						&& false !== stripos( $denied->message, 'allowed origins' )
 						&& false !== strpos( $denied->message, 'https://example.test' ),
+				);
+
+				/*
+				 * The announced origin must be exactly what was configured. This
+				 * check exists because the match on the far side is exact: a key
+				 * issued for www.example.com refuses example.com, and a site whose
+				 * WordPress address is the other form has no way to correct that
+				 * except here.
+				 */
+				$origin_client = new NPA_Gateway_Client_Agent_Api( 'https://example-api.test', 'wbk_x', 'https://www.example.test' );
+				$headers_ref   = new ReflectionMethod( 'NPA_Gateway_Client_Agent_Api', 'headers' );
+				$headers_ref->setAccessible( true );
+				$sent = $headers_ref->invoke( $origin_client );
+
+				$checks[] = array(
+					'label' => __( 'The origin the plugin announces is the one configured, sent verbatim', 'newtide-public-agent' ),
+					'pass'  => isset( $sent['Origin'] ) && 'https://www.example.test' === $sent['Origin'],
+				);
+
+				// A pasted page address is the likely input here, and sending one
+				// fails the origin check for a reason nobody could read.
+				$trimmed = $this->settings->sanitize(
+					array( 'api_origin' => 'https://www.example.test/contact/?utm=x' )
+				);
+
+				$checks[] = array(
+					'label' => __( 'A pasted page address is reduced to a bare origin before it is sent', 'newtide-public-agent' ),
+					'pass'  => isset( $trimmed['api_origin'] ) && 'https://www.example.test' === $trimmed['api_origin'],
+				);
+
+				// Empty must mean "this site", so the default install needs no
+				// thought at all.
+				NPA_Settings::begin_test_override(
+					array_merge( NPA_Settings::defaults(), array( 'api_origin' => '' ) )
+				);
+				$fallback = $this->settings->get_agent_api_origin();
+				NPA_Settings::end_test_override();
+
+				$checks[] = array(
+					'label' => __( 'Left empty, the plugin announces this site’s own address', 'newtide-public-agent' ),
+					'pass'  => $fallback === NPA_Gateway_Client_Public::site_origin() && '' !== $fallback,
 				);
 
 				return $checks;

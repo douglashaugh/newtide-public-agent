@@ -149,6 +149,7 @@ class NPA_Settings {
 			// Agent API (OpenAI-compatible). The wbk_ key is a secret: prefer the
 			// NPA_AGENT_API_KEY constant so it never reaches the database.
 			'api_base_url'              => NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL,
+			'api_origin'                => '',
 			'api_key'                   => '',
 			'platform_url'              => 'https://ai.newtide.ai', // PROD; override with NPA_PLATFORM_URL for internal UAT testing.
 			'placement'                 => 'floating',
@@ -394,6 +395,34 @@ class NPA_Settings {
 		$clean['daily_message_cap']         = $has( 'daily_message_cap' ) ? absint( $input['daily_message_cap'] ) : (int) $existing['daily_message_cap'];
 
 		// Agent API base URL — same scheme whitelist as any other stored URL.
+		if ( $has( 'api_origin' ) ) {
+			/*
+			 * Scheme and host only — an origin is not a URL. Anything with a
+			 * path is very likely a pasted page address, and sending one would
+			 * fail the allowed-origins check in a way that is hard to read from
+			 * the outside. Empty means "use this site's own address".
+			 */
+			$raw = trim( (string) $input['api_origin'] );
+
+			if ( '' === $raw ) {
+				$clean['api_origin'] = '';
+			} else {
+				$parts = wp_parse_url( esc_url_raw( $raw, array( 'http', 'https' ) ) );
+
+				if ( ! empty( $parts['host'] ) ) {
+					$origin = ( ! empty( $parts['scheme'] ) ? $parts['scheme'] : 'https' ) . '://' . $parts['host'];
+					if ( ! empty( $parts['port'] ) ) {
+						$origin .= ':' . (int) $parts['port'];
+					}
+					$clean['api_origin'] = $origin;
+				} else {
+					$clean['api_origin'] = '';
+				}
+			}
+		} else {
+			$clean['api_origin'] = $existing['api_origin'];
+		}
+
 		if ( $has( 'api_base_url' ) ) {
 			$url                      = esc_url_raw( trim( (string) $input['api_base_url'] ), array( 'http', 'https' ) );
 			$clean['api_base_url']    = '' !== $url ? $url : NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL;
@@ -793,6 +822,29 @@ class NPA_Settings {
 		$stored = trim( (string) $this->get( 'api_base_url', '' ) );
 
 		return '' !== $stored ? $stored : NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL;
+	}
+
+	/**
+	 * The origin announced to the Agent API.
+	 *
+	 * Defaults to this site's own address, which is right whenever the key was
+	 * issued for the site it is installed on. It is overridable because the match
+	 * is exact: a key allowing www.example.com rejects example.com, and a
+	 * WordPress home_url of one form cannot be changed to suit the other without
+	 * moving the whole site. Origin is not the credential here — the key is, and
+	 * a server sets this header itself — so letting the owner state which of
+	 * their own origins is registered gives away nothing.
+	 *
+	 * @return string
+	 */
+	public function get_agent_api_origin() {
+		if ( defined( 'NPA_AGENT_API_ORIGIN' ) && '' !== (string) NPA_AGENT_API_ORIGIN ) {
+			return (string) NPA_AGENT_API_ORIGIN;
+		}
+
+		$stored = trim( (string) $this->get( 'api_origin', '' ) );
+
+		return '' !== $stored ? $stored : NPA_Gateway_Client_Public::site_origin();
 	}
 
 	/**

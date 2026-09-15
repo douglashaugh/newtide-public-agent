@@ -41,6 +41,8 @@ $npa_unused_credential = $settings->gateway_key_is_set() && ! $npa_legacy_gw;
 $npa_is_embed     = ( 'embed' === $npa_mode );
 $npa_is_api       = ( 'api' === $npa_mode );
 $npa_is_proxy     = ( 'proxy' === $npa_mode );
+$npa_site_origin  = NPA_Gateway_Client_Public::site_origin();
+$npa_sending_origin = $settings->get_agent_api_origin();
 $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', array() ) );
 ?>
 <?php $npa_admin->tab_intro( 'dashicons-admin-links', __( 'Agent connection', 'newtide-public-agent' ), __( 'Link this site to your published NewTide agent and choose where it appears.', 'newtide-public-agent' ) ); ?>
@@ -120,10 +122,36 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 		</tr>
 
 		<tr data-npa-mode="api" <?php echo $npa_is_api ? '' : 'hidden'; ?>>
-			<th scope="row"><?php esc_html_e( 'Allowed origin', 'newtide-public-agent' ); ?></th>
+			<th scope="row"><label for="npa-api-origin"><?php esc_html_e( 'Announced origin', 'newtide-public-agent' ); ?></label></th>
 			<td>
-				<p><code><?php echo esc_html( NPA_Gateway_Client_Public::site_origin() ); ?></code></p>
-				<p class="description"><?php esc_html_e( 'This is the address your server announces when calling the API. It must appear on the key’s allowed-origins list in RisingTide, matched exactly — a www variant counts as a different origin, and a trailing slash will not match.', 'newtide-public-agent' ); ?></p>
+				<?php if ( defined( 'NPA_AGENT_API_ORIGIN' ) ) : ?>
+					<p><code><?php echo esc_html( (string) NPA_AGENT_API_ORIGIN ); ?></code></p>
+					<p class="description"><?php esc_html_e( 'Set via the NPA_AGENT_API_ORIGIN constant in wp-config.php.', 'newtide-public-agent' ); ?></p>
+				<?php else : ?>
+					<input type="text" id="npa-api-origin" class="regular-text code" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[api_origin]" value="<?php echo esc_attr( (string) $settings->get( 'api_origin', '' ) ); ?>" placeholder="<?php echo esc_attr( $npa_site_origin ); ?>" />
+					<p class="description">
+						<?php
+						printf(
+							/* translators: 1: the site's own origin, 2: a www example, 3: the same host without www. */
+							esc_html__( 'The address your server announces when it calls the API. It must appear on the key’s allowed-origins list in RisingTide, matched exactly: %2$s and %3$s are different origins to this check, and a trailing slash or a path will not match. Leave this empty to announce this site’s own address, %1$s — set it only when the key was issued for a different form of your address than the one WordPress uses.', 'newtide-public-agent' ),
+							'<code>' . esc_html( $npa_site_origin ) . '</code>',
+							'<code>https://www.example.com</code>',
+							'<code>https://example.com</code>'
+						);
+						?>
+					</p>
+					<?php if ( $npa_is_api && $npa_sending_origin !== $npa_site_origin ) : ?>
+						<p class="description">
+							<?php
+							printf(
+								/* translators: %s: the origin actually sent. */
+								esc_html__( 'Currently announcing %s.', 'newtide-public-agent' ),
+								'<code>' . esc_html( $npa_sending_origin ) . '</code>'
+							);
+							?>
+						</p>
+					<?php endif; ?>
+				<?php endif; ?>
 			</td>
 		</tr>
 

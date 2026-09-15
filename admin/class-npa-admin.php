@@ -1276,7 +1276,7 @@ class NPA_Admin {
 				);
 			}
 
-			$client = new NPA_Gateway_Client_Agent_Api( $s->get_agent_api_base_url(), $s->get_agent_api_key() );
+			$client = new NPA_Gateway_Client_Agent_Api( $s->get_agent_api_base_url(), $s->get_agent_api_key(), $s->get_agent_api_origin() );
 			$health = $client->health_check();
 
 			wp_send_json_success(

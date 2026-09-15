@@ -20,6 +20,22 @@
 > | `curl -H "Authorization: Bearer wbk_…"` alone | **401.** An `Origin` header is required and is not mentioned anywhere. |
 > | `X-API-Key` listed in the CORS allow-headers | Rejected. Bearer only. |
 > | — | Origin is matched **exactly** against the key's allow-list: `https://example.com` passes, `https://www.example.com` does not. |
+
+**The announced origin is configurable** (0.8.2, Agent tab → Announced origin, or
+`NPA_AGENT_API_ORIGIN`). It defaults to `home_url()`, which is right when the key
+was issued for the site it is installed on. It has to be settable because the
+match above is exact and one-sided: a key issued for the `www.` form of a host
+refuses the bare form, and a site cannot change its WordPress address to suit a
+key. Origin is not a credential on this path — the key is, and the server writes
+the header itself — so letting the owner state which of their own origins is
+registered concedes nothing that `curl` did not already have.
+
+**A revoked key returns 401 for every origin, with the same body** —
+`{"error":"Unauthorized"}` — as a wrong origin does. Measured 2026-09-15 against
+a rotated key: identical responses for the allowed origin, the `www.` variant and
+no `Origin` header at all. So a 401 alone does not distinguish the two, and the
+cheapest way to tell them apart is to try a key known to be live. The plugin's
+health check says both causes for this reason.
 >
 > **The key is a secret despite the origin check.** Origin scoping stops another
 > website using the key from a browser; it stops nothing for anyone holding it,

@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.8.1
+Stable tag: 0.8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,20 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.8.2 =
+**The origin announced to the Agent API can now be set.** The key's
+allowed-origins check is an exact string match, so a key issued for
+`www.example.com` rejects `example.com`. The plugin previously announced
+whatever WordPress had as the site address, with no way to correct it short of
+writing a PHP filter.
+
+* New "Announced origin" field in Agent API mode. Leave it empty to announce
+  this site's address, as before; set it when the key was issued for a different
+  form of your address.
+* Also settable as `NPA_AGENT_API_ORIGIN` in wp-config.php.
+* A pasted page address is reduced to a bare origin on save, since a path or
+  trailing slash silently fails the check.
 
 = 0.8.1 =
 **Fixes Agent API being impossible to select.** 0.8.0 added the mode everywhere
