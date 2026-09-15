@@ -1189,40 +1189,66 @@ class NPA_Admin {
 	}
 
 	/**
-	 * Try the spellings of this site's own origin and return the first the key
-	 * accepts, or '' if none do.
+	 * After a refusal, find the address-and-origin pair the key does accept.
 	 *
-	 * Scheme and www are the two axes that differ silently: the allow-list is
-	 * matched exactly, so https://example.com, http://example.com and the www
-	 * forms are four distinct entries and a key normally holds one of them.
+	 * A 401 has three ordinary causes that look identical from here: a wrong
+	 * key, an origin spelled differently from the one on the key's list, and a
+	 * key issued in the other environment. The last is the cruellest, because
+	 * the two endpoint addresses differ by four characters and the default is
+	 * production. Trying the combinations names the cause instead of leaving
+	 * someone to guess between them.
 	 *
-	 * Candidates are derived from home_url() only, so this reports how to spell
-	 * an address the site already has. Each is one small completion, and the
-	 * sweep stops at the first success.
+	 * Origins come from home_url() and endpoints from a fixed list, so this
+	 * reports how to reach an agent the caller already has; it does not search.
+	 * It stops at the first success.
 	 *
-	 * @param NPA_Settings $s       Settings.
-	 * @param string       $already The origin already tried, skipped here.
-	 * @return string The working origin, or ''.
+	 * @param NPA_Settings $s Settings.
+	 * @return array{base:string,origin:string}|null The working pair, or null.
 	 */
-	private function find_working_origin( NPA_Settings $s, $already ) {
-		$candidates = NPA_Gateway_Client_Agent_Api::origin_candidates( home_url() );
+	private function find_working_setup( NPA_Settings $s ) {
+		$key = $s->get_agent_api_key();
 
-		$base = $s->get_agent_api_base_url();
-		$key  = $s->get_agent_api_key();
+		if ( '' === trim( (string) $key ) ) {
+			return null;
+		}
 
-		foreach ( $candidates as $candidate ) {
-			if ( $candidate === $already ) {
-				continue;
-			}
+		$base_configured   = $s->get_agent_api_base_url();
+		$origin_configured = $s->get_agent_api_origin();
 
-			$health = ( new NPA_Gateway_Client_Agent_Api( $base, $key, $candidate ) )->health_check();
+		$bases = array_values(
+			array_unique(
+				array_merge( array( $base_configured ), NPA_Gateway_Client_Agent_Api::known_base_urls() )
+			)
+		);
 
-			if ( $health->ok ) {
-				return $candidate;
+		$origins = array_values(
+			array_unique(
+				array_merge(
+					array( $origin_configured ),
+					NPA_Gateway_Client_Agent_Api::origin_candidates( home_url() )
+				)
+			)
+		);
+
+		foreach ( $bases as $base ) {
+			foreach ( $origins as $origin ) {
+				// Already tried by the caller.
+				if ( $base === $base_configured && $origin === $origin_configured ) {
+					continue;
+				}
+
+				$health = ( new NPA_Gateway_Client_Agent_Api( $base, $key, $origin ) )->health_check();
+
+				if ( $health->ok ) {
+					return array(
+						'base'   => $base,
+						'origin' => $origin,
+					);
+				}
 			}
 		}
 
-		return '';
+		return null;
 	}
 
 	/**
@@ -1328,18 +1354,39 @@ class NPA_Admin {
 			 * someone else's origin.
 			 */
 			if ( ! $health->ok && false !== stripos( $health->message, 'allowed origins' ) ) {
-				$found = $this->find_working_origin( $s, $configured );
+				$found = $this->find_working_setup( $s );
 
-				if ( '' !== $found ) {
+				if ( null !== $found ) {
+					$base_wrong   = $found['base'] !== $s->get_agent_api_base_url();
+					$origin_wrong = $found['origin'] !== $configured;
+
+					if ( $base_wrong && $origin_wrong ) {
+						$message = sprintf(
+							/* translators: 1: the API address that worked, 2: the origin that worked. */
+							__( 'The key is good, but not for this address. It connected at %1$s announcing %2$s. Set the Agent API address to %1$s and the Announced origin to %2$s, then save.', 'newtide-public-agent' ),
+							$found['base'],
+							$found['origin']
+						);
+					} elseif ( $base_wrong ) {
+						$message = sprintf(
+							/* translators: 1: the API address that worked, 2: the address currently set. */
+							__( 'The key is good, but it belongs to a different environment. It connected at %1$s, and this site is set to %2$s. Change the Agent API address to %1$s and save.', 'newtide-public-agent' ),
+							$found['base'],
+							$s->get_agent_api_base_url()
+						);
+					} else {
+						$message = sprintf(
+							/* translators: 1: the origin that worked, 2: the origin currently announced. */
+							__( 'The key works, but not with the address this site announces. It connected announcing %1$s, and this site announces %2$s. Put %1$s in the Announced origin field above and save.', 'newtide-public-agent' ),
+							$found['origin'],
+							$configured
+						);
+					}
+
 					wp_send_json_success(
 						array(
 							'ok'      => false,
-							'message' => sprintf(
-								/* translators: 1: the origin that worked, 2: the origin currently announced. */
-								__( 'The key works, but not with the address this site announces. It connected announcing %1$s, and this site announces %2$s. Put %1$s in the Announced origin field above and save.', 'newtide-public-agent' ),
-								$found,
-								$configured
-							),
+							'message' => $message,
 							'latency' => (int) $health->latency_ms,
 						)
 					);

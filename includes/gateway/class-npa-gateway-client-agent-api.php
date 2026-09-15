@@ -44,6 +44,24 @@ class NPA_Gateway_Client_Agent_Api implements NPA_Gateway_Client {
 	const DEFAULT_BASE_URL = 'https://myagents-api.newtide.ai';
 
 	/**
+	 * The UAT endpoint. Named because a key issued in one environment is
+	 * rejected by the other with the same 401 as a bad key, and the two
+	 * addresses differ by four characters.
+	 *
+	 * @var string
+	 */
+	const UAT_BASE_URL = 'https://myagents-uat-api.newtide.ai';
+
+	/**
+	 * The endpoints a key might belong to, production first.
+	 *
+	 * @return string[]
+	 */
+	public static function known_base_urls() {
+		return array( self::DEFAULT_BASE_URL, self::UAT_BASE_URL );
+	}
+
+	/**
 	 * API base URL, no trailing slash.
 	 *
 	 * @var string
@@ -333,9 +351,10 @@ class NPA_Gateway_Client_Agent_Api implements NPA_Gateway_Client {
 				return new NPA_Gateway_Health(
 					false,
 					sprintf(
-						/* translators: %s: the origin this site announces. */
-						__( 'Rejected. Either the key is wrong, or this site’s address is not on the key’s allowed origins — it announces %s, and the match is exact, so a www variant counts as a different origin.', 'newtide-public-agent' ),
-						$this->origin
+						/* translators: 1: the origin this site announces, 2: the API address in use. */
+						__( 'Rejected. Three things produce this: the key is wrong, this site’s address is not on the key’s allowed origins, or the key belongs to a different environment. It announces %1$s to %2$s. The origin match is exact, so a www or http variant counts as a different address.', 'newtide-public-agent' ),
+						$this->origin,
+						$this->base_url
 					),
 					$latency
 				);

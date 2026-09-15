@@ -30,6 +30,30 @@ key. Origin is not a credential on this path — the key is, and the server writ
 the header itself — so letting the owner state which of their own origins is
 registered concedes nothing that `curl` did not already have.
 
+**Correction, measured 2026-09-15.** An earlier note here presented the exact
+origin match as the likely cause of a refusal, and that emphasis was wrong. The
+match is exact — `https://example.com` against a TOE key is refused, so the
+allow-list is real — but a key's list routinely holds all four spellings of its
+host, and on the key measured here it did: `https`/`http` x `www`/bare all
+returned 200. Chasing the origin cost three release cycles on a failure that was
+not the origin.
+
+**The environment is the more likely cause, and is indistinguishable from the
+other two.** A key issued on UAT returns 401 for every origin on the production
+endpoint, and 200 on UAT. The two addresses differ by four characters
+(`myagents-api` vs `myagents-uat-api`), the plugin defaults to production, and
+the response body is `{"error":"Unauthorized"}` in every case. So a 401 has three
+ordinary causes — wrong key, wrong origin, wrong environment — that cannot be
+told apart from the response. Since 0.8.5 the plugin distinguishes them by
+trying the combinations and naming the pair that works.
+
+| Condition | Result |
+| --- | --- |
+| UAT key, UAT endpoint, any spelling of the registered host | 200 |
+| UAT key, UAT endpoint, `https://example.com` | 401 |
+| UAT key, UAT endpoint, no `Origin` header | 401 |
+| UAT key, production endpoint, any origin | 401 |
+
 **A revoked key returns 401 for every origin, with the same body** —
 `{"error":"Unauthorized"}` — as a wrong origin does. Measured 2026-09-15 against
 a rotated key: identical responses for the allowed origin, the `www.` variant and

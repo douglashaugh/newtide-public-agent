@@ -1644,6 +1644,20 @@ final class NPA_Plugin {
 				// A www site should be offered its own spelling first.
 				$cand_www = NPA_Gateway_Client_Agent_Api::origin_candidates( 'https://www.example.test' );
 
+				/*
+				 * A key issued in one environment is refused by the other with
+				 * the same 401 as a bad key, and the two addresses differ by four
+				 * characters. Both must be known so a refusal can name it.
+				 */
+				$bases = NPA_Gateway_Client_Agent_Api::known_base_urls();
+
+				$checks[] = array(
+					'label' => __( 'Both the production and UAT addresses are known, so a key from the wrong one can be identified', 'newtide-public-agent' ),
+					'pass'  => in_array( NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL, $bases, true )
+						&& in_array( NPA_Gateway_Client_Agent_Api::UAT_BASE_URL, $bases, true )
+						&& NPA_Gateway_Client_Agent_Api::DEFAULT_BASE_URL !== NPA_Gateway_Client_Agent_Api::UAT_BASE_URL,
+				);
+
 				$checks[] = array(
 					'label' => __( 'The spelling the site already uses is tried first', 'newtide-public-agent' ),
 					'pass'  => isset( $cand_www[0] ) && 'https://www.example.test' === $cand_www[0],

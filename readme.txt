@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.8.4
+Stable tag: 0.8.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,17 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.8.5 =
+**A refused key now says which of the three causes it is.** "Unauthorized" means
+the key is wrong, the origin is not on its list, or the key belongs to a
+different environment — and the response looks identical in all three cases. The
+UAT and production addresses differ by four characters and the plugin defaults to
+production, so a UAT key fails with a message that used to blame the origin.
+
+* On a refusal, Test connection tries the known endpoints and the spellings of
+  your own address, and names the combination that works.
+* The refusal message names all three causes and shows the address in use.
 
 = 0.8.4 =
 **Test connection now finds the right origin for you.** The Agent API matches
