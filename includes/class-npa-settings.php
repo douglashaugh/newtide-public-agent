@@ -85,6 +85,15 @@ class NPA_Settings {
 	const MODES = array( 'api', 'proxy', 'embed' );
 
 	/**
+	 * Panel sizes a site can start the chat at. The default matches every
+	 * release before 0.10.0; the larger two exist because a long answer in a
+	 * 22rem column is hard to read, which is the whole reason for this setting.
+	 *
+	 * @var string[]
+	 */
+	const PANEL_SIZES = array( 'standard', 'large', 'xlarge' );
+
+	/**
 	 * Embed-mode placement: floating site-wide bubble, or inline via the
 	 * shortcode/block.
 	 *
@@ -163,6 +172,8 @@ class NPA_Settings {
 			'launcher_icon_emoji'       => '',        // Emoji when type = emoji.
 			'launcher_icon_builtin'     => 'chat',    // Built-in slug when type = builtin.
 			'powered_by'                => true,
+			'panel_size'                => 'standard',
+			'allow_resize'              => true,
 			// Behaviour.
 			'auto_open_delay'           => 0, // Seconds; 0 = do not auto-open.
 			'hide_on_mobile'            => false,
@@ -292,6 +303,7 @@ class NPA_Settings {
 		// Booleans.
 		$clean['enabled']           = $has( 'enabled' ) ? ! empty( $input['enabled'] ) : (bool) $existing['enabled'];
 		$clean['powered_by']        = $has( 'powered_by' ) ? ! empty( $input['powered_by'] ) : (bool) $existing['powered_by'];
+		$clean['allow_resize']      = $has( 'allow_resize' ) ? ! empty( $input['allow_resize'] ) : (bool) $existing['allow_resize'];
 		$clean['hide_on_mobile']    = $has( 'hide_on_mobile' ) ? ! empty( $input['hide_on_mobile'] ) : (bool) $existing['hide_on_mobile'];
 		$clean['remember_state']    = $has( 'remember_state' ) ? ! empty( $input['remember_state'] ) : (bool) $existing['remember_state'];
 		$clean['log_enabled']       = $has( 'log_enabled' ) ? ! empty( $input['log_enabled'] ) : (bool) $existing['log_enabled'];
@@ -380,6 +392,10 @@ class NPA_Settings {
 		// Connection mode whitelist.
 		$mode          = $has( 'mode' ) ? sanitize_key( $input['mode'] ) : $existing['mode'];
 		$clean['mode'] = in_array( $mode, self::MODES, true ) ? $mode : 'proxy';
+
+		// Panel size whitelist.
+		$panel_size          = $has( 'panel_size' ) ? sanitize_key( $input['panel_size'] ) : $existing['panel_size'];
+		$clean['panel_size'] = in_array( $panel_size, self::PANEL_SIZES, true ) ? $panel_size : 'standard';
 
 		// Embed placement whitelist.
 		$placement          = $has( 'placement' ) ? sanitize_key( $input['placement'] ) : $existing['placement'];

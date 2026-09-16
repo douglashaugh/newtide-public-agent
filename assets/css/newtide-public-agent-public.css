@@ -60,8 +60,10 @@
 .newtide-public-agent__panel {
 	position: absolute;
 	bottom: 3.5rem;
-	width: min( 22rem, calc( 100vw - 2.5rem ) );
-	max-height: min( 32rem, calc( 100vh - 6rem ) );
+	/* The caps stay here so no setting, toggle or drag can push the panel off
+	   screen; the custom properties only supply the wish. */
+	width: min( var( --npa-panel-w ), calc( 100vw - 2.5rem ) );
+	max-height: min( var( --npa-panel-h ), calc( 100vh - 6rem ) );
 	display: flex;
 	flex-direction: column;
 	background: var( --npa-surface );
@@ -532,4 +534,102 @@
 .newtide-public-agent__powered-link:hover,
 .newtide-public-agent__powered-link:focus {
 	text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------------
+   Panel sizing (0.10.0)
+
+   The panel was a fixed 22rem x 32rem, which is a readable width for "yes, we
+   open at 9" and a poor one for a price table or a six-paragraph answer. Size
+   now comes from two custom properties so three things can set it: the site
+   owner's default, the visitor's expand toggle, and a drag. The viewport caps
+   stay on the panel rule, so none of those can push it off screen.
+   --------------------------------------------------------------------------- */
+.newtide-public-agent {
+	--npa-panel-w: 22rem;
+	--npa-panel-h: 32rem;
+}
+
+.newtide-public-agent--panel-large {
+	--npa-panel-w: 30rem;
+	--npa-panel-h: 38rem;
+}
+
+.newtide-public-agent--panel-xlarge {
+	--npa-panel-w: 38rem;
+	--npa-panel-h: 44rem;
+}
+
+/* The visitor's expand toggle. Deliberately not 100vw: a chat panel spanning an
+   entire desktop monitor gives lines too long to read comfortably, which is the
+   problem this feature exists to solve. */
+.newtide-public-agent--expanded {
+	--npa-panel-w: 52rem;
+	--npa-panel-h: 100vh;
+}
+
+.newtide-public-agent__resize {
+	position: absolute;
+	top: 0;
+	width: 1.15rem;
+	height: 1.15rem;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: nwse-resize;
+	opacity: 0.45;
+	touch-action: none;
+	z-index: 1;
+}
+
+.newtide-public-agent--bottom-right .newtide-public-agent__resize {
+	left: 0;
+	cursor: nwse-resize;
+}
+
+.newtide-public-agent--bottom-left .newtide-public-agent__resize {
+	right: 0;
+	cursor: nesw-resize;
+}
+
+.newtide-public-agent__resize:hover,
+.newtide-public-agent__resize:focus-visible {
+	opacity: 0.9;
+}
+
+.newtide-public-agent__resize::before {
+	content: "";
+	position: absolute;
+	inset: 0.25rem;
+	border-top: 2px solid currentColor;
+	border-left: 2px solid currentColor;
+	border-radius: 2px 0 0 0;
+}
+
+.newtide-public-agent--bottom-left .newtide-public-agent__resize::before {
+	border-left: 0;
+	border-right: 2px solid currentColor;
+	border-radius: 0 2px 0 0;
+}
+
+/* While dragging, stop the pointer selecting the transcript behind it. */
+.newtide-public-agent--resizing,
+.newtide-public-agent--resizing .newtide-public-agent__panel {
+	user-select: none;
+}
+
+/* A drag grip is a pointer affordance. Touch users get the expand button, which
+   on a phone is the only control that matters. */
+@media ( pointer: coarse ) {
+	.newtide-public-agent__resize {
+		display: none;
+	}
+}
+
+/* On a phone the panel is already viewport-width, so expanding means filling
+   the height rather than widening. */
+@media ( max-width: 600px ) {
+	.newtide-public-agent--expanded {
+		--npa-panel-w: 100vw;
+	}
 }

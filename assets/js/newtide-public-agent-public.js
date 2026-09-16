@@ -22,6 +22,29 @@
 		return node;
 	}
 
+	/* Corner arrows out / in. Inline so the control needs no extra request and
+	   inherits the header's colour. */
+	var EXPAND_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M4 10V4h6v2H6v4H4Zm10-6h6v6h-2V6h-4V4ZM4 14h2v4h4v2H4v-6Zm14 0h2v6h-6v-2h4v-4Z"/></svg>';
+	var SHRINK_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M10 4v6H4V8h4V4h2Zm4 0h2v4h4v2h-6V4ZM4 14h6v6H8v-4H4v-2Zm10 0h6v2h-4v4h-2v-6Z"/></svg>';
+
+	/* Drag bounds, in rem. The floor keeps the panel usable; the ceiling stops a
+	   line getting so long it is hard to read, which is the problem being
+	   solved. The viewport caps in CSS apply on top of these. */
+	var MIN_W = 16;
+	var MAX_W = 64;
+	var MIN_H = 14;
+	var MAX_H = 60;
+	var STEP = 2;
+
+	function rootFontSize() {
+		var px = parseFloat( window.getComputedStyle( document.documentElement ).fontSize );
+		return px > 0 ? px : 16;
+	}
+
+	function clamp( value, min, max ) {
+		return Math.min( max, Math.max( min, value ) );
+	}
+
 	function Widget( mount ) {
 		this.mount = mount;
 		this.agent = mount.getAttribute( 'data-agent' ) || '';
@@ -33,6 +56,9 @@
 		this.errorText = mount.getAttribute( 'data-error' ) || t( 'error', 'Something went wrong.' );
 		this.powered = '1' === mount.getAttribute( 'data-powered' );
 		this.remember = '1' === mount.getAttribute( 'data-remember' );
+		this.allowResize = '1' === mount.getAttribute( 'data-allow-resize' );
+		this.position = mount.getAttribute( 'data-position' ) || 'bottom-right';
+		this.expanded = false;
 		this.autoOpen = parseInt( mount.getAttribute( 'data-auto-open' ), 10 ) || 0;
 
 		var promptsRaw = mount.getAttribute( 'data-prompts' ) || '';
@@ -181,6 +207,21 @@
 
 		header.appendChild( title );
 		header.appendChild( newBtn );
+
+		/* Expand. The single most useful control here: a long answer in a 22rem
+		   column is the thing visitors complain about, and one click fixes it. */
+		if ( this.allowResize ) {
+			var expandBtn = el( 'button', 'newtide-public-agent__expand', {
+				type: 'button',
+				'aria-label': t( 'expand', 'Expand chat' ),
+				'aria-pressed': 'false'
+			} );
+			expandBtn.innerHTML = EXPAND_ICON;
+			expandBtn.addEventListener( 'click', this.toggleExpand.bind( this ) );
+			this.expandBtn = expandBtn;
+			header.appendChild( expandBtn );
+		}
+
 		header.appendChild( closeBtn );
 
 		var log = el( 'div', 'newtide-public-agent__log', {
@@ -205,6 +246,19 @@
 		panel.appendChild( header );
 		panel.appendChild( log );
 		panel.appendChild( form );
+
+		/* A drag grip on the corner away from the page edge. It is a real button
+		   so it can be tabbed to and driven with the arrow keys — a resize that
+		   only works with a mouse is not a resize for everybody. */
+		if ( this.allowResize ) {
+			var grip = el( 'button', 'newtide-public-agent__resize', {
+				type: 'button',
+				'aria-label': t( 'resize', 'Resize chat. Use the arrow keys to adjust, or drag.' )
+			} );
+			grip.addEventListener( 'pointerdown', this.onResizeStart.bind( this ) );
+			grip.addEventListener( 'keydown', this.onResizeKey.bind( this ) );
+			panel.appendChild( grip );
+		}
 
 		if ( this.powered ) {
 			var powered = el( 'div', 'newtide-public-agent__powered' );
@@ -240,6 +294,9 @@
 		this.log = log;
 		this.input = input;
 		this.send = send;
+
+		// After the panel exists, so a measured size has something to measure.
+		this.restoreSize();
 	};
 
 	/* Clear the visible conversation and mark the next message as a fresh start.
@@ -271,6 +328,192 @@
 	   alongside the plain text. Only that server-rendered HTML is ever inserted
 	   as markup; anything else — the visitor's own message, an error, a reply
 	   from a transport that sends no html — stays textContent. */
+	/* ---------------------------------------------------------------------
+	   Panel size.
+
+	   Three things set it: the site owner's default (a class from PHP), the
+	   visitor's expand toggle, and a drag. A visitor's choice wins for that
+	   visitor and is remembered per site, because someone who widened the panel
+	   to read a table wants it wide for the next question too.
+
+	   Only the two custom properties are written; the viewport caps live in the
+	   stylesheet, so nothing here can put the panel off screen.
+	   --------------------------------------------------------------------- */
+
+	Widget.prototype.storeKey = function () {
+		return 'npa-panel:' + ( this.agent || 'default' );
+	};
+
+	Widget.prototype.saveSize = function () {
+		try {
+			window.localStorage.setItem( this.storeKey(), JSON.stringify( {
+				w: this.customW || 0,
+				h: this.customH || 0,
+				expanded: !! this.expanded
+			} ) );
+		} catch ( e ) {
+			/* Private browsing, or storage disabled. A size that does not
+			   persist is a smaller problem than a widget that throws. */
+		}
+	};
+
+	Widget.prototype.restoreSize = function () {
+		if ( ! this.allowResize ) {
+			return;
+		}
+
+		var saved = null;
+		try {
+			saved = JSON.parse( window.localStorage.getItem( this.storeKey() ) || 'null' );
+		} catch ( e ) {
+			saved = null;
+		}
+
+		if ( ! saved ) {
+			return;
+		}
+
+		if ( saved.expanded ) {
+			this.setExpanded( true );
+			return;
+		}
+
+		if ( saved.w && saved.h ) {
+			this.customW = clamp( parseFloat( saved.w ) || 0, MIN_W, MAX_W );
+			this.customH = clamp( parseFloat( saved.h ) || 0, MIN_H, MAX_H );
+			this.applySize();
+		}
+	};
+
+	Widget.prototype.applySize = function () {
+		if ( ! this.customW || ! this.customH ) {
+			return;
+		}
+
+		this.mount.style.setProperty( '--npa-panel-w', this.customW + 'rem' );
+		this.mount.style.setProperty( '--npa-panel-h', this.customH + 'rem' );
+	};
+
+	Widget.prototype.setExpanded = function ( on ) {
+		this.expanded = !! on;
+		this.mount.classList.toggle( 'newtide-public-agent--expanded', this.expanded );
+
+		if ( this.expanded ) {
+			/* An explicit size would beat the expanded class, since both write
+			   the same properties and the inline one wins. */
+			this.mount.style.removeProperty( '--npa-panel-w' );
+			this.mount.style.removeProperty( '--npa-panel-h' );
+		} else {
+			this.applySize();
+		}
+
+		if ( this.expandBtn ) {
+			this.expandBtn.setAttribute( 'aria-pressed', this.expanded ? 'true' : 'false' );
+			this.expandBtn.setAttribute(
+				'aria-label',
+				this.expanded ? t( 'shrink', 'Shrink chat' ) : t( 'expand', 'Expand chat' )
+			);
+			this.expandBtn.innerHTML = this.expanded ? SHRINK_ICON : EXPAND_ICON;
+		}
+	};
+
+	Widget.prototype.toggleExpand = function () {
+		this.setExpanded( ! this.expanded );
+		this.saveSize();
+
+		// A taller panel reveals older messages; keep the newest in view.
+		if ( this.log ) {
+			this.log.scrollTop = this.log.scrollHeight;
+		}
+	};
+
+	/* Measure what is on screen now, so a drag or a key press continues from the
+	   current size whether that came from the owner's default, a previous drag,
+	   or the expanded class. */
+	Widget.prototype.currentSize = function () {
+		var rem = rootFontSize();
+		var rect = this.panel.getBoundingClientRect();
+
+		return {
+			w: clamp( rect.width / rem, MIN_W, MAX_W ),
+			h: clamp( rect.height / rem, MIN_H, MAX_H )
+		};
+	};
+
+	Widget.prototype.onResizeStart = function ( e ) {
+		if ( e.button && 0 !== e.button ) {
+			return;
+		}
+
+		e.preventDefault();
+
+		var start = this.currentSize();
+		var startX = e.clientX;
+		var startY = e.clientY;
+		var rem = rootFontSize();
+		// Anchored to the right, the panel grows as the pointer moves left.
+		var dir = 'bottom-left' === this.position ? 1 : -1;
+		var self = this;
+
+		// An expanded panel being dragged becomes an explicitly sized one.
+		if ( this.expanded ) {
+			this.setExpanded( false );
+		}
+
+		var move = function ( ev ) {
+			self.customW = clamp( start.w + ( ( ev.clientX - startX ) * dir ) / rem, MIN_W, MAX_W );
+			self.customH = clamp( start.h + ( ( startY - ev.clientY ) / rem ), MIN_H, MAX_H );
+			self.applySize();
+		};
+
+		var up = function () {
+			window.removeEventListener( 'pointermove', move );
+			window.removeEventListener( 'pointerup', up );
+			window.removeEventListener( 'pointercancel', up );
+			self.mount.classList.remove( 'newtide-public-agent--resizing' );
+			self.saveSize();
+		};
+
+		this.mount.classList.add( 'newtide-public-agent--resizing' );
+		window.addEventListener( 'pointermove', move );
+		window.addEventListener( 'pointerup', up );
+		window.addEventListener( 'pointercancel', up );
+	};
+
+	Widget.prototype.onResizeKey = function ( e ) {
+		var keys = { ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1 };
+
+		if ( ! keys[ e.key ] ) {
+			return;
+		}
+
+		e.preventDefault();
+
+		if ( this.expanded ) {
+			this.setExpanded( false );
+		}
+
+		var size = this.currentSize();
+		this.customW = size.w;
+		this.customH = size.h;
+
+		// Left and right follow the grip, which sits on the inward edge.
+		var dir = 'bottom-left' === this.position ? 1 : -1;
+
+		if ( 'ArrowLeft' === e.key ) {
+			this.customW = clamp( this.customW - STEP * dir, MIN_W, MAX_W );
+		} else if ( 'ArrowRight' === e.key ) {
+			this.customW = clamp( this.customW + STEP * dir, MIN_W, MAX_W );
+		} else if ( 'ArrowUp' === e.key ) {
+			this.customH = clamp( this.customH + STEP, MIN_H, MAX_H );
+		} else {
+			this.customH = clamp( this.customH - STEP, MIN_H, MAX_H );
+		}
+
+		this.applySize();
+		this.saveSize();
+	};
+
 	Widget.prototype.addMessage = function ( who, text, announce, html ) {
 		var msg = el( 'div', 'newtide-public-agent__msg newtide-public-agent__msg--' + who );
 		var bubble = el( 'div', 'newtide-public-agent__bubble' );

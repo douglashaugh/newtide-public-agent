@@ -23,6 +23,8 @@ $cur_size     = (string) $settings->get( 'launcher_size' );
 $cur_header   = (string) $settings->get( 'header_title' );
 $cur_label    = (string) $settings->get( 'launcher_label' );
 $cur_powered  = (bool) $settings->get( 'powered_by' );
+$cur_panel    = (string) $settings->get( 'panel_size', 'standard' );
+$cur_resize   = (bool) $settings->get( 'allow_resize' );
 
 $icon_type    = (string) $settings->get( 'launcher_icon_type' );
 $icon_id      = (int) $settings->get( 'launcher_icon_id' );
@@ -78,6 +80,8 @@ if ( 'auto' !== $cur_theme ) {
 			'launcher_icon_emoji',
 			'launcher_icon_builtin',
 			'powered_by',
+			'panel_size',
+			'allow_resize',
 		)
 	);
 	?>
@@ -252,6 +256,27 @@ if ( 'auto' !== $cur_theme ) {
 					<td>
 						<input type="text" id="npa-header-title" class="regular-text" name="<?php echo esc_attr( $option ); ?>[header_title]" value="<?php echo esc_attr( $cur_header ); ?>" data-npa-preview-control="header" />
 						<p class="description"><?php esc_html_e( 'Shown at the top of the open chat panel.', 'newtide-public-agent' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="npa-panel-size"><?php esc_html_e( 'Chat panel size', 'newtide-public-agent' ); ?></label></th>
+					<td>
+						<select id="npa-panel-size" name="<?php echo esc_attr( $option ); ?>[panel_size]">
+							<option value="standard" <?php selected( $cur_panel, 'standard' ); ?>><?php esc_html_e( 'Standard — compact, good for short answers', 'newtide-public-agent' ); ?></option>
+							<option value="large" <?php selected( $cur_panel, 'large' ); ?>><?php esc_html_e( 'Large — easier for detailed replies', 'newtide-public-agent' ); ?></option>
+							<option value="xlarge" <?php selected( $cur_panel, 'xlarge' ); ?>><?php esc_html_e( 'Extra large — for agents that answer with tables', 'newtide-public-agent' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'The size the chat opens at. It never exceeds the visitor’s screen, so a large setting simply means “as large as fits”. If your agent answers with tables or several paragraphs, start larger.', 'newtide-public-agent' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Resizing', 'newtide-public-agent' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="<?php echo esc_attr( $option ); ?>[allow_resize]" value="1" <?php checked( $cur_resize ); ?> />
+							<?php esc_html_e( 'Let visitors expand and resize the chat panel.', 'newtide-public-agent' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'Adds an expand button to the chat header and a drag handle on its corner. A visitor’s chosen size is remembered on their own device only. Their choice overrides the size above.', 'newtide-public-agent' ); ?></p>
 					</td>
 				</tr>
 				<tr>

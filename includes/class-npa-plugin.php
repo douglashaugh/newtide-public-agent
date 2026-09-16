@@ -1062,25 +1062,55 @@ final class NPA_Plugin {
 				 * A tabbed form saves only the keys it declares in its _present
 				 * list; anything rendered but undeclared is dropped on save with
 				 * no error, and the field simply appears not to work. The
-				 * api_origin field shipped that way in 0.8.2. Compare what the
-				 * view renders against what it declares.
+				 * api_origin field shipped that way in 0.8.2. Every tab that
+				 * writes settings is checked, not just the one that broke.
 				 */
-				preg_match_all( '/NPA_Settings::OPTION \); \?>\[([a-z_]+)\]/', $view, $rendered );
-				$rendered_keys = array_values( array_unique( $rendered[1] ) );
+				$undeclared = array();
 
-				// One region covers both the literal list and the conditional
-				// appends beside it, so nothing has to match a dollar sign.
-				$declared = array();
-				if ( preg_match( '/npa_present = array\((.*?)present_fields\(/s', $view, $dm ) ) {
-					preg_match_all( "/'([a-z_]+)'/", $dm[1], $dl );
-					$declared = $dl[1];
+				foreach ( array( 'tab-agent.php', 'tab-appearance.php' ) as $view_file ) {
+					$source = (string) @file_get_contents( NPA_PLUGIN_DIR . 'admin/views/' . $view_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+
+					if ( '' === $source ) {
+						$undeclared[] = $view_file . ' (unreadable)';
+						continue;
+					}
+
+					// Field names are written two ways across the tabs: with the
+					// class constant echoed inline, and via an $option variable.
+					preg_match_all( '/(?:NPA_Settings::OPTION \); \?>|\$option \); \?>)\[([a-z_]+)\]/', $source, $rendered );
+					$rendered_keys = array_values( array_unique( $rendered[1] ) );
+
+					/*
+					 * Two shapes in use: a $npa_present variable built up with
+					 * conditional appends, and the list passed inline to
+					 * present_fields(). Both count as declaring a key, and
+					 * reading only the first shape made this check report every
+					 * field on the Appearance tab as broken.
+					 */
+					$declared = array();
+
+					if ( preg_match( '/npa_present = array\((.*?)present_fields\(/s', $source, $dm ) ) {
+						preg_match_all( "/'([a-z_]+)'/", $dm[1], $dl );
+						$declared = array_merge( $declared, $dl[1] );
+					}
+
+					if ( preg_match( '/present_fields\(\s*array\((.*?)\)\s*\)\s*;/s', $source, $im ) ) {
+						preg_match_all( "/'([a-z_]+)'/", $im[1], $il );
+						$declared = array_merge( $declared, $il[1] );
+					}
+
+					foreach ( array_diff( $rendered_keys, $declared ) as $missing ) {
+						$undeclared[] = $view_file . ':' . $missing;
+					}
+
+					if ( array() === $rendered_keys ) {
+						$undeclared[] = $view_file . ' (no fields found)';
+					}
 				}
 
-				$undeclared = array_diff( $rendered_keys, $declared );
-
 				$checks[] = array(
-					'label' => __( 'Every field on the Agent tab is one the form actually saves', 'newtide-public-agent' ),
-					'pass'  => array() !== $rendered_keys && array() === $undeclared,
+					'label' => __( 'Every field on every settings tab is one the form actually saves', 'newtide-public-agent' ),
+					'pass'  => array() === $undeclared,
 				);
 
 				$checks[] = array(

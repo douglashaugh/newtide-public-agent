@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.9.1
+Stable tag: 0.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,25 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.10.0 =
+**The chat panel can be resized.** It was a fixed 22rem wide, which is fine for
+"we open at nine" and poor for a price table or a long answer.
+
+* **Expand button** in the chat header — one click to a much larger panel, and
+  back again.
+* **Drag handle** on the panel's inner corner. It is also a real button, so it
+  can be tabbed to and resized with the arrow keys.
+* A visitor's chosen size is remembered on their own device, so they do not have
+  to expand it again for the next question.
+* **Appearance → Chat panel size** sets the size the chat opens at: Standard,
+  Large, or Extra large. Start larger if your agent answers with tables.
+* **Appearance → Resizing** switches the visitor controls off if you would
+  rather fix the size.
+
+The panel is still capped by the visitor's screen, so no setting, toggle or drag
+can push it out of view. On phones, expanding fills the height, and the drag
+handle is hidden where there is no pointer.
 
 = 0.9.1 =
 **The "Powered by NewTide" credit links to newtide.ai.** It opens in a new tab,

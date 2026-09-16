@@ -171,6 +171,9 @@ class NPA_Public {
 					'received'  => __( 'Assistant replied', 'newtide-public-agent' ),
 					'poweredBy' => __( 'Powered by NewTide', 'newtide-public-agent' ),
 					'newChat'   => __( 'New chat', 'newtide-public-agent' ),
+					'expand'    => __( 'Expand chat', 'newtide-public-agent' ),
+					'shrink'    => __( 'Shrink chat', 'newtide-public-agent' ),
+					'resize'    => __( 'Resize chat. Use the arrow keys to adjust, or drag.', 'newtide-public-agent' ),
 				),
 			)
 		);
@@ -526,6 +529,9 @@ class NPA_Public {
 		$size  = (string) $s->get( 'launcher_size', 'medium' );
 		$size  = in_array( $size, NPA_Settings::LAUNCHER_SIZES, true ) ? $size : 'medium';
 
+		$panel_size = (string) $s->get( 'panel_size', 'standard' );
+		$panel_size = in_array( $panel_size, NPA_Settings::PANEL_SIZES, true ) ? $panel_size : 'standard';
+
 		$prompts = array_filter( array_map( 'trim', preg_split( '/\r\n|\r|\n/', (string) $s->get( 'suggested_prompts', '' ) ) ), 'strlen' );
 
 		return array(
@@ -543,6 +549,8 @@ class NPA_Public {
 			'icon_emoji'   => (string) $s->get( 'launcher_icon_emoji', '' ),
 			'icon_builtin' => (string) $s->get( 'launcher_icon_builtin', 'chat' ),
 			'powered'      => (bool) $s->get( 'powered_by' ),
+			'panel_size'   => $panel_size,
+			'allow_resize' => (bool) $s->get( 'allow_resize' ),
 			'auto_open'    => (int) $s->get( 'auto_open_delay', 0 ),
 			'hide_mobile'  => (bool) $s->get( 'hide_on_mobile' ),
 			'remember'     => (bool) $s->get( 'remember_state' ),
@@ -568,6 +576,7 @@ class NPA_Public {
 			'newtide-public-agent--' . $config['position'],
 			'newtide-public-agent--shape-' . $config['shape'],
 			'newtide-public-agent--size-' . $config['size'],
+			'newtide-public-agent--panel-' . $config['panel_size'],
 		);
 		if ( 'auto' !== $config['theme'] ) {
 			$classes[] = 'newtide-public-agent--theme-' . $config['theme'];
@@ -593,6 +602,7 @@ class NPA_Public {
 			'data-auto-open'   => (string) max( 0, $config['auto_open'] ),
 			'data-remember'    => $config['remember'] ? '1' : '0',
 			'data-powered'     => $config['powered'] ? '1' : '0',
+			'data-allow-resize' => $config['allow_resize'] ? '1' : '0',
 			'style'            => '--npa-accent:' . $config['accent'],
 		);
 
