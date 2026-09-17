@@ -1114,7 +1114,20 @@ final class NPA_Plugin {
 					}
 
 					foreach ( array_diff( $rendered_keys, $declared ) as $missing ) {
-						$undeclared[] = $view_file . ':' . $missing;
+						$undeclared[] = $view_file . ':' . $missing . ' (rendered, never saved)';
+					}
+
+					/*
+					 * And the reverse, which is worse. A key a tab claims but no
+					 * longer renders is read from a form that contains no such
+					 * field — so an absent checkbox saves as off and the setting
+					 * is silently cleared by opening an unrelated tab and
+					 * pressing Save. Moving the transcript settings to Behavior
+					 * in 0.11.1 left exactly that behind on the Agent tab, and
+					 * the first version of this check only looked the other way.
+					 */
+					foreach ( array_diff( $declared, $rendered_keys ) as $orphan ) {
+						$undeclared[] = $view_file . ':' . $orphan . ' (saved, never rendered)';
 					}
 
 					if ( array() === $rendered_keys ) {
@@ -1123,7 +1136,7 @@ final class NPA_Plugin {
 				}
 
 				$checks[] = array(
-					'label' => __( 'Every field on every settings tab is one the form actually saves', 'newtide-public-agent' ),
+					'label' => __( 'Every settings tab saves exactly the fields it shows — no more, no fewer', 'newtide-public-agent' ),
 					'pass'  => array() === $undeclared,
 				);
 

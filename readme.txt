@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.11.0
+Stable tag: 0.11.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,17 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.11.1 =
+**Fixes settings that were invisible in Agent API mode.** Transcript storage,
+retention, logging, the daily message cap and conversation memory all sat inside
+the Agent tab's "Gateway settings" card, which only appears in Proxy mode — so
+choosing Agent API hid them completely, and where they were visible they read as
+settings for one connection mode. None of them are.
+
+* They now live on **Behavior → Operation**, and apply to every connection mode.
+* Nothing needs reconfiguring: the settings themselves are unchanged, only where
+  they appear.
 
 = 0.11.0 =
 **A Conversations tab — you can now read what visitors asked.** Conversation

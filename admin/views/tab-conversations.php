@@ -90,7 +90,7 @@ $npa_base_url = admin_url( 'options-general.php?page=' . NPA_Admin::SLUG . '&tab
 			<?php esc_html_e( 'Nothing new is being recorded, and nothing was recorded while this was switched off — there is no history to recover for that period.', 'newtide-public-agent' ); ?>
 		</p>
 		<p>
-			<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . NPA_Admin::SLUG . '&tab=agent' ) ); ?>" class="button button-primary">
+			<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . NPA_Admin::SLUG . '&tab=behavior' ) ); ?>" class="button button-primary">
 				<?php esc_html_e( 'Turn on conversation storage', 'newtide-public-agent' ); ?>
 			</a>
 		</p>
@@ -302,7 +302,7 @@ $npa_base_url = admin_url( 'options-general.php?page=' . NPA_Admin::SLUG . '&tab
 				esc_html( $npa_stats['oldest'] ? mysql2date( 'M j, Y', $npa_stats['oldest'] ) : '—' )
 			);
 			?>
-			<?php esc_html_e( 'Retention limits are set on the Agent tab; bulk deletion is on Service Status.', 'newtide-public-agent' ); ?>
+			<?php esc_html_e( 'Retention limits are set on the Behavior tab; bulk deletion is on Service Status.', 'newtide-public-agent' ); ?>
 		</p>
 	<?php endif; ?>
 

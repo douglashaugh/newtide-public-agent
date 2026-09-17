@@ -50,7 +50,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
 	<?php
 	// Keys this form is responsible for; anything omitted keeps its stored value.
-	$npa_present = array( 'enabled', 'mode', 'placement', 'api_base_url', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days', 'transcript_max_conversations', 'conversation_memory' );
+	$npa_present = array( 'enabled', 'mode', 'placement', 'api_base_url', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id' );
 	if ( ! $npa_key_constant ) {
 		$npa_present[] = 'gateway_key';
 	}
@@ -390,70 +390,6 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 			</td>
 		</tr>
 
-		<tr>
-			<th scope="row"><label for="npa-cap"><?php esc_html_e( 'Daily message cap', 'newtide-public-agent' ); ?></label></th>
-			<td>
-				<input type="number" id="npa-cap" min="0" class="small-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[daily_message_cap]" value="<?php echo esc_attr( (string) $settings->get( 'daily_message_cap' ) ); ?>" />
-				<p class="description"><?php esc_html_e( 'Courtesy limiter on this site. 0 = unlimited. Real rate limiting is enforced upstream by the agent API, which returns a retry time the widget passes on to the visitor.', 'newtide-public-agent' ); ?></p>
-			</td>
-		</tr>
-
-		<tr>
-			<th scope="row"><?php esc_html_e( 'Conversation memory', 'newtide-public-agent' ); ?></th>
-			<td>
-				<label>
-					<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[conversation_memory]" value="1" <?php checked( (bool) $settings->get( 'conversation_memory' ) ); ?> />
-					<?php esc_html_e( 'Let the agent follow up on what was said earlier in the same chat.', 'newtide-public-agent' ); ?>
-				</label>
-				<p class="description">
-					<?php
-					printf(
-						/* translators: 1: turn limit, 2: how long a conversation is kept. */
-						esc_html__( 'The agent API is single-turn — it answers each message with no memory of the last, so "and who runs it?" cannot work on its own. This site keeps the last %1$d exchanges for %2$s and sends them as context. Visitors get a "New chat" button to start over.', 'newtide-public-agent' ),
-						(int) NPA_Conversation::MAX_TURNS,
-						esc_html( human_time_diff( 0, NPA_Conversation::TTL ) )
-					);
-					?>
-				</p>
-				<p class="description">
-					<?php esc_html_e( 'A workaround for a platform limitation, and it has a cost: earlier messages are replayed to the agent, so each turn is longer, and visitor text ends up inside the prompt. Turn this off once the agent platform supports conversations itself.', 'newtide-public-agent' ); ?>
-				</p>
-			</td>
-		</tr>
-
-		<tr>
-			<th scope="row"><?php esc_html_e( 'Logging', 'newtide-public-agent' ); ?></th>
-			<td>
-				<label>
-					<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[log_enabled]" value="1" <?php checked( (bool) $settings->get( 'log_enabled' ) ); ?> />
-					<?php esc_html_e( 'Keep a diagnostic log of the last 50 calls (metadata only — never message content).', 'newtide-public-agent' ); ?>
-				</label>
-				<p class="description"><?php esc_html_e( 'For troubleshooting. Service Status draws on the usage table and reports whether this is on or off.', 'newtide-public-agent' ); ?></p>
-			</td>
-		</tr>
-
-		<tr>
-			<th scope="row"><?php esc_html_e( 'Store transcripts', 'newtide-public-agent' ); ?></th>
-			<td>
-				<label>
-					<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[store_transcripts]" value="1" <?php checked( (bool) $settings->get( 'store_transcripts' ) ); ?> />
-					<?php esc_html_e( 'Persist message content (off by default; introduces PII/retention obligations).', 'newtide-public-agent' ); ?>
-				</label>
-				<label class="npa-inline">
-					<?php esc_html_e( 'Retention (days):', 'newtide-public-agent' ); ?>
-					<input type="number" min="1" max="3650" class="small-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[transcript_retention_days]" value="<?php echo esc_attr( (string) $settings->get( 'transcript_retention_days' ) ); ?>" />
-				</label>
-				<label class="npa-inline">
-					<?php esc_html_e( 'Keep at most (conversations):', 'newtide-public-agent' ); ?>
-					<input type="number" min="0" max="100000" class="small-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[transcript_max_conversations]" value="<?php echo esc_attr( (string) $settings->get( 'transcript_max_conversations' ) ); ?>" />
-				</label>
-				<p class="description">
-					<?php esc_html_e( 'Stores what visitors type and what the agent replies, readable on the Conversations tab. Anything older than the retention window is deleted by a daily job.', 'newtide-public-agent' ); ?>
-					<?php esc_html_e( 'The conversation limit is a second ceiling applied after the age limit — 0 means no limit. Whole conversations are removed, oldest first, never half an exchange.', 'newtide-public-agent' ); ?>
-					<?php esc_html_e( 'Turning storage off stops new storage; it does not delete what is already held — use Delete all on the Service Status tab for that.', 'newtide-public-agent' ); ?>
-				</p>
-			</td>
-		</tr>
 	</table>
 	<?php $npa_admin->card_close(); ?>
 	</div>
