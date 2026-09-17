@@ -76,6 +76,15 @@ class NPA_Settings {
 	const AUDIENCES = array( 'everyone', 'logged_in', 'anonymous' );
 
 	/**
+	 * What an additional agent may say about its own audience. Same list plus
+	 * "inherit", which is the default and means "whatever the site-wide setting
+	 * says" — so an existing row keeps behaving exactly as it did.
+	 *
+	 * @var string[]
+	 */
+	const AGENT_AUDIENCES = array( 'inherit', 'everyone', 'logged_in', 'anonymous' );
+
+	/**
 	 * Connection modes. 'proxy' = the plugin's own widget through the server-side
 	 * gateway; 'embed' = inject RisingTide's official agent-embed.js widget with a
 	 * publishable key (M11).
@@ -500,6 +509,49 @@ class NPA_Settings {
 	}
 
 	/**
+	 * Whether the current visitor falls inside one audience value.
+	 *
+	 * One implementation, used by the site-wide gate and by every additional
+	 * agent, so the two can never disagree about what "logged-in only" means.
+	 *
+	 * @param string $audience One of self::AUDIENCES.
+	 * @return bool
+	 */
+	public static function audience_allows( $audience ) {
+		$audience = (string) $audience;
+
+		if ( 'logged_in' === $audience ) {
+			return is_user_logged_in();
+		}
+
+		if ( 'anonymous' === $audience ) {
+			return ! is_user_logged_in();
+		}
+
+		// Anything unrecognised is treated as "everyone" rather than as a
+		// closed door: a typo in a filter should not silently hide the widget.
+		return true;
+	}
+
+	/**
+	 * The audience actually in force for one additional agent.
+	 *
+	 * @param array $row An agent row.
+	 * @return string One of self::AUDIENCES.
+	 */
+	public function agent_audience( array $row ) {
+		$audience = isset( $row['audience'] ) ? (string) $row['audience'] : 'inherit';
+
+		if ( 'inherit' === $audience || ! in_array( $audience, self::AUDIENCES, true ) ) {
+			$global = (string) $this->get( 'audience', 'everyone' );
+
+			return in_array( $global, self::AUDIENCES, true ) ? $global : 'everyone';
+		}
+
+		return $audience;
+	}
+
+	/**
 	 * Sanitize the additional-agents repeater: a list of maps. Each is normalized
 	 * to a fixed shape; entirely-empty rows are dropped and the list is capped.
 	 * Overrides left blank mean "inherit the global setting" at render time.
@@ -545,6 +597,9 @@ class NPA_Settings {
 
 			$icon_builtin = ( isset( $row['icon_builtin'] ) && NPA_Icons::is_valid( $row['icon_builtin'] ) ) ? $row['icon_builtin'] : 'chat';
 
+			$audience = isset( $row['audience'] ) ? sanitize_key( $row['audience'] ) : 'inherit';
+			$audience = in_array( $audience, self::AGENT_AUDIENCES, true ) ? $audience : 'inherit';
+
 			// Drop rows with no name, no key and no pages — an empty add.
 			if ( '' === $name && '' === $public_key && empty( $page_ids ) ) {
 				continue;
@@ -561,6 +616,7 @@ class NPA_Settings {
 				'icon_id'      => $icon_id,
 				'icon_emoji'   => $icon_emoji,
 				'icon_builtin' => $icon_builtin,
+				'audience'     => $audience,
 			);
 
 			if ( count( $out ) >= 20 ) {

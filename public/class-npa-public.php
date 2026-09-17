@@ -279,9 +279,24 @@ class NPA_Public {
 		}
 		foreach ( $this->plugin->settings->get_agents() as $agent ) {
 			$pages = isset( $agent['page_ids'] ) ? array_map( 'absint', (array) $agent['page_ids'] ) : array();
-			if ( in_array( $current, $pages, true ) ) {
-				return $agent;
+
+			if ( ! in_array( $current, $pages, true ) ) {
+				continue;
 			}
+
+			/*
+			 * A row this visitor is not the audience for does not claim the
+			 * page. It is skipped rather than returned-and-blocked, so a later
+			 * row can match and, failing that, the site-wide agent still
+			 * appears — a logged-out visitor on a members-only agent's page
+			 * gets the public agent rather than no help at all. The site-wide
+			 * one is still subject to its own audience and page rules.
+			 */
+			if ( ! NPA_Settings::audience_allows( $this->plugin->settings->agent_audience( $agent ) ) ) {
+				continue;
+			}
+
+			return $agent;
 		}
 		return null;
 	}
@@ -299,15 +314,7 @@ class NPA_Public {
 	private function passes_common_gates() {
 		$s = $this->plugin->settings;
 
-		$audience = (string) $s->get( 'audience', 'everyone' );
-		if ( 'logged_in' === $audience && ! is_user_logged_in() ) {
-			return false;
-		}
-		if ( 'anonymous' === $audience && is_user_logged_in() ) {
-			return false;
-		}
-
-		return true;
+		return NPA_Settings::audience_allows( $s->get( 'audience', 'everyone' ) );
 	}
 
 	/**

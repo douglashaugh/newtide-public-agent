@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.11.2
+Stable tag: 0.12.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,20 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.12.0 =
+**Each additional agent can have its own audience.** "Who sees it" was a single
+site-wide rule, so a page-targeted agent could not be restricted on its own —
+which is exactly what an advanced or internal agent on a members-only page
+needs.
+
+* **Additional Agents → Who sees it** on every agent: everyone, logged-in only,
+  logged-out only, or the site-wide setting.
+* The default is the site-wide setting, so existing agents are unchanged.
+* When a visitor is not the audience, that agent does not claim its pages and
+  your site-wide agent appears there instead — subject to its own rules. A
+  logged-out visitor on a members-only agent's page gets the public agent rather
+  than no help at all.
 
 = 0.11.2 =
 **Conversations now expand in place, and the row link works.** Clicking a

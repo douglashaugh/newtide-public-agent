@@ -41,6 +41,7 @@ $render_row = function ( $i, array $row ) use ( $option, $all_pages, $builtin_ch
 			'icon_id'      => 0,
 			'icon_emoji'   => '',
 			'icon_builtin' => 'chat',
+			'audience'     => 'inherit',
 		)
 	);
 	$page_ids = array_map( 'absint', (array) $row['page_ids'] );
@@ -80,6 +81,17 @@ $render_row = function ( $i, array $row ) use ( $option, $all_pages, $builtin_ch
 				<?php else : ?>
 					<span class="description"><?php esc_html_e( 'No published pages found.', 'newtide-public-agent' ); ?></span>
 				<?php endif; ?>
+			</p>
+
+			<p class="npa-field">
+				<label><?php esc_html_e( 'Who sees it', 'newtide-public-agent' ); ?></label>
+				<select name="<?php echo esc_attr( $base ); ?>[audience]">
+					<option value="inherit" <?php selected( $row['audience'], 'inherit' ); ?>><?php esc_html_e( 'Same as the site-wide setting', 'newtide-public-agent' ); ?></option>
+					<option value="everyone" <?php selected( $row['audience'], 'everyone' ); ?>><?php esc_html_e( 'Everyone', 'newtide-public-agent' ); ?></option>
+					<option value="logged_in" <?php selected( $row['audience'], 'logged_in' ); ?>><?php esc_html_e( 'Logged-in users only', 'newtide-public-agent' ); ?></option>
+					<option value="anonymous" <?php selected( $row['audience'], 'anonymous' ); ?>><?php esc_html_e( 'Logged-out visitors only', 'newtide-public-agent' ); ?></option>
+				</select>
+				<span class="description"><?php esc_html_e( 'Overrides Behavior → Who sees it for this agent only. When a visitor is not the audience, this agent does not claim its pages and your site-wide agent appears there instead — subject to its own rules.', 'newtide-public-agent' ); ?></span>
 			</p>
 
 			<p class="npa-field">

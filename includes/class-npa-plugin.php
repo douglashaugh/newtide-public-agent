@@ -2906,6 +2906,144 @@ Second line." );
 				);
 
 
+
+				/*
+				 * Audience, per additional agent. The site-wide "Who sees it"
+				 * used to be the only such rule, so a page-targeted agent could
+				 * not be restricted on its own — which is what a members-only
+				 * agent on a members-only page needs.
+				 *
+				 * A visitor outside the audience does not merely get blocked:
+				 * the row stops claiming its pages, so the site-wide agent
+				 * appears there instead. Someone logged out on a members page
+				 * gets the public agent rather than nothing.
+				 */
+				$decide_audience = new ReflectionMethod( 'NPA_Public', 'active_additional_agent' );
+				$decide_audience->setAccessible( true );
+
+				NPA_Settings::begin_test_override(
+					array_merge(
+						NPA_Settings::defaults(),
+						array(
+							'enabled'  => true,
+							'audience' => 'everyone',
+							'agents'   => array(
+								array(
+									'name'       => 'Members desk',
+									'public_key' => 'pk_members',
+									'page_ids'   => array( 4242 ),
+									'audience'   => 'logged_in',
+								),
+							),
+						)
+					)
+				);
+
+				/*
+				 * Both fields, for the reason recorded above: setting only the
+				 * id yields 0 from get_queried_object_id() and the check proves
+				 * nothing. The first version of this one did exactly that and
+				 * reported the restricted agent as correctly hidden when it was
+				 * simply never reached.
+				 */
+				global $wp_query;
+				$saved_audience_query = $wp_query;
+				$wp_query = new WP_Query(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restored below.
+				$wp_query->queried_object    = new stdClass();
+				$wp_query->queried_object_id = 4242;
+
+				$public_for_audience = new NPA_Public( $this );
+
+				/*
+				 * A real user id from this site, not 1. User ids are not
+				 * guaranteed to start at 1 — on the site this was written
+				 * against they are eight digits — and wp_set_current_user() with
+				 * an id that does not exist yields a logged-out state, so the
+				 * first version of this check tested the anonymous path twice
+				 * and called it a pass.
+				 */
+				$real_users = get_users( array( 'number' => 1, 'fields' => 'ID' ) );
+				$a_user_id  = ! empty( $real_users ) ? (int) $real_users[0] : 0;
+
+				$was_user = get_current_user_id();
+
+				// Logged out: the restricted row must stand aside.
+				wp_set_current_user( 0 );
+				$anon_match = $decide_audience->invoke( $public_for_audience );
+
+				// Logged in: it claims the page.
+				wp_set_current_user( $a_user_id );
+				$user_match = $decide_audience->invoke( $public_for_audience );
+				$was_logged_in = is_user_logged_in();
+
+				wp_set_current_user( $was_user );
+
+				$wp_query = $saved_audience_query; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+				$checks[] = array(
+					'label' => __( 'An additional agent set to logged-in only is hidden from logged-out visitors', 'newtide-public-agent' ),
+					'pass'  => $a_user_id > 0
+						&& $was_logged_in
+						&& null === $anon_match
+						&& is_array( $user_match )
+						&& 'pk_members' === $user_match['public_key'],
+				);
+
+				// "Same as the site-wide setting" must keep following it.
+				NPA_Settings::begin_test_override(
+					array_merge(
+						NPA_Settings::defaults(),
+						array(
+							'enabled'  => true,
+							'audience' => 'logged_in',
+							'agents'   => array(
+								array(
+									'name'       => 'Inheriting desk',
+									'public_key' => 'pk_inherit',
+									'page_ids'   => array( 4242 ),
+									'audience'   => 'inherit',
+								),
+							),
+						)
+					)
+				);
+
+				$inheriting = NPA_Settings::defaults();
+				$settings_for_audience = $this->settings;
+				$effective  = $settings_for_audience->agent_audience( array( 'audience' => 'inherit' ) );
+
+				$checks[] = array(
+					'label' => __( '“Same as the site-wide setting” follows that setting rather than pinning a value', 'newtide-public-agent' ),
+					'pass'  => 'logged_in' === $effective
+						&& 'anonymous' === $settings_for_audience->agent_audience( array( 'audience' => 'anonymous' ) ),
+				);
+
+				NPA_Settings::end_test_override();
+
+				// An existing row, saved before this setting existed, must be
+				// unaffected — no audience key at all means inherit.
+				$upgraded = NPA_Settings::sanitize_agents(
+					array(
+						array(
+							'name'       => 'Legacy row',
+							'public_key' => 'pk_legacy',
+							'page_ids'   => array( 7 ),
+						),
+					)
+				);
+
+				$checks[] = array(
+					'label' => __( 'An agent saved before this option existed keeps its old behaviour', 'newtide-public-agent' ),
+					'pass'  => isset( $upgraded[0]['audience'] ) && 'inherit' === $upgraded[0]['audience'],
+				);
+
+				// A value that is not on the list is not a closed door.
+				$checks[] = array(
+					'label' => __( 'An unrecognised audience shows the widget rather than silently hiding it', 'newtide-public-agent' ),
+					'pass'  => true === NPA_Settings::audience_allows( 'nonsense' )
+						&& true === NPA_Settings::audience_allows( 'everyone' ),
+				);
+
 				return $checks;
 			},
 			'user'
