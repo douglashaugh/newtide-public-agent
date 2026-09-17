@@ -154,6 +154,10 @@ class NPA_Settings {
 	public static function defaults() {
 		return array(
 			'enabled'                   => true,
+			// Site knowledge (MCP). Defaults ON: an agent that cannot read the
+			// site it answers for is the failure the subsystem exists to prevent,
+			// so shipping it off by default would ship the problem.
+			'mcp_enabled'               => true,
 			'agent_id'                  => NPA_Gateway_Client_Mock::DEFAULT_AGENT_ID,
 			'gateway_base_url'          => '',
 			'gateway_key'               => '', // Write-only fallback; prefer the NPA_GATEWAY_KEY constant.
@@ -312,6 +316,7 @@ class NPA_Settings {
 
 		// Booleans.
 		$clean['enabled']           = $has( 'enabled' ) ? ! empty( $input['enabled'] ) : (bool) $existing['enabled'];
+		$clean['mcp_enabled']       = $has( 'mcp_enabled' ) ? ! empty( $input['mcp_enabled'] ) : (bool) $existing['mcp_enabled'];
 		$clean['powered_by']        = $has( 'powered_by' ) ? ! empty( $input['powered_by'] ) : (bool) $existing['powered_by'];
 		$clean['allow_resize']      = $has( 'allow_resize' ) ? ! empty( $input['allow_resize'] ) : (bool) $existing['allow_resize'];
 		$clean['hide_on_mobile']    = $has( 'hide_on_mobile' ) ? ! empty( $input['hide_on_mobile'] ) : (bool) $existing['hide_on_mobile'];

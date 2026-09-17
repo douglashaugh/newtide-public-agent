@@ -107,6 +107,27 @@ final class NPA_Plugin {
 	public $rest;
 
 	/**
+	 * MCP tool registry.
+	 *
+	 * @var NPA_MCP_Tools
+	 */
+	public $mcp_tools;
+
+	/**
+	 * MCP service key.
+	 *
+	 * @var NPA_MCP_Key
+	 */
+	public $mcp_key;
+
+	/**
+	 * MCP server — the agent's read access to this site's own content.
+	 *
+	 * @var NPA_MCP_Server
+	 */
+	public $mcp;
+
+	/**
 	 * Front-end surface (shortcode + block + widget).
 	 *
 	 * @var NPA_Public
@@ -156,6 +177,20 @@ final class NPA_Plugin {
 		$this->budget = new NPA_Budget( $this->settings, $this->store );
 		$this->rest   = new NPA_Rest( $this );
 		$this->rest->register();
+
+		/*
+		 * Constructed unconditionally rather than behind a setting check. An
+		 * agent that cannot read the site it answers for is the failure this
+		 * subsystem exists to prevent, so the route always registers and the
+		 * enabled check happens in the permission callback — which keeps a
+		 * disabled server answering 403 rather than 404, so an operator can tell
+		 * "switched off" from "not installed".
+		 */
+		$this->mcp_key   = new NPA_MCP_Key();
+		$this->mcp_tools = new NPA_MCP_Tools();
+		$this->mcp       = new NPA_MCP_Server( $this, $this->mcp_tools, $this->mcp_key );
+		$this->mcp->register();
+
 		$this->public = new NPA_Public( $this );
 		$this->public->register();
 
@@ -193,6 +228,7 @@ final class NPA_Plugin {
 		$this->register_transcript_tests();
 		$this->register_widget_tests();
 		$this->register_embed_tests();
+		$this->register_mcp_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -241,6 +277,11 @@ final class NPA_Plugin {
 
 		// REST proxy.
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-rest.php';
+
+		// MCP — the agent's read access to this site's published content.
+		require_once NPA_PLUGIN_DIR . 'includes/mcp/class-npa-mcp-key.php';
+		require_once NPA_PLUGIN_DIR . 'includes/mcp/class-npa-mcp-tools.php';
+		require_once NPA_PLUGIN_DIR . 'includes/mcp/class-npa-mcp-server.php';
 
 		// Front-end surface.
 		require_once NPA_PLUGIN_DIR . 'public/class-npa-public.php';
@@ -352,6 +393,20 @@ final class NPA_Plugin {
 			__( 'Daily budget', 'newtide-public-agent' ),
 			function () {
 				return $this->budget->status();
+			}
+		);
+
+		/*
+		 * Reported as "site knowledge" rather than "MCP", because that is the
+		 * question an operator actually has. Nobody administering a site needs
+		 * to know what the Model Context Protocol is; they need to know whether
+		 * the agent can read the pages it is answering for.
+		 */
+		$this->service_status->register(
+			'site_knowledge',
+			__( 'Site knowledge', 'newtide-public-agent' ),
+			function () {
+				return $this->mcp->status();
 			}
 		);
 
@@ -1827,6 +1882,168 @@ final class NPA_Plugin {
 	 *
 	 * @return void
 	 */
+	/**
+	 * Site knowledge (MCP) suite.
+	 *
+	 * Checks the things that fail silently. A misconfigured MCP server does not
+	 * throw — the agent simply answers without the site, which reads as a vague
+	 * model rather than a broken integration. Each check below corresponds to a
+	 * way that has actually happened.
+	 *
+	 * @return void
+	 */
+	private function register_mcp_tests() {
+		$this->test_runner->register_suite(
+			'mcp',
+			__( 'Site knowledge', 'newtide-public-agent' ),
+			__( 'Confirms the agent can read this site: the endpoint is registered, a key exists, the tools are well formed, and content access is limited to what a logged-out visitor sees.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+
+				$checks[] = array(
+					'label' => __( 'MCP classes loaded', 'newtide-public-agent' ),
+					'pass'  => class_exists( 'NPA_MCP_Server' ) && class_exists( 'NPA_MCP_Tools' ) && class_exists( 'NPA_MCP_Key' ),
+				);
+
+				$key = $this->mcp_key->get();
+
+				$checks[] = array(
+					'label' => __( 'A service key is provisioned', 'newtide-public-agent' ),
+					'pass'  => '' !== $key && 0 === strpos( $key, NPA_MCP_Key::PREFIX ),
+				);
+
+				$checks[] = array(
+					'label' => __( 'A wrong key is rejected', 'newtide-public-agent' ),
+					'pass'  => ! $this->mcp_key->verify( NPA_MCP_Key::PREFIX . str_repeat( '0', 40 ) ),
+				);
+
+				$checks[] = array(
+					'label' => __( 'An empty key is rejected', 'newtide-public-agent' ),
+					'pass'  => ! $this->mcp_key->verify( '' ),
+				);
+
+				$tools = $this->mcp_tools->definitions();
+
+				$checks[] = array(
+					'label' => __( 'Tools are advertised', 'newtide-public-agent' ),
+					'pass'  => count( $tools ) >= 4,
+				);
+
+				/*
+				 * The description is the only thing the model sees when choosing
+				 * a tool, so an empty or stub one is a silent capability loss.
+				 */
+				$well_formed = true;
+
+				foreach ( $tools as $tool ) {
+					if ( empty( $tool['name'] ) || empty( $tool['inputSchema'] )
+						|| strlen( (string) $tool['description'] ) < 80
+						|| true !== $tool['annotations']['readOnlyHint'] ) {
+						$well_formed = false;
+						break;
+					}
+				}
+
+				$checks[] = array(
+					'label' => __( 'Every tool has a substantial description, a schema, and is marked read-only', 'newtide-public-agent' ),
+					'pass'  => $well_formed,
+				);
+
+				$names = $this->mcp_tools->names();
+
+				$checks[] = array(
+					'label' => __( 'describe_site is present — without it an agent cannot learn the content model', 'newtide-public-agent' ),
+					'pass'  => isset( $names['describe_site'] ),
+				);
+
+				// describe_site must reflect this site, not a hardcoded model.
+				$described = $this->mcp_tools->call( 'describe_site', array() );
+
+				$checks[] = array(
+					'label' => __( 'describe_site reports this site and its real content types', 'newtide-public-agent' ),
+					'pass'  => isset( $described['name'], $described['content_types'] )
+						&& $described['name'] === get_bloginfo( 'name' ),
+				);
+
+				/*
+				 * The visibility boundary. The agent answers in public, so it
+				 * must see exactly what the public sees.
+				 */
+				$draft = wp_insert_post(
+					array(
+						'post_title'   => 'NPA MCP suite draft',
+						'post_content' => 'Draft body that must never be readable.',
+						'post_status'  => 'draft',
+						'post_type'    => 'post',
+					)
+				);
+
+				$draft_blocked = false;
+
+				if ( $draft && ! is_wp_error( $draft ) ) {
+					try {
+						$this->mcp_tools->call( 'get_content', array( 'identifier' => (string) $draft ) );
+					} catch ( InvalidArgumentException $e ) {
+						$draft_blocked = true;
+					}
+
+					wp_delete_post( $draft, true );
+				}
+
+				$checks[] = array(
+					'label' => __( 'A draft post cannot be read, even by ID', 'newtide-public-agent' ),
+					'pass'  => $draft_blocked,
+				);
+
+				// Shortcodes must be stripped, never executed.
+				$shortcoded = wp_insert_post(
+					array(
+						'post_title'   => 'NPA MCP suite shortcode',
+						'post_content' => "Readable sentence before the embed. [gallery ids=\"1,2,3\"] Readable sentence after it, long enough to clear the prose threshold that filters out layout-only pages from search results.",
+						'post_status'  => 'publish',
+						'post_type'    => 'post',
+					)
+				);
+
+				$stripped = false;
+
+				if ( $shortcoded && ! is_wp_error( $shortcoded ) ) {
+					$fetched  = $this->mcp_tools->call( 'get_content', array( 'identifier' => (string) $shortcoded ) );
+					$body     = isset( $fetched['content'] ) ? $fetched['content'] : '';
+					$stripped = false === strpos( $body, '[gallery' )
+						&& false !== strpos( $body, 'Readable sentence before' );
+
+					wp_delete_post( $shortcoded, true );
+				}
+
+				$checks[] = array(
+					'label' => __( 'Shortcodes are stripped from content, not executed or left raw', 'newtide-public-agent' ),
+					'pass'  => $stripped,
+				);
+
+				// Every result must stay inside the context budget.
+				$search = $this->mcp_tools->call( 'search_content', array( 'limit' => NPA_MCP_Tools::MAX_ROWS ) );
+				$size   = strlen( (string) wp_json_encode( $search ) );
+
+				$checks[] = array(
+					'label' => __( 'A maximum-size search stays within the result ceiling', 'newtide-public-agent' ),
+					'pass'  => $size <= NPA_MCP_Tools::MAX_RESULT_BYTES,
+				);
+
+				$checks[] = array(
+					'label' => __( 'The endpoint is registered on the REST API', 'newtide-public-agent' ),
+					'pass'  => in_array(
+						'/' . NPA_Rest::NS . NPA_MCP_Server::ROUTE,
+						array_keys( rest_get_server()->get_routes() ),
+						true
+					),
+				);
+
+				return $checks;
+			}
+		);
+	}
+
 	private function register_conversations_tests() {
 		$this->test_runner->register_suite(
 			'conversations',
