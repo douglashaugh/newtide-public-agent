@@ -239,30 +239,37 @@ class NPA_Rest {
 		$conversation_id = sanitize_text_field( (string) $request->get_param( 'conversation_id' ) );
 
 		/*
-		 * Conversation memory. The upstream API is single-turn and ignores every
-		 * threading field, so continuity is reconstructed here or not at all —
-		 * see NPA_Conversation. Off leaves every turn independent, which is what
-		 * the platform itself does today.
+		 * Conversation memory.
+		 *
+		 * This used to also require the transport to be NPA_Gateway_Client_Public,
+		 * written when that was the only transport and memory was purely a
+		 * workaround for its single-turn API. The Agent API arrived in 0.8.0 with
+		 * real threading and that condition was never revisited, so on the one
+		 * transport that models a conversation properly the history was always
+		 * empty and every question arrived unaccompanied. Which transport it is
+		 * decides how the turns travel, below — not whether they are kept.
 		 */
-		$remember = (bool) $this->plugin->settings->get( 'conversation_memory' )
-			&& $this->plugin->gateway_client() instanceof NPA_Gateway_Client_Public;
+		$remember = (bool) $this->plugin->settings->get( 'conversation_memory' );
 
 		if ( $request->get_param( 'new_conversation' ) ) {
 			NPA_Conversation::forget( $conversation_id );
 			$conversation_id = '';
 		}
 
-		if ( $remember ) {
-			// Only ever continue an id this server issued; anything else starts
-			// a new conversation rather than failing.
-			if ( ! NPA_Conversation::is_valid_id( $conversation_id ) ) {
-				$conversation_id = NPA_Conversation::new_id();
-			}
-
-			$history = NPA_Conversation::load( $conversation_id );
-		} else {
-			$history = array();
+		/*
+		 * Mint an id whatever the memory setting says. It is what groups a
+		 * stored transcript into a conversation, and without one every message
+		 * lands under the empty string — which is why stored transcripts could
+		 * be counted but never read back as exchanges.
+		 *
+		 * Only ever continue an id this server issued; anything else starts a
+		 * new conversation rather than failing.
+		 */
+		if ( ! NPA_Conversation::is_valid_id( $conversation_id ) ) {
+			$conversation_id = NPA_Conversation::new_id();
 		}
+
+		$history = $remember ? NPA_Conversation::load( $conversation_id ) : array();
 		$context         = $this->sanitize_context( (array) $request->get_param( 'context' ) );
 		$resolved        = $this->resolve_agent( $request );
 		$agent_id        = $resolved['label'];
@@ -317,10 +324,17 @@ class NPA_Rest {
 			$result  = $client->send_message( $agent_id, $outbound, $conversation_id, $context, $send_history );
 			$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
 
+			/*
+			 * A transport may echo the id, mint its own, or return nothing.
+			 * Falling back to ours keeps the usage row, the transcript and the
+			 * browser all naming the same conversation.
+			 */
+			$thread_id = ( '' !== (string) $result->conversation_id ) ? (string) $result->conversation_id : $conversation_id;
+
 			$this->plugin->store->record(
 				array(
 					'agent_id'        => $agent_id,
-					'conversation_id' => $result->conversation_id,
+					'conversation_id' => $thread_id,
 					'status'          => 200,
 					'finish_reason'   => $result->finish_reason,
 					'latency_ms'      => $latency,
@@ -334,7 +348,7 @@ class NPA_Rest {
 			}
 
 			// Transcripts store what was actually said, never the composed prompt.
-			$this->store_turn( $agent_id, $result->conversation_id, $message, $result->reply_text );
+			$this->store_turn( $agent_id, $thread_id, $message, $result->reply_text );
 			$this->plugin->service_status->record_success( 'gateway' );
 			$this->plugin->logger->log(
 				array(
@@ -353,7 +367,7 @@ class NPA_Rest {
 					// output into markup is the one place a mistake is an XSS
 					// hole, and in PHP it is covered by the test battery.
 					'reply_html'      => NPA_Markdown::to_html( $result->reply_text ),
-					'conversation_id' => $result->conversation_id,
+					'conversation_id' => $thread_id,
 					'finish_reason'   => $result->finish_reason,
 				),
 				200

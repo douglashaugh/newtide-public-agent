@@ -225,7 +225,13 @@ $npa_admin->card_open(
 							<span class="npa-convo-toggle__icon" aria-hidden="true"></span>
 						</button>
 					</td>
-					<td><?php echo esc_html( mysql2date( 'M j, Y H:i', $npa_row['started'] ) ); ?></td>
+					<td>
+						<?php echo esc_html( mysql2date( 'M j, Y H:i', $npa_row['started'] ) ); ?>
+						<?php if ( '' === $npa_id ) : ?>
+							<?php /* Everything recorded before 0.12.1 was filed under the empty id, because the plugin only minted one when conversation memory was on. Those messages are real and worth reading; they simply cannot be split back into separate exchanges. */ ?>
+							<br /><span class="description"><?php esc_html_e( 'Ungrouped — recorded before messages were threaded', 'newtide-public-agent' ); ?></span>
+						<?php endif; ?>
+					</td>
 					<td><?php echo esc_html( $npa_agent_label( (string) $npa_row['agent_id'], $settings ) ); ?></td>
 					<td><?php echo esc_html( number_format_i18n( (int) $npa_row['turns'] ) ); ?></td>
 					<td><?php echo esc_html( '' !== $npa_preview ? wp_trim_words( $npa_preview, 18, '…' ) : __( '(no visitor message)', 'newtide-public-agent' ) ); ?></td>

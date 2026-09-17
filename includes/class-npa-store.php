@@ -430,7 +430,12 @@ class NPA_Store {
 	public function turns_for( array $conversation_ids ) {
 		global $wpdb;
 
-		$ids = array_values( array_filter( array_map( 'strval', $conversation_ids ), 'strlen' ) );
+		/*
+		 * Empty ids are kept. Messages recorded before 0.12.1 were filed under
+		 * the empty string, and dropping them here is what made those rows
+		 * expand to nothing at all.
+		 */
+		$ids = array_values( array_unique( array_map( 'strval', $conversation_ids ) ) );
 
 		if ( empty( $ids ) ) {
 			return array();

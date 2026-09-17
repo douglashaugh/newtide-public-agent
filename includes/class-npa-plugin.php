@@ -2239,6 +2239,102 @@ Second line." );
 					'pass'  => array() === NPA_Conversation::load( $minted ),
 				);
 
+
+				/*
+				 * Memory has to survive the actual route, not just the store.
+				 *
+				 * Between 0.8.0 and 0.12.1 it did not: $remember also required
+				 * the transport to be the legacy public client, a condition
+				 * written when that was the only one. On the Agent API — the one
+				 * transport that threads a conversation properly — history was
+				 * always empty, so every question arrived with nothing before
+				 * it, and no conversation id was minted, so stored transcripts
+				 * all landed under the empty string and could be counted but
+				 * never read back. Both symptoms, one line.
+				 *
+				 * This drives the REST route rather than the client, because the
+				 * client was never the part that was broken.
+				 */
+				$GLOBALS['npa_seen_turns'] = array();
+
+				$threading_client = static function () {
+					return new class implements NPA_Gateway_Client {
+						public function supports_history(): bool {
+							return true;
+						}
+						public function send_message( string $a, string $m, string $c, array $x, array $h = array() ): NPA_Gateway_Result { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+							$GLOBALS['npa_seen_turns'][] = count( $h );
+							return new NPA_Gateway_Result( 'ok', $c, 'stop', 1, 1, array() );
+						}
+						public function list_agents(): array {
+							return array();
+						}
+						public function health_check(): NPA_Gateway_Health {
+							return new NPA_Gateway_Health( true, 'ok', 1 );
+						}
+					};
+				};
+
+				/*
+				 * The resolved client is cached for the request, and earlier
+				 * suites have already resolved it — so adding the filter alone
+				 * changes nothing and the stand-in is never consulted. Reset
+				 * either side, and again afterwards so nothing downstream
+				 * inherits this one.
+				 */
+				add_filter( 'npa_gateway_client', $threading_client, PHP_INT_MAX );
+				$this->reset_gateway_client();
+
+				NPA_Settings::begin_test_override(
+					array_merge(
+						NPA_Settings::defaults(),
+						array(
+							'enabled'             => true,
+							'mode'                => 'api',
+							'api_key'             => 'wbk_suite',
+							'conversation_memory' => true,
+							'store_transcripts'   => false,
+						)
+					)
+				);
+
+				$thread = '';
+				$ids    = array();
+
+				for ( $i = 0; $i < 3; $i++ ) {
+					$req = new WP_REST_Request( 'POST', '/npa/v1/message' );
+					$req->set_header( 'content-type', 'application/json' );
+					$req->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+					$req->set_body( wp_json_encode( array( 'message' => 'q' . $i, 'conversation_id' => $thread ) ) );
+
+					$data   = rest_do_request( $req )->get_data();
+					$thread = isset( $data['conversation_id'] ) ? (string) $data['conversation_id'] : '';
+					$ids[]  = $thread;
+				}
+
+				remove_filter( 'npa_gateway_client', $threading_client, PHP_INT_MAX );
+				$this->reset_gateway_client();
+				NPA_Settings::end_test_override();
+
+				$seen = $GLOBALS['npa_seen_turns'];
+				unset( $GLOBALS['npa_seen_turns'] );
+
+				foreach ( $ids as $id ) {
+					NPA_Conversation::forget( $id );
+				}
+
+				$checks[] = array(
+					'label' => __( 'Asking a follow-up through the widget carries the earlier turns to the agent', 'newtide-public-agent' ),
+					'pass'  => array( 0, 1, 2 ) === $seen,
+				);
+
+				$checks[] = array(
+					'label' => __( 'Every reply carries a conversation id, so a follow-up and its transcript stay together', 'newtide-public-agent' ),
+					'pass'  => 3 === count( array_filter( $ids, 'strlen' ) )
+						&& 1 === count( array_unique( $ids ) )
+						&& NPA_Conversation::is_valid_id( $ids[0] ),
+				);
+
 				return $checks;
 			},
 			'user'

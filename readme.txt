@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.12.0
+Stable tag: 0.12.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,22 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.12.1 =
+**Conversation memory was not working in Agent API mode, and stored transcripts
+were not grouped.** Both came from one condition: memory also required the older
+transport, a rule written when that was the only one. On the Agent API — the one
+connection mode that threads a conversation properly — no earlier turns were
+ever sent, and no conversation id was created, so every stored message was filed
+without one.
+
+* Follow-up questions now carry the earlier turns to the agent, in every mode.
+* Every reply carries a conversation id, so stored messages group into readable
+  exchanges and an expanded row shows the conversation.
+* Messages recorded before this release are still shown, marked "Ungrouped".
+  They cannot be split back into separate exchanges, but nothing is lost.
+
+If your agent has been forgetting what was said a moment earlier, this is why.
 
 = 0.12.0 =
 **Each additional agent can have its own audience.** "Who sees it" was a single
