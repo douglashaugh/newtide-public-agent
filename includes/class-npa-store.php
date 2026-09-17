@@ -418,6 +418,42 @@ class NPA_Store {
 	}
 
 	/**
+	 * Every turn of several conversations at once, grouped by conversation.
+	 *
+	 * The list renders each row's transcript inline, so the alternative is one
+	 * query per row. Twenty rows is twenty round trips for a screen that is
+	 * mostly collapsed.
+	 *
+	 * @param string[] $conversation_ids Conversation ids.
+	 * @return array<string,array<int,array>> Keyed by conversation id, oldest turn first.
+	 */
+	public function turns_for( array $conversation_ids ) {
+		global $wpdb;
+
+		$ids = array_values( array_filter( array_map( 'strval', $conversation_ids ), 'strlen' ) );
+
+		if ( empty( $ids ) ) {
+			return array();
+		}
+
+		$table        = $this->transcripts_table_name();
+		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%s' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare( "SELECT * FROM {$table} WHERE conversation_id IN ( {$placeholders} ) ORDER BY id ASC", $ids ),
+			ARRAY_A
+		);
+
+		$grouped = array();
+		foreach ( (array) $rows as $row ) {
+			$grouped[ $row['conversation_id'] ][] = $row;
+		}
+
+		return $grouped;
+	}
+
+	/**
 	 * Delete one conversation outright.
 	 *
 	 * @param string $conversation_id Conversation id.

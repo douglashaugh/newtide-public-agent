@@ -1903,6 +1903,33 @@ final class NPA_Plugin {
 					'pass'  => '' !== $view && $escapes_content && ! $renders_markdown,
 				);
 
+				/*
+				 * The plugin registers a top-level menu, so its pages live under
+				 * admin.php. The first Conversations tab built its own links
+				 * against options-general.php, which is where the settings API
+				 * would put them — every link pointed at a page that does not
+				 * exist, and clicking a conversation did nothing. Anything
+				 * addressing a plugin screen goes through tab_url().
+				 */
+				$admin_src = (string) @file_get_contents( NPA_PLUGIN_DIR . 'admin/class-npa-admin.php' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+				$wrong_parent = array();
+
+				foreach ( array( 'admin/views/tab-conversations.php' => $view, 'admin/class-npa-admin.php' => $admin_src ) as $where => $src ) {
+					// Match the call, not the word: the comments in both files
+					// explain this bug and name the wrong parent, and a plain
+					// substring search flagged the explanation.
+					if ( preg_match( '/admin_url\(\s*.?options-general\.php/', $src ) ) {
+						$wrong_parent[] = $where;
+					}
+				}
+
+				$checks[] = array(
+					'label' => __( 'Links to the plugin’s own screens point at the menu it actually registers', 'newtide-public-agent' ),
+					'pass'  => '' !== $admin_src
+						&& array() === $wrong_parent
+						&& false !== strpos( $view, "tab_url( 'conversations' )" ),
+				);
+
 				// Cleanup: this suite's rows and nothing else.
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id > %d", $since ) );

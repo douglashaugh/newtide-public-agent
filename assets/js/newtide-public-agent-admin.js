@@ -814,3 +814,46 @@
 		} );
 	} );
 }() );
+
+/* Conversations tab: expand a row in place.
+
+   The transcript is already on the page — one query rendered it with the list —
+   so this only flips visibility. No request and no spinner. Without JavaScript
+   the panels stay closed, but a conversation named in the URL is opened by the
+   server, so a shared link and the redirect after a delete still work. */
+( function () {
+	'use strict';
+
+	var toggles = document.querySelectorAll( '.npa-convo-toggle' );
+
+	if ( ! toggles.length ) {
+		return;
+	}
+
+	Array.prototype.forEach.call( toggles, function ( btn ) {
+		btn.addEventListener( 'click', function () {
+			var panel = document.getElementById( btn.getAttribute( 'aria-controls' ) );
+
+			if ( ! panel ) {
+				return;
+			}
+
+			var open = 'true' === btn.getAttribute( 'aria-expanded' );
+
+			btn.setAttribute( 'aria-expanded', open ? 'false' : 'true' );
+			panel.hidden = open;
+
+			var row = btn.closest( '.npa-convo-row' );
+			if ( row ) {
+				row.classList.toggle( 'is-open', ! open );
+			}
+		} );
+	} );
+
+	/* A conversation named in the URL — a shared link, or the redirect after a
+	   delete — is already open server-side; bring it into view. */
+	var openRow = document.querySelector( '.npa-convo-row.is-open' );
+	if ( openRow && window.location.search.indexOf( 'npa_c=' ) > -1 ) {
+		openRow.scrollIntoView( { block: 'center' } );
+	}
+}() );

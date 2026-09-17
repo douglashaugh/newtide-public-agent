@@ -446,7 +446,9 @@ class NPA_Admin {
 					'tab'         => 'conversations',
 					'npa_deleted' => (int) $deleted,
 				),
-				admin_url( 'options-general.php' )
+				// The plugin is a top-level menu, so this is admin.php — not the
+				// options-general.php the settings API would imply.
+				admin_url( 'admin.php' )
 			)
 		);
 		exit;

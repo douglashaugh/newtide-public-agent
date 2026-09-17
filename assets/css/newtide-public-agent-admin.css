@@ -1436,3 +1436,59 @@ pre.npa-code {
 	gap: 0.4rem;
 	align-items: center;
 }
+
+/* Conversations: the expand control. A disclosure triangle rather than a link,
+   because the row opens here rather than going somewhere. */
+.npa-convo-table__toggle {
+	width: 2.2rem;
+	text-align: center;
+}
+
+.npa-convo-toggle {
+	padding: 0.2rem 0.35rem;
+	border: 0;
+	background: none;
+	cursor: pointer;
+	color: #50575e;
+	line-height: 1;
+}
+
+.npa-convo-toggle:hover,
+.npa-convo-toggle:focus-visible {
+	color: #2271b1;
+}
+
+.npa-convo-toggle__icon {
+	display: inline-block;
+	width: 0;
+	height: 0;
+	border-top: 5px solid transparent;
+	border-bottom: 5px solid transparent;
+	border-left: 7px solid currentColor;
+	transition: transform 0.12s ease;
+}
+
+.npa-convo-row.is-open .npa-convo-toggle__icon {
+	transform: rotate( 90deg );
+}
+
+.npa-convo-row.is-open > td {
+	border-bottom: 0;
+	font-weight: 600;
+}
+
+.npa-convo-detail > td {
+	padding: 0.9rem 1.2rem 1.1rem;
+	background: #fbfbfc;
+	box-shadow: inset 0 1px 0 #f0f0f1;
+}
+
+.npa-convo__actions {
+	margin: 0.4rem 0 0;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.npa-convo-toggle__icon {
+		transition: none;
+	}
+}

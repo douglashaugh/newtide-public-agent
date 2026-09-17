@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.11.1
+Stable tag: 0.11.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,16 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.11.2 =
+**Conversations now expand in place, and the row link works.** Clicking a
+conversation did nothing: the link was built against the wrong admin page, so it
+navigated somewhere that does not exist.
+
+* Select any row to read the whole conversation inline — no page change, no
+  request, and no need to export a CSV to see what was said.
+* The transcripts for a page are fetched in one query, so expanding is instant.
+* A conversation named in the URL opens on load, so a shared link still works.
 
 = 0.11.1 =
 **Fixes settings that were invisible in Agent API mode.** Transcript storage,
