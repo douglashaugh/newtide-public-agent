@@ -252,6 +252,252 @@ class NPA_Store {
 	}
 
 	/**
+	 * Build the WHERE clause shared by the conversation list and its count.
+	 *
+	 * @param array $args { agent:string, search:string }.
+	 * @return array { sql:string, params:array }
+	 */
+	private function transcript_where( array $args ) {
+		global $wpdb;
+
+		$where  = array();
+		$params = array();
+
+		if ( ! empty( $args['agent'] ) ) {
+			$where[]  = 'agent_id = %s';
+			$params[] = (string) $args['agent'];
+		}
+
+		if ( ! empty( $args['search'] ) ) {
+			/*
+			 * Match the conversation, not the message: someone searching for
+			 * "refund" wants the exchange that mentions it, including the turns
+			 * either side. The inner select finds the conversations containing a
+			 * hit; the outer query returns them whole.
+			 */
+			$table    = $this->transcripts_table_name();
+			$where[]  = "conversation_id IN ( SELECT conversation_id FROM {$table} WHERE content LIKE %s )"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$params[] = '%' . $wpdb->esc_like( (string) $args['search'] ) . '%';
+		}
+
+		return array(
+			'sql'    => $where ? ( ' WHERE ' . implode( ' AND ', $where ) ) : '',
+			'params' => $params,
+		);
+	}
+
+	/**
+	 * A page of conversations, most recent activity first.
+	 *
+	 * Grouped rather than listed message by message, because the unit a reader
+	 * cares about is the exchange. The preview is the visitor's opening line,
+	 * which is what makes a row recognisable in a list.
+	 *
+	 * @param array $args { agent:string, search:string, per_page:int, page:int }.
+	 * @return array<int,array>
+	 */
+	public function conversations( array $args = array() ) {
+		global $wpdb;
+
+		$table    = $this->transcripts_table_name();
+		$per_page = max( 1, min( 200, isset( $args['per_page'] ) ? (int) $args['per_page'] : 20 ) );
+		$page     = max( 1, isset( $args['page'] ) ? (int) $args['page'] : 1 );
+		$offset   = ( $page - 1 ) * $per_page;
+
+		$where = $this->transcript_where( $args );
+
+		$sql = "SELECT conversation_id, MAX( agent_id ) AS agent_id, MIN( created_at ) AS started,
+				MAX( created_at ) AS ended, COUNT(*) AS turns
+			FROM {$table}{$where['sql']}
+			GROUP BY conversation_id
+			ORDER BY ended DESC
+			LIMIT %d OFFSET %d";
+
+		$params = array_merge( $where['params'], array( $per_page, $offset ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
+		$rows = is_array( $rows ) ? $rows : array();
+
+		if ( empty( $rows ) ) {
+			return array();
+		}
+
+		// One query for every preview on this page, rather than one per row.
+		$ids          = wp_list_pluck( $rows, 'conversation_id' );
+		$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%s' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$previews = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT t.conversation_id, t.content
+				FROM {$table} t
+				INNER JOIN (
+					SELECT conversation_id, MIN( id ) AS first_id
+					FROM {$table}
+					WHERE role = 'visitor' AND conversation_id IN ( {$placeholders} )
+					GROUP BY conversation_id
+				) f ON f.first_id = t.id",
+				$ids
+			),
+			ARRAY_A
+		);
+
+		$by_id = array();
+		foreach ( (array) $previews as $preview ) {
+			$by_id[ $preview['conversation_id'] ] = (string) $preview['content'];
+		}
+
+		foreach ( $rows as $i => $row ) {
+			$rows[ $i ]['preview'] = isset( $by_id[ $row['conversation_id'] ] ) ? $by_id[ $row['conversation_id'] ] : '';
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * How many conversations match, for paging.
+	 *
+	 * @param array $args Same shape as conversations().
+	 * @return int
+	 */
+	public function count_conversations( array $args = array() ) {
+		global $wpdb;
+
+		$table = $this->transcripts_table_name();
+		$where = $this->transcript_where( $args );
+
+		$sql = "SELECT COUNT( DISTINCT conversation_id ) FROM {$table}{$where['sql']}";
+
+		if ( empty( $where['params'] ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return (int) $wpdb->get_var( $sql );
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		return (int) $wpdb->get_var( $wpdb->prepare( $sql, $where['params'] ) );
+	}
+
+	/**
+	 * The agent ids that actually appear in stored conversations.
+	 *
+	 * Used to offer a filter that only lists agents there is something to see
+	 * for, rather than every agent ever configured.
+	 *
+	 * @return string[]
+	 */
+	public function transcript_agent_ids() {
+		global $wpdb;
+
+		$table = $this->transcripts_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$ids = $wpdb->get_col( "SELECT DISTINCT agent_id FROM {$table} WHERE agent_id <> '' ORDER BY agent_id ASC" );
+
+		return is_array( $ids ) ? $ids : array();
+	}
+
+	/**
+	 * Every turn of one conversation, oldest first.
+	 *
+	 * @param string $conversation_id Conversation id.
+	 * @return array<int,array>
+	 */
+	public function conversation( $conversation_id ) {
+		global $wpdb;
+
+		$table = $this->transcripts_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare( "SELECT * FROM {$table} WHERE conversation_id = %s ORDER BY id ASC", (string) $conversation_id ),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Delete one conversation outright.
+	 *
+	 * @param string $conversation_id Conversation id.
+	 * @return int Rows deleted.
+	 */
+	public function delete_conversation( $conversation_id ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->delete( $this->transcripts_table_name(), array( 'conversation_id' => (string) $conversation_id ), array( '%s' ) );
+	}
+
+	/**
+	 * Which conversations fall outside a ceiling of $max, least recent first.
+	 *
+	 * Split out from the deletion so the selection can be tested without
+	 * deleting anything. The battery runs on live sites, where a test that
+	 * trims the real table to prove trimming works would destroy the very
+	 * records it is meant to be protecting.
+	 *
+	 * Whole conversations, never loose messages: a ceiling applied to rows
+	 * would leave an exchange with its question deleted and the answer still
+	 * present, which reads as the agent volunteering something nobody asked.
+	 *
+	 * @param int $max Maximum conversations to keep; 0 means no limit.
+	 * @return string[] Conversation ids to remove.
+	 */
+	public function conversations_over_limit( $max ) {
+		global $wpdb;
+
+		$max = (int) $max;
+
+		if ( $max < 1 ) {
+			return array();
+		}
+
+		$table = $this->transcripts_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$doomed = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT conversation_id FROM (
+					SELECT conversation_id, MAX( created_at ) AS ended
+					FROM {$table}
+					GROUP BY conversation_id
+					ORDER BY ended DESC
+					LIMIT %d, 18446744073709551615
+				) AS keepers",
+				$max
+			)
+		);
+
+		return is_array( $doomed ) ? $doomed : array();
+	}
+
+	/**
+	 * Keep at most $max conversations, dropping the least recently active.
+	 *
+	 * @param int $max Maximum conversations to keep; 0 means no limit.
+	 * @return int Rows deleted.
+	 */
+	public function trim_conversations( $max ) {
+		global $wpdb;
+
+		$table  = $this->transcripts_table_name();
+		$doomed = $this->conversations_over_limit( $max );
+
+		if ( empty( $doomed ) ) {
+			return 0;
+		}
+
+		$placeholders = implode( ', ', array_fill( 0, count( $doomed ), '%s' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		return (int) $wpdb->query(
+			$wpdb->prepare( "DELETE FROM {$table} WHERE conversation_id IN ( {$placeholders} )", $doomed )
+		);
+	}
+
+	/**
 	 * Delete transcript rows older than the retention window.
 	 *
 	 * @param int $days Retention window in days; must be >= 1.

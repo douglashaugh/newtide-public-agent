@@ -195,6 +195,7 @@ class NPA_Settings {
 			// Turn off once the platform supports conversation continuity.
 			'conversation_memory'       => true,
 			'transcript_retention_days' => 30,
+			'transcript_max_conversations' => 0,
 			'daily_message_cap'         => 0, // 0 = unlimited.
 		);
 	}
@@ -408,6 +409,14 @@ class NPA_Settings {
 		// Integers.
 		$retention                          = $has( 'transcript_retention_days' ) ? absint( $input['transcript_retention_days'] ) : (int) $existing['transcript_retention_days'];
 		$clean['transcript_retention_days'] = min( 3650, max( 1, $retention ) );
+
+		/*
+		 * A ceiling on how many conversations are kept, applied alongside the
+		 * age limit rather than instead of it. Zero means no ceiling, which is
+		 * the behaviour every release before 0.11.0 had.
+		 */
+		$max_conversations                     = $has( 'transcript_max_conversations' ) ? absint( $input['transcript_max_conversations'] ) : (int) $existing['transcript_max_conversations'];
+		$clean['transcript_max_conversations'] = min( 100000, $max_conversations );
 		$clean['daily_message_cap']         = $has( 'daily_message_cap' ) ? absint( $input['daily_message_cap'] ) : (int) $existing['daily_message_cap'];
 
 		// Agent API base URL — same scheme whitelist as any other stored URL.

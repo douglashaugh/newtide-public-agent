@@ -68,6 +68,8 @@ class NPA_Admin {
 		add_action( 'admin_post_npa_export', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_npa_import', array( $this, 'handle_import' ) );
 		add_action( 'admin_post_npa_purge_transcripts', array( $this, 'handle_purge_transcripts' ) );
+		add_action( 'admin_post_npa_delete_conversation', array( $this, 'handle_delete_conversation' ) );
+		add_action( 'admin_post_npa_export_conversations', array( $this, 'handle_export_conversations' ) );
 	}
 
 	/**
@@ -419,6 +421,120 @@ class NPA_Admin {
 	}
 
 	/**
+	 * Delete one stored conversation.
+	 *
+	 * Separate from the bulk purge because the reason is different: a purge is
+	 * retention housekeeping, this is someone reading a transcript and deciding
+	 * it should not be kept — a visitor asking for their message to be removed,
+	 * most obviously.
+	 *
+	 * @return void
+	 */
+	public function handle_delete_conversation() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'newtide-public-agent' ) );
+		}
+		check_admin_referer( 'npa_delete_conversation' );
+
+		$conversation = isset( $_GET['npa_c'] ) ? sanitize_text_field( wp_unslash( $_GET['npa_c'] ) ) : '';
+		$deleted      = '' !== $conversation ? $this->plugin->store->delete_conversation( $conversation ) : 0;
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'        => self::SLUG,
+					'tab'         => 'conversations',
+					'npa_deleted' => (int) $deleted,
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
+	 * Send the current selection of conversations as a CSV.
+	 *
+	 * The people who asked for this read spreadsheets, not admin tables. It
+	 * honours the filters on screen, so "download what I am looking at" does
+	 * that rather than dumping everything.
+	 *
+	 * Note this writes visitor messages to a file that then lives on somebody's
+	 * laptop, outside the retention window the plugin enforces. That is a
+	 * legitimate thing to want and worth being deliberate about, which is why it
+	 * is a capability-checked, nonce-checked action rather than a link.
+	 *
+	 * @return void
+	 */
+	public function handle_export_conversations() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'newtide-public-agent' ) );
+		}
+		check_admin_referer( 'npa_export_conversations' );
+
+		$args = array(
+			'search'   => isset( $_GET['npa_s'] ) ? sanitize_text_field( wp_unslash( $_GET['npa_s'] ) ) : '',
+			'agent'    => isset( $_GET['npa_agent'] ) ? sanitize_text_field( wp_unslash( $_GET['npa_agent'] ) ) : '',
+			'page'     => 1,
+			'per_page' => 200,
+		);
+
+		$filename = 'newtide-conversations-' . gmdate( 'Y-m-d' ) . '.csv';
+
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
+
+		$out = fopen( 'php://output', 'w' );
+
+		// Excel reads a bare UTF-8 CSV as the system codepage and mangles any
+		// accent or curly quote; the BOM is what stops that.
+		fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+
+		fputcsv(
+			$out,
+			array(
+				__( 'Conversation', 'newtide-public-agent' ),
+				__( 'Time', 'newtide-public-agent' ),
+				__( 'Agent', 'newtide-public-agent' ),
+				__( 'Who', 'newtide-public-agent' ),
+				__( 'Message', 'newtide-public-agent' ),
+			)
+		);
+
+		/*
+		 * Paged rather than one query: an export is the one place the whole
+		 * table would otherwise be pulled into memory at once, and a busy site
+		 * with a long retention window is exactly where that falls over.
+		 */
+		$page = 1;
+		do {
+			$args['page'] = $page;
+			$rows         = $this->plugin->store->conversations( $args );
+
+			foreach ( $rows as $row ) {
+				foreach ( $this->plugin->store->conversation( $row['conversation_id'] ) as $turn ) {
+					fputcsv(
+						$out,
+						array(
+							$row['conversation_id'],
+							$turn['created_at'],
+							$turn['agent_id'],
+							'visitor' === $turn['role'] ? __( 'Visitor', 'newtide-public-agent' ) : __( 'Agent', 'newtide-public-agent' ),
+							$turn['content'],
+						)
+					);
+				}
+			}
+
+			++$page;
+		} while ( count( $rows ) === $args['per_page'] );
+
+		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		exit;
+	}
+
+	/**
 	 * Delete stored transcripts — either everything, or only what has aged past
 	 * the retention window. Destructive and irreversible, so it is a POST behind
 	 * a capability check and a nonce, never a link.
@@ -646,6 +762,7 @@ class NPA_Admin {
 			'appearance' => __( 'Appearance', 'newtide-public-agent' ),
 			'behavior'   => __( 'Behavior', 'newtide-public-agent' ),
 			'additional' => __( 'Additional Agents', 'newtide-public-agent' ),
+			'conversations' => __( 'Conversations', 'newtide-public-agent' ),
 			'publishing' => __( 'Publishing', 'newtide-public-agent' ),
 			'status'     => __( 'Service Status', 'newtide-public-agent' ),
 			'tests'      => __( 'Tests', 'newtide-public-agent' ),

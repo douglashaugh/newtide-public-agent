@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.10.0
+Stable tag: 0.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,29 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.11.0 =
+**A Conversations tab — you can now read what visitors asked.** Conversation
+storage has existed for several releases with nowhere to read it, which made the
+setting close to pointless: a site could hold a month of transcripts and show
+only a row count.
+
+* **Conversations tab** listing each conversation with its opening line, agent
+  and message count; click through for the full exchange.
+* **Search** matches the whole conversation a phrase appears in, not the single
+  message, so the turns either side come with it.
+* **Filter by agent** when more than one agent has been used.
+* **Download CSV** of whatever the filters currently show.
+* **Delete a single conversation** — for when a visitor asks you to remove what
+  they typed.
+* **Keep at most N conversations** (Agent tab), a second ceiling applied after
+  the age limit. Whole conversations are removed, oldest first, never half an
+  exchange. 0 means no limit.
+
+Storage is still off by default and is still opt-in. Nothing was recorded while
+it was switched off, and that history cannot be recovered. Stored messages are
+stripped of markup when written and escaped when displayed, so a message can
+never run as code in your admin.
 
 = 0.10.0 =
 **The chat panel can be resized.** It was a fixed 22rem wide, which is fine for

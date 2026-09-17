@@ -189,6 +189,7 @@ final class NPA_Plugin {
 		$this->register_agent_api_tests();
 		$this->register_conversation_tests();
 		$this->register_markdown_tests();
+		$this->register_conversations_tests();
 		$this->register_transcript_tests();
 		$this->register_widget_tests();
 		$this->register_embed_tests();
@@ -274,7 +275,20 @@ final class NPA_Plugin {
 	public function purge_transcripts() {
 		$days = (int) $this->settings->get( 'transcript_retention_days', 30 );
 
-		return $this->store->purge_transcripts( $days );
+		$deleted = $this->store->purge_transcripts( $days );
+
+		/*
+		 * Then the ceiling, so a busy month cannot outrun the age limit. Age
+		 * first: it is the obligation, and trimming to a count afterwards can
+		 * only remove more, never keep something the window says must go.
+		 */
+		$max = (int) $this->settings->get( 'transcript_max_conversations', 0 );
+
+		if ( $max > 0 ) {
+			$deleted += $this->store->trim_conversations( $max );
+		}
+
+		return $deleted;
 	}
 
 	/**
@@ -1722,6 +1736,179 @@ final class NPA_Plugin {
 	}
 
 	/**
+	 * Register the stored-conversations suite.
+	 *
+	 * Writes a sentinel conversation, reads it back the way the Conversations
+	 * tab does, and removes it — proving the listing, the search, the detail
+	 * view and the retention ceiling against real rows rather than fixtures.
+	 *
+	 * @return void
+	 */
+	private function register_conversations_tests() {
+		$this->test_runner->register_suite(
+			'conversations',
+			__( 'Stored conversations', 'newtide-public-agent' ),
+			__( 'If you have switched on conversation storage so your team can read what visitors asked, these confirm the record is complete, searchable, and deleted on schedule — and that a stored message can never run as code in your admin.', 'newtide-public-agent' ),
+			function () {
+				global $wpdb;
+
+				$checks = array();
+				$store  = $this->store;
+				$table  = $store->transcripts_table_name();
+
+				// Everything this suite writes is above this id, which is how it
+				// cleans up without matching on content that could belong to a
+				// real visitor.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$since = (int) $wpdb->get_var( "SELECT COALESCE( MAX( id ), 0 ) FROM {$table}" );
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$rows_before = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+
+				$convo = 'c-test-' . wp_generate_uuid4();
+				$agent = 'npa-test-agent';
+
+				$store->record_transcript( array( 'conversation_id' => $convo, 'agent_id' => $agent, 'role' => 'visitor', 'content' => 'What is the price of kerosene?' ) );
+				$store->record_transcript( array( 'conversation_id' => $convo, 'agent_id' => $agent, 'role' => 'agent', 'content' => 'Kerosene was 3.21 a gallon last week.' ) );
+				$store->record_transcript( array( 'conversation_id' => $convo, 'agent_id' => $agent, 'role' => 'visitor', 'content' => 'And diesel?' ) );
+
+				$turns = $store->conversation( $convo );
+
+				$checks[] = array(
+					'label' => __( 'A conversation reads back complete and in the order it happened', 'newtide-public-agent' ),
+					'pass'  => 3 === count( $turns )
+						&& 'visitor' === $turns[0]['role']
+						&& 'What is the price of kerosene?' === $turns[0]['content']
+						&& 'And diesel?' === $turns[2]['content'],
+				);
+
+				$listed = $store->conversations( array( 'agent' => $agent, 'per_page' => 10 ) );
+				$found  = null;
+				foreach ( $listed as $row ) {
+					if ( $row['conversation_id'] === $convo ) {
+						$found = $row;
+					}
+				}
+
+				$checks[] = array(
+					'label' => __( 'The list shows each conversation once, with its message count and opening line', 'newtide-public-agent' ),
+					'pass'  => null !== $found
+						&& 3 === (int) $found['turns']
+						&& 'What is the price of kerosene?' === $found['preview'],
+				);
+
+				/*
+				 * Search matches the conversation, not the message. Someone
+				 * looking for "kerosene" wants the exchange, including the turns
+				 * around it — a hit list of isolated lines is not readable.
+				 */
+				$hits    = $store->conversations( array( 'search' => 'kerosene', 'per_page' => 50 ) );
+				$hit_ids = wp_list_pluck( $hits, 'conversation_id' );
+				$missed  = $store->conversations( array( 'search' => 'zzz-no-such-text-zzz', 'per_page' => 50 ) );
+
+				$checks[] = array(
+					'label' => __( 'Searching finds the whole conversation a phrase appears in', 'newtide-public-agent' ),
+					'pass'  => in_array( $convo, $hit_ids, true )
+						&& 3 === count( $store->conversation( $convo ) )
+						&& array() === $missed,
+				);
+
+				$checks[] = array(
+					'label' => __( 'The count used for paging agrees with the conversations listed', 'newtide-public-agent' ),
+					'pass'  => $store->count_conversations( array( 'agent' => $agent ) ) === count( $store->conversations( array( 'agent' => $agent, 'per_page' => 200 ) ) ),
+				);
+
+				/*
+				 * The ceiling removes whole conversations, oldest first. A cap
+				 * applied to rows would leave a question deleted and its answer
+				 * behind, which reads as the agent saying something unprompted.
+				 */
+				$older = 'c-test-' . wp_generate_uuid4();
+				$store->record_transcript( array( 'conversation_id' => $older, 'agent_id' => $agent, 'role' => 'visitor', 'content' => 'Older question' ) );
+				$store->record_transcript( array( 'conversation_id' => $older, 'agent_id' => $agent, 'role' => 'agent', 'content' => 'Older answer' ) );
+
+				/*
+				 * Backdated far enough to be unambiguously the least recently
+				 * active row in the table. A day was not enough: the ceiling is
+				 * evaluated across every conversation, so on a site with real
+				 * history the one it picked was somebody's, not this suite's,
+				 * and the assertion was measuring the site rather than the code.
+				 */
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->update( $table, array( 'created_at' => '2001-01-01 00:00:00' ), array( 'conversation_id' => $older ) );
+
+				$kept_before = $store->count_conversations( array( 'agent' => $agent ) );
+
+				/*
+				 * Ask which conversations a ceiling would drop, rather than
+				 * applying one. The first version of this check called
+				 * trim_conversations() against the live table to prove trimming
+				 * works, and deleted a real conversation doing it — on a site
+				 * where this battery runs from the Tests tab, that is the
+				 * records being destroyed by the test meant to protect them.
+				 * The row-count check at the end of this suite caught it.
+				 */
+				$total  = $store->count_conversations( array() );
+				$doomed = $store->conversations_over_limit( max( 1, $total - 1 ) );
+
+				$checks[] = array(
+					'label' => __( 'The conversation limit selects the least recent conversation, whole', 'newtide-public-agent' ),
+					'pass'  => 2 === $kept_before
+						&& 1 === count( $doomed )
+						&& in_array( $older, $doomed, true )
+						&& ! in_array( $convo, $doomed, true ),
+				);
+
+				$checks[] = array(
+					'label' => __( 'A limit of zero means no limit, so nothing is ever deleted by surprise', 'newtide-public-agent' ),
+					'pass'  => array() === $store->conversations_over_limit( 0 )
+						&& 0 === $store->trim_conversations( 0 )
+						&& $total === $store->count_conversations( array() ),
+				);
+
+				// Deletion itself, proven on this suite's own conversation.
+				$store->delete_conversation( $older );
+
+				$checks[] = array(
+					'label' => __( 'Deleting a conversation removes every message in it and nothing else', 'newtide-public-agent' ),
+					'pass'  => array() === $store->conversation( $older )
+						&& 3 === count( $store->conversation( $convo ) ),
+				);
+
+				/*
+				 * A transcript is visitor-supplied text displayed to an
+				 * administrator, which is the classic stored-XSS shape. The view
+				 * escapes rather than rendering, unlike the widget where the
+				 * reply is deliberately rendered as Markdown.
+				 */
+				$view   = (string) @file_get_contents( NPA_PLUGIN_DIR . 'admin/views/tab-conversations.php' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+				$escapes_content = false !== strpos( $view, 'esc_html( (string) $npa_turn[' );
+				$renders_markdown = false !== strpos( $view, 'NPA_Markdown' );
+
+				$checks[] = array(
+					'label' => __( 'Stored messages are shown as text in the admin, never rendered as markup', 'newtide-public-agent' ),
+					'pass'  => '' !== $view && $escapes_content && ! $renders_markdown,
+				);
+
+				// Cleanup: this suite's rows and nothing else.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id > %d", $since ) );
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$rows_after = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+
+				$checks[] = array(
+					'label' => __( 'Running these tests leaves your stored conversations exactly as they were', 'newtide-public-agent' ),
+					'pass'  => $rows_before === $rows_after,
+				);
+
+				return $checks;
+			},
+			'user'
+		);
+	}
+
+	/**
 	 * Register the Markdown rendering suite.
 	 *
 	 * The agent's reply is untrusted text being turned into markup, so these
@@ -2118,9 +2305,43 @@ Second line." );
 				 * with "Origin header is required" once the key has validated —
 				 * a failure that looks like a bad key and is not.
 				 */
-				$seen_headers = array();
-				$sniff        = static function ( $pre, $args, $url ) use ( &$seen_headers ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
-					$seen_headers = isset( $args['headers'] ) ? (array) $args['headers'] : array();
+				/*
+				 * Which origin goes out depends on a cached per-key preference,
+				 * so both states are set up explicitly here. The earlier version
+				 * of this check asserted the platform origin without setting the
+				 * preference, and passed only while a preference cached by some
+				 * previous run happened to say "platform" — when that transient
+				 * expired the check began failing, having tested nothing but its
+				 * own leftovers.
+				 */
+				$pref_key = NPA_Gateway_Client_Public::ORIGIN_PREF . md5( 'pk_test' );
+
+				$sniff_once = static function ( $sniff, $pref ) {
+					$key = NPA_Gateway_Client_Public::ORIGIN_PREF . md5( 'pk_test' );
+
+					if ( null === $pref ) {
+						delete_transient( $key );
+					} else {
+						set_transient( $key, $pref, HOUR_IN_SECONDS );
+					}
+
+					add_filter( 'pre_http_request', $sniff, 10, 3 );
+					$client = new NPA_Gateway_Client_Public( 'https://uat-ai-api.newtide.ai', 'pk_test', 'https://example.test' );
+
+					try {
+						$client->send_message( '', 'hello', '', array() );
+					} catch ( NPA_Gateway_Exception $e ) {
+						remove_filter( 'pre_http_request', $sniff, 10 );
+						return array();
+					}
+
+					remove_filter( 'pre_http_request', $sniff, 10 );
+
+					return $GLOBALS['npa_seen_headers'];
+				};
+
+				$sniff = static function ( $pre, $args, $url ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
+					$GLOBALS['npa_seen_headers'] = isset( $args['headers'] ) ? (array) $args['headers'] : array();
 					return array(
 						'headers'  => array(),
 						'body'     => 'data: {"Event":"TextDelta","Data":{"Text":"ok"}}' . "\n\n",
@@ -2131,20 +2352,29 @@ Second line." );
 					);
 				};
 
-				add_filter( 'pre_http_request', $sniff, 10, 3 );
-				$sniff_client = new NPA_Gateway_Client_Public( 'https://uat-ai-api.newtide.ai', 'pk_test', 'https://example.test' );
-				try {
-					$sniff_client->send_message( '', 'hello', '', array() );
-				} catch ( NPA_Gateway_Exception $e ) {
-					$seen_headers = array();
-				}
-				remove_filter( 'pre_http_request', $sniff, 10 );
+				$GLOBALS['npa_seen_headers'] = array();
+
+				$fresh    = $sniff_once( $sniff, null );        // No preference yet.
+				$platform = $sniff_once( $sniff, 'platform' );  // Known to need the platform host.
+
+				delete_transient( $pref_key );
+				unset( $GLOBALS['npa_seen_headers'] );
 
 				$checks[] = array(
 					'label' => __( 'Requests carry the API key and both origin headers', 'newtide-public-agent' ),
-					'pass'  => isset( $seen_headers['X-Api-Key'], $seen_headers['Origin'], $seen_headers['X-Embed-Origin'] )
-						&& 'https://uat-ai.newtide.ai' === $seen_headers['Origin']
-						&& 'https://example.test' === $seen_headers['X-Embed-Origin'],
+					'pass'  => isset( $fresh['X-Api-Key'], $fresh['Origin'], $fresh['X-Embed-Origin'] )
+						&& 'pk_test' === $fresh['X-Api-Key']
+						&& 'https://example.test' === $fresh['X-Embed-Origin']
+						&& 'https://example.test' === $fresh['Origin'],
+				);
+
+				$checks[] = array(
+					'label' => __( 'A key known to need the platform address announces that instead of the site’s', 'newtide-public-agent' ),
+					'pass'  => isset( $platform['Origin'], $platform['X-Embed-Origin'] )
+						&& 'https://uat-ai.newtide.ai' === $platform['Origin']
+						// The site's own address still rides along, so the API can
+						// see which site the call is for either way.
+						&& 'https://example.test' === $platform['X-Embed-Origin'],
 				);
 
 				/*

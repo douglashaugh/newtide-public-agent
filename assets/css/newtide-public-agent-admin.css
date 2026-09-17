@@ -1385,3 +1385,54 @@ pre.npa-code {
 .npa-td-bubble--rich th,
 .npa-td-bubble--rich td { padding: 0.3em 0.55em; border: 1px solid #dcdcde; text-align: left; white-space: nowrap; }
 .npa-td-bubble--rich th { font-weight: 700; background: #f6f7f7; }
+
+/* Conversations tab: a stored transcript, laid out so the two speakers are
+   distinguishable at a glance without imitating the live widget — this is a
+   record being read, not a chat in progress. */
+.npa-convo {
+	max-width: 52rem;
+}
+
+.npa-convo__turn {
+	margin: 0 0 0.9rem;
+	padding: 0.6rem 0.8rem;
+	border-left: 3px solid #dcdcde;
+	background: #fff;
+}
+
+.npa-convo__turn--visitor {
+	border-left-color: #2271b1;
+	background: #f6f7f7;
+}
+
+.npa-convo__who {
+	margin-bottom: 0.3rem;
+	font-weight: 600;
+	font-size: 0.85em;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	color: #50575e;
+}
+
+.npa-convo__when {
+	margin-left: 0.5rem;
+	font-weight: 400;
+	text-transform: none;
+	letter-spacing: 0;
+	color: #787c82;
+}
+
+/* pre-wrap so the agent's Markdown keeps its shape as a record, without being
+   rendered as markup. */
+.npa-convo__text {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.npa-convo-filters {
+	margin: 0 0 1rem;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	align-items: center;
+}

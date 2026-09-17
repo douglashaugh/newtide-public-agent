@@ -50,7 +50,7 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
 	<?php
 	// Keys this form is responsible for; anything omitted keeps its stored value.
-	$npa_present = array( 'enabled', 'mode', 'placement', 'api_base_url', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days', 'conversation_memory' );
+	$npa_present = array( 'enabled', 'mode', 'placement', 'api_base_url', 'page_scope', 'page_ids', 'gateway_base_url', 'agent_id', 'daily_message_cap', 'log_enabled', 'store_transcripts', 'transcript_retention_days', 'transcript_max_conversations', 'conversation_memory' );
 	if ( ! $npa_key_constant ) {
 		$npa_present[] = 'gateway_key';
 	}
@@ -443,8 +443,14 @@ $npa_page_ids     = array_map( 'absint', (array) $settings->get( 'page_ids', arr
 					<?php esc_html_e( 'Retention (days):', 'newtide-public-agent' ); ?>
 					<input type="number" min="1" max="3650" class="small-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[transcript_retention_days]" value="<?php echo esc_attr( (string) $settings->get( 'transcript_retention_days' ) ); ?>" />
 				</label>
+				<label class="npa-inline">
+					<?php esc_html_e( 'Keep at most (conversations):', 'newtide-public-agent' ); ?>
+					<input type="number" min="0" max="100000" class="small-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[transcript_max_conversations]" value="<?php echo esc_attr( (string) $settings->get( 'transcript_max_conversations' ) ); ?>" />
+				</label>
 				<p class="description">
-					<?php esc_html_e( 'Stores what visitors type and what the agent replies. Anything older than the retention window is deleted by a daily job. Turning this off stops new storage; it does not delete what is already held — use Delete all on the Service Status tab for that.', 'newtide-public-agent' ); ?>
+					<?php esc_html_e( 'Stores what visitors type and what the agent replies, readable on the Conversations tab. Anything older than the retention window is deleted by a daily job.', 'newtide-public-agent' ); ?>
+					<?php esc_html_e( 'The conversation limit is a second ceiling applied after the age limit — 0 means no limit. Whole conversations are removed, oldest first, never half an exchange.', 'newtide-public-agent' ); ?>
+					<?php esc_html_e( 'Turning storage off stops new storage; it does not delete what is already held — use Delete all on the Service Status tab for that.', 'newtide-public-agent' ); ?>
 				</p>
 			</td>
 		</tr>
