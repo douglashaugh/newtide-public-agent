@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.13.0
+Stable tag: 0.14.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,31 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.14.0 =
+**The agent can read the pages on your site.** Until now it answered from
+whatever the platform knew, not from what you publish — which reads as vague
+rather than broken, so it rarely gets reported as a fault.
+
+The plugin now serves your published content to your agent on request: what the
+site publishes, a search across it, a page or post in full, and your taxonomy
+terms. Nothing is hardcoded, so a site with products, events or any custom
+content type exposes those too.
+
+What it will and will not show:
+
+* **Only what a logged-out visitor can already see** — published, non-password-
+  protected, public content. Drafts, private pages and anything behind a
+  password are never returned.
+* **Read-only.** There is no path through this that can change anything on your
+  site.
+* **Protected by a key**, created automatically, which never appears in your
+  pages. Requests without it are refused.
+* **On by default**, because an agent that cannot read your site is the problem
+  this solves. Behavior → Site knowledge switches it off; when off, the agent
+  simply cannot read your pages.
+
+Service Status reports it as "Site knowledge".
 
 = 0.13.0 =
 **Service Status now answers where conversations start.** The page a visitor was
