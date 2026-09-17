@@ -341,6 +341,10 @@ class NPA_Rest {
 					'input_tokens'    => $result->input_tokens,
 					'output_tokens'   => $result->output_tokens,
 					'is_mock'         => $is_mock,
+					// Where the visitor was. Stored as a path with the query
+					// string dropped — see NPA_Store::page_path.
+					'page_path'       => $context['page_url'],
+					'page_title'      => $context['page_title'],
 				)
 			);
 			if ( $remember ) {
@@ -384,6 +388,11 @@ class NPA_Rest {
 					'latency_ms'      => $latency,
 					'error_code'      => $e->get_error_code(),
 					'is_mock'         => $is_mock,
+					// The failing page matters more than the successful one:
+					// it is how a site owner finds where the agent is letting
+					// visitors down.
+					'page_path'       => $context['page_url'],
+					'page_title'      => $context['page_title'],
 				)
 			);
 			$this->plugin->service_status->record_failure( 'gateway' );

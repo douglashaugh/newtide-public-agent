@@ -30,6 +30,159 @@ echo $npa_admin->analytics_html(); // phpcs:ignore WordPress.Security.EscapeOutp
 ?>
 <?php $npa_admin->card_close(); ?>
 
+<?php
+/*
+ * What the usage table can answer beyond "how many calls".
+ *
+ * The window is 30 days rather than the 14 of the chart above, because
+ * conversations are far rarer than page views and a fortnight of a quiet site
+ * is a handful of rows.
+ */
+$npa_window   = 30;
+$npa_convo    = $npa_plugin->store->conversation_stats( $npa_window );
+$npa_pages    = $npa_plugin->store->conversation_start_pages( $npa_window, 8 );
+$npa_tokens   = $npa_plugin->store->token_totals( $npa_window );
+$npa_errors   = $npa_plugin->store->error_breakdown( $npa_window );
+$npa_hours    = $npa_plugin->store->busiest_hours( $npa_window );
+$npa_peak     = array_keys( $npa_hours, max( $npa_hours ), true );
+$npa_has_data = $npa_convo['messages'] > 0;
+?>
+
+<?php
+$npa_admin->card_open(
+	__( 'Conversations', 'newtide-public-agent' ),
+	sprintf(
+		/* translators: %d: number of days. */
+		__( 'The last %d days, from recorded call metadata.', 'newtide-public-agent' ),
+		$npa_window
+	)
+);
+?>
+
+<?php if ( ! $npa_has_data ) : ?>
+	<p><?php esc_html_e( 'No agent traffic recorded in this window yet.', 'newtide-public-agent' ); ?></p>
+<?php else : ?>
+	<ul class="npa-stat-grid">
+		<li class="npa-stat">
+			<span class="npa-stat__value"><?php echo esc_html( number_format_i18n( $npa_convo['conversations'] ) ); ?></span>
+			<span class="npa-stat__label"><?php esc_html_e( 'Conversations', 'newtide-public-agent' ); ?></span>
+		</li>
+		<li class="npa-stat">
+			<span class="npa-stat__value"><?php echo esc_html( number_format_i18n( $npa_convo['messages'] ) ); ?></span>
+			<span class="npa-stat__label"><?php esc_html_e( 'Questions asked', 'newtide-public-agent' ); ?></span>
+		</li>
+		<li class="npa-stat">
+			<span class="npa-stat__value"><?php echo esc_html( number_format_i18n( $npa_convo['messages_per'] ) ); ?></span>
+			<span class="npa-stat__label"><?php esc_html_e( 'Questions per conversation', 'newtide-public-agent' ); ?></span>
+		</li>
+		<?php if ( ! empty( $npa_peak ) && max( $npa_hours ) > 0 ) : ?>
+			<li class="npa-stat">
+				<span class="npa-stat__value"><?php echo esc_html( sprintf( '%02d:00', (int) $npa_peak[0] ) ); ?></span>
+				<span class="npa-stat__label"><?php esc_html_e( 'Busiest hour', 'newtide-public-agent' ); ?></span>
+			</li>
+		<?php endif; ?>
+		<?php if ( $npa_tokens['messages'] > 0 ) : ?>
+			<li class="npa-stat">
+				<span class="npa-stat__value"><?php echo esc_html( number_format_i18n( $npa_tokens['input'] + $npa_tokens['output'] ) ); ?></span>
+				<span class="npa-stat__label"><?php esc_html_e( 'Tokens used', 'newtide-public-agent' ); ?></span>
+			</li>
+		<?php endif; ?>
+	</ul>
+
+	<?php
+	/*
+	 * "Questions per conversation" is the number worth reading twice. One
+	 * question per conversation across a lot of conversations usually means
+	 * people are not getting an answer they can build on.
+	 */
+	?>
+	<p class="description">
+		<?php
+		if ( $npa_convo['conversations'] > 4 && $npa_convo['messages_per'] < 1.5 ) {
+			esc_html_e( 'Most visitors ask once and stop. That can mean the first answer was enough — or that it was not useful enough to follow up. The Conversations tab shows what they actually asked.', 'newtide-public-agent' );
+		} else {
+			esc_html_e( 'A conversation is one visitor’s session with the agent; questions are the messages they sent within it.', 'newtide-public-agent' );
+		}
+		?>
+	</p>
+<?php endif; ?>
+
+<?php $npa_admin->card_close(); ?>
+
+<?php
+$npa_admin->card_open(
+	__( 'Where conversations start', 'newtide-public-agent' ),
+	__( 'The page a visitor was reading when they opened the chat.', 'newtide-public-agent' )
+);
+?>
+
+<?php if ( empty( $npa_pages ) ) : ?>
+	<p>
+		<?php esc_html_e( 'No page data yet. The page a conversation starts on has been recorded since version 0.13.0, so this fills in as new conversations happen — earlier traffic has none.', 'newtide-public-agent' ); ?>
+	</p>
+<?php else : ?>
+	<table class="wp-list-table widefat striped">
+		<thead>
+			<tr>
+				<th scope="col"><?php esc_html_e( 'Page', 'newtide-public-agent' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Conversations started', 'newtide-public-agent' ); ?></th>
+			</tr>
+		</thead>
+		<tbody>
+			<?php foreach ( $npa_pages as $npa_row ) : ?>
+				<tr>
+					<td>
+						<?php
+						$npa_title = trim( (string) $npa_row['page_title'] );
+						$npa_path  = (string) $npa_row['page_path'];
+						?>
+						<?php if ( '' !== $npa_title ) : ?>
+							<strong><?php echo esc_html( $npa_title ); ?></strong><br />
+						<?php endif; ?>
+						<a href="<?php echo esc_url( home_url( $npa_path ) ); ?>" target="_blank" rel="noopener">
+							<code><?php echo esc_html( $npa_path ); ?></code>
+						</a>
+					</td>
+					<td><?php echo esc_html( number_format_i18n( (int) $npa_row['starts'] ) ); ?></td>
+				</tr>
+			<?php endforeach; ?>
+		</tbody>
+	</table>
+	<p class="description">
+		<?php esc_html_e( 'Counted once per conversation, at the page it began on — so a visitor who keeps chatting while they browse is credited to where they first asked. Addresses are stored without their query string.', 'newtide-public-agent' ); ?>
+	</p>
+<?php endif; ?>
+
+<?php $npa_admin->card_close(); ?>
+
+<?php if ( ! empty( $npa_errors ) ) : ?>
+	<?php
+	$npa_admin->card_open(
+		__( 'What has been failing', 'newtide-public-agent' ),
+		__( 'Errors recorded in the same window, most frequent first.', 'newtide-public-agent' )
+	);
+	?>
+	<table class="wp-list-table widefat striped">
+		<thead>
+			<tr>
+				<th scope="col"><?php esc_html_e( 'Error', 'newtide-public-agent' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Times', 'newtide-public-agent' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Last seen', 'newtide-public-agent' ); ?></th>
+			</tr>
+		</thead>
+		<tbody>
+			<?php foreach ( $npa_errors as $npa_err ) : ?>
+				<tr>
+					<td><code><?php echo esc_html( $npa_err['error_code'] ); ?></code></td>
+					<td><?php echo esc_html( number_format_i18n( (int) $npa_err['hits'] ) ); ?></td>
+					<td><?php echo esc_html( mysql2date( 'M j, Y H:i', $npa_err['last_seen'] ) ); ?></td>
+				</tr>
+			<?php endforeach; ?>
+		</tbody>
+	</table>
+	<?php $npa_admin->card_close(); ?>
+<?php endif; ?>
+
 <?php $npa_admin->card_open( __( 'Health', 'newtide-public-agent' ), __( 'Each dependency the plugin relies on, at a glance.', 'newtide-public-agent' ) ); ?>
 <?php
 // status_html() is fully escaped at construction.

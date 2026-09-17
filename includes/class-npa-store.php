@@ -25,7 +25,7 @@ class NPA_Store {
 	 *
 	 * @var int
 	 */
-	const SCHEMA_VERSION = 3;
+	const SCHEMA_VERSION = 4;
 
 	/**
 	 * Roles a stored transcript row can carry.
@@ -120,9 +120,12 @@ class NPA_Store {
 			output_tokens int(10) unsigned NOT NULL DEFAULT 0,
 			error_code varchar(40) NOT NULL DEFAULT '',
 			is_mock tinyint(1) unsigned NOT NULL DEFAULT 0,
+			page_path varchar(190) NOT NULL DEFAULT '',
+			page_title varchar(190) NOT NULL DEFAULT '',
 			PRIMARY KEY  (id),
 			KEY created_at (created_at),
-			KEY agent_id (agent_id)
+			KEY agent_id (agent_id),
+			KEY page_path (page_path)
 		) {$collate};";
 
 		dbDelta( $sql );
@@ -581,6 +584,34 @@ class NPA_Store {
 	 *                    error_code.
 	 * @return int|false Inserted row id, or false on failure.
 	 */
+	/**
+	 * Reduce a page URL to something worth keeping.
+	 *
+	 * Path only: the query string is dropped rather than truncated, because a
+	 * URL a visitor arrived on can carry a reset token, an email address or a
+	 * session id, and this table is the one place in the plugin that promises
+	 * to hold no personal data. The path is site content, not a person.
+	 *
+	 * @param string $url A page URL.
+	 * @return string Path, or '' when there is nothing usable.
+	 */
+	public static function page_path( $url ) {
+		$url = trim( (string) $url );
+
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$parts = wp_parse_url( $url );
+		$path  = isset( $parts['path'] ) ? (string) $parts['path'] : '';
+
+		if ( '' === $path ) {
+			return '';
+		}
+
+		return substr( $path, 0, 190 );
+	}
+
 	public function record( array $data ) {
 		global $wpdb;
 
@@ -595,13 +626,15 @@ class NPA_Store {
 			'output_tokens'   => isset( $data['output_tokens'] ) ? max( 0, (int) $data['output_tokens'] ) : 0,
 			'error_code'      => isset( $data['error_code'] ) ? substr( (string) $data['error_code'], 0, 40 ) : '',
 			'is_mock'         => ! empty( $data['is_mock'] ) ? 1 : 0,
+			'page_path'       => isset( $data['page_path'] ) ? self::page_path( $data['page_path'] ) : '',
+			'page_title'      => isset( $data['page_title'] ) ? substr( sanitize_text_field( (string) $data['page_title'] ), 0, 190 ) : '',
 		);
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$ok = $wpdb->insert(
 			$this->table_name(),
 			$row,
-			array( '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%d' )
+			array( '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%d', '%s', '%s' )
 		);
 
 		if ( false === $ok ) {
@@ -642,6 +675,180 @@ class NPA_Store {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE created_at >= %s", $start ) );
+	}
+
+	/**
+	 * Where conversations start: the page each one's first message came from.
+	 *
+	 * The first row of a conversation, not every row — a visitor who opens the
+	 * chat on the pricing page and keeps talking while they browse started on
+	 * pricing, and counting every message would make a long conversation look
+	 * like popularity for whatever page they drifted to.
+	 *
+	 * @param int $days  Window in days.
+	 * @param int $limit Rows to return.
+	 * @return array<int,array{page_path:string,page_title:string,starts:int}>
+	 */
+	public function conversation_start_pages( $days = 30, $limit = 10 ) {
+		global $wpdb;
+
+		$table = $this->table_name();
+		$since = gmdate( 'Y-m-d H:i:s', time() - ( max( 1, (int) $days ) * DAY_IN_SECONDS ) );
+		$limit = max( 1, min( 50, (int) $limit ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT u.page_path, MAX( u.page_title ) AS page_title, COUNT(*) AS starts
+				FROM {$table} u
+				INNER JOIN (
+					SELECT conversation_id, MIN( id ) AS first_id
+					FROM {$table}
+					WHERE conversation_id <> '' AND created_at >= %s
+					GROUP BY conversation_id
+				) f ON f.first_id = u.id
+				WHERE u.page_path <> ''
+				GROUP BY u.page_path
+				ORDER BY starts DESC
+				LIMIT %d",
+				$since,
+				$limit
+			),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Conversations and how long they run.
+	 *
+	 * Messages alone cannot tell a hundred people asking one question from one
+	 * person asking a hundred, and those want very different responses from a
+	 * site owner.
+	 *
+	 * @param int $days Window in days.
+	 * @return array{conversations:int,messages:int,messages_per:float}
+	 */
+	public function conversation_stats( $days = 30 ) {
+		global $wpdb;
+
+		$table = $this->table_name();
+		$since = gmdate( 'Y-m-d H:i:s', time() - ( max( 1, (int) $days ) * DAY_IN_SECONDS ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT COUNT( DISTINCT conversation_id ) AS conversations, COUNT(*) AS messages
+				FROM {$table}
+				WHERE created_at >= %s AND conversation_id <> ''",
+				$since
+			),
+			ARRAY_A
+		);
+
+		$conversations = isset( $row['conversations'] ) ? (int) $row['conversations'] : 0;
+		$messages      = isset( $row['messages'] ) ? (int) $row['messages'] : 0;
+
+		return array(
+			'conversations' => $conversations,
+			'messages'      => $messages,
+			'messages_per'  => $conversations > 0 ? round( $messages / $conversations, 1 ) : 0.0,
+		);
+	}
+
+	/**
+	 * What has been failing, most common first.
+	 *
+	 * @param int $days Window in days.
+	 * @return array<int,array{error_code:string,hits:int,last_seen:string}>
+	 */
+	public function error_breakdown( $days = 30 ) {
+		global $wpdb;
+
+		$table = $this->table_name();
+		$since = gmdate( 'Y-m-d H:i:s', time() - ( max( 1, (int) $days ) * DAY_IN_SECONDS ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT error_code, COUNT(*) AS hits, MAX( created_at ) AS last_seen
+				FROM {$table}
+				WHERE created_at >= %s AND error_code <> ''
+				GROUP BY error_code
+				ORDER BY hits DESC
+				LIMIT 10",
+				$since
+			),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Tokens consumed in a window, for the transports that report them.
+	 *
+	 * @param int $days Window in days.
+	 * @return array{input:int,output:int,messages:int}
+	 */
+	public function token_totals( $days = 30 ) {
+		global $wpdb;
+
+		$table = $this->table_name();
+		$since = gmdate( 'Y-m-d H:i:s', time() - ( max( 1, (int) $days ) * DAY_IN_SECONDS ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT SUM( input_tokens ) AS input, SUM( output_tokens ) AS output,
+					SUM( CASE WHEN input_tokens > 0 OR output_tokens > 0 THEN 1 ELSE 0 END ) AS messages
+				FROM {$table}
+				WHERE created_at >= %s AND is_mock = 0",
+				$since
+			),
+			ARRAY_A
+		);
+
+		return array(
+			'input'    => isset( $row['input'] ) ? (int) $row['input'] : 0,
+			'output'   => isset( $row['output'] ) ? (int) $row['output'] : 0,
+			'messages' => isset( $row['messages'] ) ? (int) $row['messages'] : 0,
+		);
+	}
+
+	/**
+	 * The hour of day traffic arrives in, in the site's timezone.
+	 *
+	 * @param int $days Window in days.
+	 * @return array<int,int> 24 counts, index 0 = midnight.
+	 */
+	public function busiest_hours( $days = 30 ) {
+		global $wpdb;
+
+		$table = $this->table_name();
+		$since = gmdate( 'Y-m-d H:i:s', time() - ( max( 1, (int) $days ) * DAY_IN_SECONDS ) );
+
+		// created_at is written with current_time( 'mysql' ), so it is already
+		// the site's local time and needs no conversion here.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT HOUR( created_at ) AS h, COUNT(*) AS hits
+				FROM {$table}
+				WHERE created_at >= %s
+				GROUP BY HOUR( created_at )",
+				$since
+			),
+			ARRAY_A
+		);
+
+		$out = array_fill( 0, 24, 0 );
+		foreach ( (array) $rows as $row ) {
+			$out[ (int) $row['h'] ] = (int) $row['hits'];
+		}
+
+		return $out;
 	}
 
 	/**

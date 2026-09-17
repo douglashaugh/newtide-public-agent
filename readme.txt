@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.12.1
+Stable tag: 0.13.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,25 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.13.0 =
+**Service Status now answers where conversations start.** The page a visitor was
+reading when they opened the chat is recorded and listed, most popular first.
+
+* **Where conversations start** — counted once per conversation, at the page it
+  began on, so a visitor who keeps chatting while they browse is credited to
+  where they first asked rather than wherever they drifted to.
+* **Conversations, questions asked, questions per conversation** — messages
+  alone cannot tell a hundred visitors asking once from one asking a hundred
+  times.
+* **Busiest hour** and **tokens used** in the same window.
+* **What has been failing** — errors grouped by cause with a last-seen time,
+  instead of only the most recent one.
+
+Page addresses are stored without their query string. A URL can carry a token,
+an email address or a session id, and the usage table holds no personal data.
+
+This starts from now: conversations before this release have no page recorded.
 
 = 0.12.1 =
 **Conversation memory was not working in Agent API mode, and stored transcripts

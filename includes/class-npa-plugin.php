@@ -1243,6 +1243,76 @@ final class NPA_Plugin {
 				$wpdb->delete( $table, array( 'agent_id' => $sentinel ), array( '%s' ) );
 				delete_transient( NPA_Store::LAST_TRANSIENT );
 
+
+				/*
+				 * Analytics. These read the same table the Service Status tab
+				 * does, with rows this suite writes and removes, so a green run
+				 * means the panel would show the same numbers.
+				 */
+				$analytics_since = (int) $wpdb->get_var( "SELECT COALESCE( MAX( id ), 0 ) FROM {$table}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+				$convo_a = 'c-stat-' . wp_generate_uuid4();
+				$convo_b = 'c-stat-' . wp_generate_uuid4();
+
+				// One conversation of three messages, begun on /pricing/ and
+				// carried on elsewhere; one of a single message on /about/.
+				$this->store->record( array( 'conversation_id' => $convo_a, 'agent_id' => 'npa-stat', 'status' => 200, 'page_path' => 'https://example.test/pricing/?utm_source=x&token=secret', 'page_title' => 'Pricing', 'input_tokens' => 10, 'output_tokens' => 5 ) );
+				$this->store->record( array( 'conversation_id' => $convo_a, 'agent_id' => 'npa-stat', 'status' => 200, 'page_path' => 'https://example.test/guides/', 'page_title' => 'Guides', 'input_tokens' => 10, 'output_tokens' => 5 ) );
+				$this->store->record( array( 'conversation_id' => $convo_a, 'agent_id' => 'npa-stat', 'status' => 200, 'page_path' => 'https://example.test/guides/', 'page_title' => 'Guides', 'input_tokens' => 10, 'output_tokens' => 5 ) );
+				$this->store->record( array( 'conversation_id' => $convo_b, 'agent_id' => 'npa-stat', 'status' => 500, 'error_code' => 'server_error', 'page_path' => 'https://example.test/about/', 'page_title' => 'About' ) );
+
+				$starts = $this->store->conversation_start_pages( 30, 10 );
+				$by_path = array();
+				foreach ( $starts as $start_row ) {
+					$by_path[ $start_row['page_path'] ] = (int) $start_row['starts'];
+				}
+
+				$checks[] = array(
+					'label' => __( 'A conversation is counted against the page it began on, not every page the visitor moved through', 'newtide-public-agent' ),
+					'pass'  => isset( $by_path['/pricing/'], $by_path['/about/'] )
+						&& ! isset( $by_path['/guides/'] ),
+				);
+
+				/*
+				 * The query string is dropped, not truncated. A URL a visitor
+				 * arrived on can carry a token or an email address, and this
+				 * table is the one that promises to hold no personal data.
+				 */
+				$checks[] = array(
+					'label' => __( 'A page address is stored without its query string, so nothing personal is kept', 'newtide-public-agent' ),
+					'pass'  => '/pricing/' === NPA_Store::page_path( 'https://example.test/pricing/?token=secret&email=a@b.test' )
+						&& ! isset( $by_path['/pricing/?utm_source=x&token=secret'] )
+						&& '' === NPA_Store::page_path( '' ),
+				);
+
+				$stats = $this->store->conversation_stats( 30 );
+
+				$checks[] = array(
+					'label' => __( 'Conversations and questions are counted separately, so one long chat is not read as many visitors', 'newtide-public-agent' ),
+					'pass'  => $stats['conversations'] >= 2
+						&& $stats['messages'] >= 4
+						&& $stats['messages_per'] > 1,
+				);
+
+				$breakdown = $this->store->error_breakdown( 30 );
+				$codes     = wp_list_pluck( $breakdown, 'error_code' );
+
+				$checks[] = array(
+					'label' => __( 'Failures are grouped by cause, so a recurring one is visible', 'newtide-public-agent' ),
+					'pass'  => in_array( 'server_error', $codes, true ),
+				);
+
+				$tokens = $this->store->token_totals( 30 );
+
+				$checks[] = array(
+					'label' => __( 'Token usage is totalled for the transports that report it', 'newtide-public-agent' ),
+					'pass'  => $tokens['input'] >= 30 && $tokens['output'] >= 15,
+				);
+
+				// Cleanup: only this suite's rows.
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id > %d", $analytics_since ) );
+
 				return $checks;
 			}
 		);

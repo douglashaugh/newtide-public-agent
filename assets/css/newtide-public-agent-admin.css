@@ -1492,3 +1492,33 @@ pre.npa-code {
 		transition: none;
 	}
 }
+
+/* Service Status: the headline numbers. A short row of figures reads faster
+   than a table when there are only four or five of them. */
+.npa-stat-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1.6rem;
+	margin: 0 0 0.8rem;
+	padding: 0;
+	list-style: none;
+}
+
+.npa-stat {
+	min-width: 7rem;
+}
+
+.npa-stat__value {
+	display: block;
+	font-size: 1.7rem;
+	font-weight: 600;
+	line-height: 1.15;
+	color: #1d2327;
+}
+
+.npa-stat__label {
+	display: block;
+	margin-top: 0.15rem;
+	font-size: 0.82rem;
+	color: #646970;
+}
