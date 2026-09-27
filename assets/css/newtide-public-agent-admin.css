@@ -1522,3 +1522,87 @@ pre.npa-code {
 	font-size: 0.82rem;
 	color: #646970;
 }
+
+/* Site knowledge — a read-only value with its Copy / Show buttons. */
+.npa-copy-field {
+	display: flex;
+	gap: 0.4rem;
+	align-items: center;
+}
+
+.npa-columns .npa-card .npa-copy-field input[type="text"],
+.npa-columns .npa-card .npa-copy-field input[type="password"] {
+	flex: 1 1 auto;
+	min-width: 0;
+	width: auto;
+	font-family: Consolas, Monaco, monospace;
+}
+
+.npa-copy-field .button {
+	flex: 0 0 auto;
+}
+
+/* The agent-builder guide: long-form reading, so a measure and real spacing. */
+.npa-guide {
+	max-width: 56rem;
+	padding: 0.25rem 0 0.75rem;
+	line-height: 1.6;
+}
+
+.npa-guide__section + .npa-guide__section {
+	margin-top: 1.75rem;
+	padding-top: 1.25rem;
+	border-top: 1px solid #f0f0f1;
+}
+
+.npa-guide__title {
+	margin: 0 0 0.5rem;
+	font-size: 1.05rem;
+	color: var( --npa-navy );
+}
+
+.npa-guide__tool {
+	margin: 1.25rem 0 0.35rem;
+	font-size: 0.95rem;
+}
+
+.npa-guide ul,
+.npa-guide ol {
+	margin: 0.5rem 0 0.75rem 1.5rem;
+}
+
+.npa-guide ul {
+	list-style: disc;
+}
+
+.npa-guide li {
+	margin-bottom: 0.35rem;
+}
+
+.npa-guide__code {
+	margin: 0.5rem 0 1rem;
+	padding: 0.85rem 1rem;
+	background: #0f1b33;
+	color: #e6edf7;
+	border-radius: 8px;
+	overflow-x: auto;
+	font-size: 0.85rem;
+	line-height: 1.5;
+	white-space: pre;
+}
+
+.npa-guide__code code {
+	padding: 0;
+	background: none;
+	color: inherit;
+	font-size: inherit;
+}
+
+.npa-guide__table {
+	overflow-x: auto;
+	margin: 0.5rem 0 1rem;
+}
+
+.npa-guide__table td {
+	vertical-align: top;
+}

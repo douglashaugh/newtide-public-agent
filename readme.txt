@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.14.0
+Stable tag: 0.15.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,7 +20,7 @@ It is a **thin client**. The Public Agent Gateway owns identity, safety, rate-li
 
 * Shortcode and Gutenberg block, with per-placement overrides (agent, greeting, label, position, accent).
 * Server-side REST proxy (`/wp-json/npa/v1/message`) — the credential never leaves your server.
-* Admin screen with tabs: Agent, Appearance, Behavior, Additional Agents, Publishing, Service Status, Tests.
+* Admin screen with tabs: Agent, Appearance, Behavior, Site knowledge, Additional Agents, Conversations, Publishing, Service Status, Tests.
 * Durable usage history (metadata only — no message content), powering a status panel and a courtesy daily budget cap.
 * Accessible widget: keyboard-operable, focus management, screen-reader announcements, respects reduced motion.
 * Built to run fully against a deterministic mock, so it works before your gateway is live.
@@ -101,6 +101,27 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 
 == Changelog ==
 
+= 0.15.0 =
+**A Site knowledge tab, so the agent can actually be connected.** 0.14.0 gave
+the agent a way to read your site, but the address and key it needs were not
+shown anywhere, so there was nothing to hand to whoever sets the agent up.
+
+* **Connection details** — the server URL and key, each with a Copy button, plus
+  a URL with the key built in for agent platforms that accept only a URL.
+* **Create a new key** — if the key has been shared too widely. The old one stops
+  working at once.
+* **Activity today** — calls from your agent per tool, and when it last read
+  anything. The Home checklist now completes this step only once an agent has
+  actually connected, not merely when the switch is on.
+* **A guide for agent builders**, generated for your site and downloadable as a
+  file to send them: how to connect, how to test the connection, every tool with
+  its arguments, recommended instructions for the agent, and what each error
+  means. It never contains your key — send that separately.
+* The on/off switch the 0.14.0 notes described now exists, on this tab.
+
+Service Status no longer reports yesterday's calls as today's until the next one
+arrives.
+
 = 0.14.0 =
 **The agent can read the pages on your site.** Until now it answered from
 whatever the platform knew, not from what you publish — which reads as vague
@@ -121,7 +142,7 @@ What it will and will not show:
 * **Protected by a key**, created automatically, which never appears in your
   pages. Requests without it are refused.
 * **On by default**, because an agent that cannot read your site is the problem
-  this solves. Behavior → Site knowledge switches it off; when off, the agent
+  this solves. The Site knowledge tab switches it off; when off, the agent
   simply cannot read your pages.
 
 Service Status reports it as "Site knowledge".

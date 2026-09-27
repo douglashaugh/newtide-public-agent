@@ -128,6 +128,13 @@ final class NPA_Plugin {
 	public $mcp;
 
 	/**
+	 * Agent-builder guide for the MCP server.
+	 *
+	 * @var NPA_MCP_Guide
+	 */
+	public $mcp_guide;
+
+	/**
 	 * Front-end surface (shortcode + block + widget).
 	 *
 	 * @var NPA_Public
@@ -190,6 +197,7 @@ final class NPA_Plugin {
 		$this->mcp_tools = new NPA_MCP_Tools();
 		$this->mcp       = new NPA_MCP_Server( $this, $this->mcp_tools, $this->mcp_key );
 		$this->mcp->register();
+		$this->mcp_guide = new NPA_MCP_Guide( $this->mcp_tools );
 
 		$this->public = new NPA_Public( $this );
 		$this->public->register();
@@ -282,6 +290,7 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/mcp/class-npa-mcp-key.php';
 		require_once NPA_PLUGIN_DIR . 'includes/mcp/class-npa-mcp-tools.php';
 		require_once NPA_PLUGIN_DIR . 'includes/mcp/class-npa-mcp-server.php';
+		require_once NPA_PLUGIN_DIR . 'includes/mcp/class-npa-mcp-guide.php';
 
 		// Front-end surface.
 		require_once NPA_PLUGIN_DIR . 'public/class-npa-public.php';
@@ -2038,6 +2047,69 @@ final class NPA_Plugin {
 						true
 					),
 				);
+
+				/*
+				 * The URL-only connector. Platforms that take a URL and nothing
+				 * else depend on the key surviving the round trip through the
+				 * query string, encoding included.
+				 */
+				$from_url = new WP_REST_Request( 'POST', '/' . NPA_Rest::NS . NPA_MCP_Server::ROUTE );
+				$query    = array();
+				wp_parse_str( (string) wp_parse_url( NPA_MCP_Server::connector_url( $key ), PHP_URL_QUERY ), $query );
+				$from_url->set_query_params( $query );
+
+				$checks[] = array(
+					'label' => __( 'The URL-with-key authenticates, for platforms that accept only a URL', 'newtide-public-agent' ),
+					'pass'  => $this->mcp_key->verify( $this->mcp_key->from_request( $from_url ) ),
+				);
+
+				/*
+				 * The guide is written to be forwarded, so the live key must never
+				 * be in it — in either rendering.
+				 */
+				$markdown = $this->mcp_guide->to_markdown();
+				$html     = $this->mcp_guide->to_document();
+
+				$checks[] = array(
+					'label' => __( 'The agent-builder guide never contains the live key, as Markdown or as the PDF page', 'newtide-public-agent' ),
+					'pass'  => false === strpos( $markdown, $key ) && false === strpos( $html, $key )
+						&& false !== strpos( $markdown, NPA_MCP_Guide::KEY_PLACEHOLDER ),
+				);
+
+				// It must describe this site, and every tool the server offers.
+				$documented = false !== strpos( $markdown, NPA_MCP_Server::endpoint_url() );
+
+				foreach ( array_keys( $names ) as $tool_name ) {
+					if ( false === strpos( $markdown, '### `' . $tool_name . '`' ) ) {
+						$documented = false;
+						break;
+					}
+				}
+
+				$checks[] = array(
+					'label' => __( 'The guide names this site’s server URL and documents every advertised tool', 'newtide-public-agent' ),
+					'pass'  => $documented,
+				);
+
+				/*
+				 * Rotation must cut the old key off at once — that is its whole
+				 * purpose. Run against the real option and restored afterwards,
+				 * so a test run never changes the key an agent is using. Skipped
+				 * when the key comes from wp-config.php, where rotation does not
+				 * apply.
+				 */
+				if ( ! $this->mcp_key->is_constant() ) {
+					$original = get_option( NPA_MCP_Key::OPTION, '' );
+					$rotated  = $this->mcp_key->rotate();
+					$cut_off  = ! $this->mcp_key->verify( $key ) && $this->mcp_key->verify( $rotated ) && $rotated !== $key;
+
+					update_option( NPA_MCP_Key::OPTION, $original, false );
+
+					$checks[] = array(
+						'label' => __( 'Creating a new key stops the old one working immediately', 'newtide-public-agent' ),
+						'pass'  => $cut_off && $this->mcp_key->verify( $key ),
+					);
+				}
 
 				return $checks;
 			}

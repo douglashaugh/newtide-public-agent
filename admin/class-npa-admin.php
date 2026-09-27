@@ -70,6 +70,9 @@ class NPA_Admin {
 		add_action( 'admin_post_npa_purge_transcripts', array( $this, 'handle_purge_transcripts' ) );
 		add_action( 'admin_post_npa_delete_conversation', array( $this, 'handle_delete_conversation' ) );
 		add_action( 'admin_post_npa_export_conversations', array( $this, 'handle_export_conversations' ) );
+		add_action( 'admin_post_npa_rotate_mcp_key', array( $this, 'handle_rotate_mcp_key' ) );
+		add_action( 'admin_post_npa_download_mcp_guide', array( $this, 'handle_download_mcp_guide' ) );
+		add_action( 'admin_post_npa_print_mcp_guide', array( $this, 'handle_print_mcp_guide' ) );
 	}
 
 	/**
@@ -128,6 +131,10 @@ class NPA_Admin {
 				'errorText'   => __( 'Request failed. Please try again.', 'newtide-public-agent' ),
 				// The probe runs one shape per request; the order lives server-side.
 				'probeShapes' => array_keys( $this->conversation_probe_shapes() ),
+				'copiedText'  => __( 'Copied', 'newtide-public-agent' ),
+				'copyFailText' => __( 'Select and copy manually', 'newtide-public-agent' ),
+				'showText'    => __( 'Show', 'newtide-public-agent' ),
+				'hideText'    => __( 'Hide', 'newtide-public-agent' ),
 			)
 		);
 
@@ -286,6 +293,24 @@ class NPA_Admin {
 			'done'  => (bool) $s->get( 'enabled' ),
 			'tab'   => 'agent',
 			'hint'  => __( 'Enable the front-end widget on the Agent tab.', 'newtide-public-agent' ),
+		);
+
+		/*
+		 * Site knowledge is on by default, but it only helps once someone on the
+		 * agent platform side connects to it — and nothing on this site can do
+		 * that for them. Done means an agent has actually called in, not that the
+		 * switch is on: a switched-on server nobody calls is the silent failure
+		 * this step exists to surface.
+		 */
+		$knowledge_on = (bool) $s->get( 'mcp_enabled', true );
+
+		$items[] = array(
+			'label' => __( 'Let the agent read this site', 'newtide-public-agent' ),
+			'done'  => $knowledge_on && NPA_MCP_Server::today()['last'] > 0,
+			'tab'   => 'knowledge',
+			'hint'  => $knowledge_on
+				? __( 'Send the connection details and guide to whoever sets up your agent. This completes when the agent first reads a page.', 'newtide-public-agent' )
+				: __( 'Site knowledge is switched off, so the agent cannot read your pages.', 'newtide-public-agent' ),
 		);
 
 		$items[] = array(
@@ -537,6 +562,79 @@ class NPA_Admin {
 	}
 
 	/**
+	 * Replace the MCP service key.
+	 *
+	 * The old key stops working at once — that is the point of rotating after a
+	 * key has been shared too widely — so the agent loses access until whoever
+	 * runs it is sent the new one. The tab says so beside the button.
+	 *
+	 * @return void
+	 */
+	public function handle_rotate_mcp_key() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'newtide-public-agent' ) );
+		}
+		check_admin_referer( 'npa_rotate_mcp_key' );
+
+		// A key defined in wp-config.php overrides the stored one, so rotating
+		// the stored copy would change nothing and report success.
+		$result = $this->plugin->mcp_key->is_constant() ? 'constant' : 'ok';
+
+		if ( 'ok' === $result ) {
+			$this->plugin->mcp_key->rotate();
+		}
+
+		wp_safe_redirect( add_query_arg( 'npa_rotated', $result, $this->tab_url( 'knowledge' ) ) );
+		exit;
+	}
+
+	/**
+	 * Send the agent-builder guide as a Markdown file.
+	 *
+	 * Behind a capability check and a nonce even though it holds no secret: it
+	 * does describe the site's endpoint and tools, and there is no reason for it
+	 * to be fetchable by anyone who guesses the URL.
+	 *
+	 * @return void
+	 */
+	public function handle_download_mcp_guide() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'newtide-public-agent' ) );
+		}
+		check_admin_referer( 'npa_download_mcp_guide' );
+
+		$markdown = $this->plugin->mcp_guide->to_markdown();
+		$host     = sanitize_file_name( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+		$filename = 'agent-connection-guide-' . ( '' !== $host ? $host : 'site' ) . '.md';
+
+		nocache_headers();
+		header( 'Content-Type: text/markdown; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+		header( 'Content-Length: ' . strlen( $markdown ) );
+		echo $markdown; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Markdown file download.
+		exit;
+	}
+
+	/**
+	 * Show the agent-builder guide as a print-ready page, for saving as PDF.
+	 *
+	 * See NPA_MCP_Guide::to_document() for why this is a page and not a file.
+	 *
+	 * @return void
+	 */
+	public function handle_print_mcp_guide() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'newtide-public-agent' ) );
+		}
+		check_admin_referer( 'npa_print_mcp_guide' );
+
+		nocache_headers();
+		header( 'Content-Type: text/html; charset=utf-8' );
+		echo $this->plugin->mcp_guide->to_document(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped block by block in NPA_MCP_Guide.
+		exit;
+	}
+
+	/**
 	 * Delete stored transcripts — either everything, or only what has aged past
 	 * the retention window. Destructive and irreversible, so it is a POST behind
 	 * a capability check and a nonce, never a link.
@@ -763,6 +861,7 @@ class NPA_Admin {
 			'agent'      => __( 'Agent', 'newtide-public-agent' ),
 			'appearance' => __( 'Appearance', 'newtide-public-agent' ),
 			'behavior'   => __( 'Behavior', 'newtide-public-agent' ),
+			'knowledge'  => __( 'Site knowledge', 'newtide-public-agent' ),
 			'additional' => __( 'Additional Agents', 'newtide-public-agent' ),
 			'conversations' => __( 'Conversations', 'newtide-public-agent' ),
 			'publishing' => __( 'Publishing', 'newtide-public-agent' ),

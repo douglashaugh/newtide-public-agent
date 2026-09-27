@@ -532,6 +532,37 @@ class NPA_MCP_Server {
 	}
 
 	/**
+	 * Today's counters, per tool, with the time of the last call ever made.
+	 *
+	 * The stored counters only reset when the next call arrives, so read raw
+	 * they report yesterday's traffic as today's until something calls in. The
+	 * last-call time is kept across the reset: it is what tells an admin whether
+	 * an agent has ever connected at all.
+	 *
+	 * @return array{tools:array,ok:int,err:int,last:int,last_tool:string}
+	 */
+	public static function today() {
+		$stats   = self::stats();
+		$current = isset( $stats['day'] ) && gmdate( 'Y-m-d' ) === $stats['day'];
+		$tools   = ( $current && isset( $stats['tools'] ) && is_array( $stats['tools'] ) ) ? $stats['tools'] : array();
+		$ok      = 0;
+		$err     = 0;
+
+		foreach ( $tools as $row ) {
+			$ok  += isset( $row['ok'] ) ? (int) $row['ok'] : 0;
+			$err += isset( $row['err'] ) ? (int) $row['err'] : 0;
+		}
+
+		return array(
+			'tools'     => $tools,
+			'ok'        => $ok,
+			'err'       => $err,
+			'last'      => isset( $stats['last'] ) ? (int) $stats['last'] : 0,
+			'last_tool' => isset( $stats['last_tool'] ) ? (string) $stats['last_tool'] : '',
+		);
+	}
+
+	/**
 	 * Public endpoint URL.
 	 *
 	 * @return string
@@ -570,24 +601,30 @@ class NPA_MCP_Server {
 			);
 		}
 
-		$stats = self::stats();
-		$ok    = 0;
-		$err   = 0;
-
-		foreach ( isset( $stats['tools'] ) ? $stats['tools'] : array() as $row ) {
-			$ok  += isset( $row['ok'] ) ? (int) $row['ok'] : 0;
-			$err += isset( $row['err'] ) ? (int) $row['err'] : 0;
-		}
-
+		$today      = self::today();
+		$ok         = $today['ok'];
+		$err        = $today['err'];
 		$tool_count = count( $this->tools->names() );
+
+		if ( 0 === $today['last'] ) {
+			return array(
+				'ok'      => true,
+				'message' => sprintf(
+					/* translators: %d: number of tools. */
+					__( 'Ready — %d tools available, but no agent has connected yet. The Site knowledge tab has the connection details and a guide for whoever sets up the agent.', 'newtide-public-agent' ),
+					$tool_count
+				),
+			);
+		}
 
 		if ( 0 === $ok + $err ) {
 			return array(
 				'ok'      => true,
 				'message' => sprintf(
-					/* translators: %d: number of tools. */
-					__( 'Ready — %d tools available. No calls yet; the agent will use them once its connector is configured.', 'newtide-public-agent' ),
-					$tool_count
+					/* translators: 1: tool count, 2: human time since last call. */
+					__( 'Ready — %1$d tools available. No calls yet today; last call %2$s ago.', 'newtide-public-agent' ),
+					$tool_count,
+					human_time_diff( $today['last'], time() )
 				),
 			);
 		}
@@ -605,7 +642,7 @@ class NPA_MCP_Server {
 				$ok,
 				$err,
 				$tool_count,
-				isset( $stats['last'] ) ? human_time_diff( (int) $stats['last'], time() ) : '—'
+				human_time_diff( $today['last'], time() )
 			),
 		);
 	}

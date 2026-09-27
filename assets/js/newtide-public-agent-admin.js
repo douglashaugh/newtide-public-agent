@@ -857,3 +857,76 @@
 		openRow.scrollIntoView( { block: 'center' } );
 	}
 }() );
+
+/* Site knowledge: copy a connection value, and reveal the masked ones.
+   Buttons name their field by id, so the same two handlers serve the URL, the
+   key and the URL-with-key. Its own block: the blocks above return early on
+   tabs that lack their elements, which silently skipped this code when it was
+   appended to one of them. */
+( function () {
+	'use strict';
+
+	var cfg = window.NPA_ADMIN || {};
+
+	function flash( btn, text ) {
+		var original = btn.textContent;
+		btn.textContent = text;
+		window.setTimeout( function () {
+			btn.textContent = original;
+		}, 1500 );
+	}
+
+	function copyField( field, btn ) {
+		// execCommand needs a visible, selected text field; a masked key is
+		// unmasked just long enough to copy it.
+		function legacy() {
+			var masked = 'password' === field.type;
+			if ( masked ) {
+				field.type = 'text';
+			}
+			field.focus();
+			field.select();
+			var ok = false;
+			try {
+				ok = document.execCommand( 'copy' );
+			} catch ( e ) {
+				ok = false;
+			}
+			if ( masked ) {
+				field.type = 'password';
+			}
+			flash( btn, ok ? cfg.copiedText : cfg.copyFailText );
+		}
+
+		if ( navigator.clipboard && window.isSecureContext ) {
+			navigator.clipboard.writeText( field.value ).then( function () {
+				flash( btn, cfg.copiedText );
+			}, legacy );
+		} else {
+			legacy();
+		}
+	}
+
+	document.querySelectorAll( '[data-npa-copy]' ).forEach( function ( btn ) {
+		btn.addEventListener( 'click', function () {
+			var field = document.getElementById( btn.getAttribute( 'data-npa-copy' ) );
+			if ( field ) {
+				copyField( field, btn );
+			}
+		} );
+	} );
+
+	document.querySelectorAll( '[data-npa-reveal]' ).forEach( function ( btn ) {
+		btn.setAttribute( 'aria-pressed', 'false' );
+		btn.addEventListener( 'click', function () {
+			var field = document.getElementById( btn.getAttribute( 'data-npa-reveal' ) );
+			if ( ! field ) {
+				return;
+			}
+			var show = 'password' === field.type;
+			field.type = show ? 'text' : 'password';
+			btn.textContent = show ? cfg.hideText : cfg.showText;
+			btn.setAttribute( 'aria-pressed', show ? 'true' : 'false' );
+		} );
+	} );
+}() );
