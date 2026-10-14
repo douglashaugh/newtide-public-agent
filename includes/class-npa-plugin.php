@@ -107,6 +107,13 @@ final class NPA_Plugin {
 	public $rest;
 
 	/**
+	 * Charts: the agent-facing format and its optional system message.
+	 *
+	 * @var NPA_Charts
+	 */
+	public $charts;
+
+	/**
 	 * MCP tool registry.
 	 *
 	 * @var NPA_MCP_Tools
@@ -184,6 +191,8 @@ final class NPA_Plugin {
 		$this->budget = new NPA_Budget( $this->settings, $this->store );
 		$this->rest   = new NPA_Rest( $this );
 		$this->rest->register();
+		$this->charts = new NPA_Charts( $this->settings );
+		$this->charts->register();
 
 		/*
 		 * Constructed unconditionally rather than behind a setting check. An
@@ -237,6 +246,7 @@ final class NPA_Plugin {
 		$this->register_widget_tests();
 		$this->register_embed_tests();
 		$this->register_mcp_tests();
+		$this->register_release_notes_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -282,6 +292,8 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-budget.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-conversation.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-markdown.php';
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-charts.php';
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-release-notes.php';
 
 		// REST proxy.
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-rest.php';
@@ -1037,14 +1049,18 @@ final class NPA_Plugin {
 						&& ! array_key_exists( 'exclude_ids', $settings->sanitize( array( 'exclude_ids' => '12,40' ) ) ),
 				);
 
-				// Suggested prompts are capped and blank lines dropped.
-				$prompts  = $settings->sanitize(
-					array( 'suggested_prompts' => "One\n\nTwo\nThree\nFour\nFive\nSix\nSeven\nEight" )
-				);
-				$lines    = array_filter( explode( "\n", $prompts['suggested_prompts'] ), 'strlen' );
-				$checks[] = array(
-					'label' => __( 'Suggested prompts drop blank lines and cap at six', 'newtide-public-agent' ),
-					'pass'  => count( $lines ) <= 6 && ! in_array( '', $lines, true ),
+				/*
+				 * Conversation starters are capped at three and blanks dropped,
+				 * whether they arrive as the three admin fields or as one string
+				 * (the pre-0.16.0 textarea, an import). An empty middle field
+				 * must not leave a gap or shift the third into a blank card.
+				 */
+				$from_text   = $settings->sanitize( array( 'suggested_prompts' => "One\n\nTwo\nThree\nFour\nFive" ) );
+				$from_fields = $settings->sanitize( array( 'suggested_prompts' => array( 'First', '', 'Third' ) ) );
+				$checks[]    = array(
+					'label' => __( 'Conversation starters keep at most three, in order, with blanks dropped', 'newtide-public-agent' ),
+					'pass'  => "One\nTwo\nThree" === $from_text['suggested_prompts']
+						&& "First\nThird" === $from_fields['suggested_prompts'],
 				);
 
 				// Write-only credential rule: an empty submission never wipes a
@@ -2308,6 +2324,103 @@ final class NPA_Plugin {
 	}
 
 	/**
+	 * Register the release-notes suite (What's new tab and update notice).
+	 *
+	 * @return void
+	 */
+	private function register_release_notes_tests() {
+		$this->test_runner->register_suite(
+			'release_notes',
+			__( 'Release notes', 'newtide-public-agent' ),
+			__( 'The What’s new tab reads its notes from the plugin’s own readme, so they ship with every update. These confirm this version has notes, that they display as written, and that the update notice reaches each administrator once and then gets out of the way.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+
+				/*
+				 * Release discipline. A version without a changelog entry ships
+				 * an empty What's new tab and a blank update description, and a
+				 * stable tag behind the version tells WordPress.org the wrong
+				 * release. Both are easy to forget at release time.
+				 */
+				$readme_path = NPA_PLUGIN_DIR . 'readme.txt';
+				$readme      = is_readable( $readme_path ) ? (string) file_get_contents( $readme_path ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- bundled file.
+				$stable      = preg_match( '/^Stable tag:\s*(\S+)/mi', $readme, $m ) ? $m[1] : '';
+
+				$checks[] = array(
+					'label' => __( 'This version has release notes, and the readme names it as the stable release', 'newtide-public-agent' ),
+					'pass'  => null !== NPA_Release_Notes::for_version( NPA_VERSION ) && NPA_VERSION === $stable,
+				);
+
+				/*
+				 * The readme is wrapped at 80 columns. Read line by line, a
+				 * bullet that wraps would break into a bullet and a stray
+				 * paragraph; it must come out as one item.
+				 */
+				$sample  = "== Changelog ==\n\n= 9.9.9 =\n**Lead sentence that\nwraps.**\n\n* First item that\n  wraps onto a second line.\n* Second item.\n\n= 9.9.8 =\nOlder.\n\n== Upgrade Notice ==\nIgnored.";
+				$entries = NPA_Release_Notes::entries( $sample );
+				$html    = $entries ? NPA_Markdown::to_html( $entries[0]['body'] ) : '';
+
+				$checks[] = array(
+					'label' => __( 'Release notes display as written: wrapped lines rejoin, and every version is found', 'newtide-public-agent' ),
+					'pass'  => 2 === count( $entries )
+						&& '9.9.9' === $entries[0]['version']
+						&& 'Older.' === $entries[1]['body']
+						&& false !== strpos( $html, '<li>First item that wraps onto a second line.</li>' )
+						&& false !== strpos( $html, '<strong>Lead sentence that wraps.</strong>' )
+						&& 2 === substr_count( $html, '<li>' ),
+				);
+
+				$checks[] = array(
+					'label' => __( 'The What’s new tab is present', 'newtide-public-agent' ),
+					// The tab list lives on the admin controller, which only loads in wp-admin.
+					'pass'  => is_readable( NPA_PLUGIN_DIR . 'admin/views/tab-whatsnew.php' )
+						&& ( null === $this->admin || array_key_exists( 'whatsnew', $this->admin->tabs() ) ),
+				);
+
+				/*
+				 * The notice: shown until this person has seen this version's
+				 * notes, then not again. Uses a real administrator and puts
+				 * their setting back exactly as it was.
+				 */
+				$admins = get_users(
+					array(
+						'role'   => 'administrator',
+						'number' => 1,
+						'fields' => 'ID',
+					)
+				);
+				$uid    = $admins ? (int) $admins[0] : 0;
+				$notice = false;
+
+				if ( $uid ) {
+					$had  = metadata_exists( 'user', $uid, NPA_Release_Notes::SEEN_META );
+					$prev = get_user_meta( $uid, NPA_Release_Notes::SEEN_META, true );
+
+					delete_user_meta( $uid, NPA_Release_Notes::SEEN_META );
+					$before = NPA_Release_Notes::is_unseen( $uid );
+					NPA_Release_Notes::mark_seen( $uid );
+					$after = NPA_Release_Notes::is_unseen( $uid );
+
+					if ( $had ) {
+						update_user_meta( $uid, NPA_Release_Notes::SEEN_META, $prev );
+					} else {
+						delete_user_meta( $uid, NPA_Release_Notes::SEEN_META );
+					}
+
+					$notice = $before && ! $after;
+				}
+
+				$checks[] = array(
+					'label' => __( 'After an update, each administrator is told once, and not again after reading', 'newtide-public-agent' ),
+					'pass'  => $notice,
+				);
+
+				return $checks;
+			}
+		);
+	}
+
+	/**
 	 * Register the Markdown rendering suite.
 	 *
 	 * The agent's reply is untrusted text being turned into markup, so these
@@ -2331,6 +2444,26 @@ final class NPA_Plugin {
 | Regular | 4.319 |
 | ULSD | 6.285 |";
 				$html  = NPA_Markdown::to_html( $table );
+
+				/*
+				 * Charts (0.16.0) ride on one class the renderer writes itself:
+				 * a `chart` fence keeps "language-chart" so the widget can find
+				 * it. The class must come only from the fence language — never
+				 * from the agent's text, which is escaped before parsing — and
+				 * every other fence must stay bare.
+				 */
+				$chart_md  = NPA_Markdown::to_html( "Prices rose.\n\n```chart\n{\"type\": \"line\", \"labels\": [\"Jan\", \"Feb\"], \"series\": [{\"name\": \"WTI\", \"values\": [70, 72]}]}\n```" );
+				$other_md  = NPA_Markdown::to_html( "```js\nalert(1)\n```" );
+				$forged_md = NPA_Markdown::to_html( '<code class="language-chart" onclick="x()">{}</code>' );
+
+				$checks[] = array(
+					'label' => __( 'A chart from the agent reaches the widget as data it can draw, and nothing else can pose as one', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $chart_md, '<pre><code class="language-chart">' )
+						&& false !== strpos( $chart_md, '&quot;type&quot;: &quot;line&quot;' )
+						&& false !== strpos( $other_md, '<pre><code>alert(1)</code></pre>' )
+						&& false === strpos( $forged_md, '<code class=' )
+						&& false === strpos( $forged_md, 'onclick="' ),
+				);
 
 				$checks[] = array(
 					'label' => __( 'A price table is rendered as a table, not as rows of pipes', 'newtide-public-agent' ),
@@ -3174,6 +3307,23 @@ Second line." );
 				);
 
 				/*
+				 * The credit shows the NewTide logo, one file per colour scheme.
+				 * A missing file is a broken-image icon in every visitor's chat
+				 * footer, so check both are present and really are PNGs.
+				 */
+				$logos_ok = true;
+				foreach ( NPA_Public::POWERED_BY_LOGOS as $logo_path ) {
+					$logo_file = NPA_PLUGIN_DIR . $logo_path;
+					$logo_head = is_readable( $logo_file ) ? (string) file_get_contents( $logo_file, false, null, 0, 8 ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled asset, not a remote resource.
+					$logos_ok  = $logos_ok && "\x89PNG\r\n\x1a\n" === $logo_head;
+				}
+
+				$checks[] = array(
+					'label' => __( 'The NewTide logo for the “Powered by” credit ships with the plugin, for light and dark panels', 'newtide-public-agent' ),
+					'pass'  => $logos_ok,
+				);
+
+				/*
 				 * Pin proxy mode + enabled so the render check is deterministic
 				 * regardless of the site's live connection mode, but keep the
 				 * rest of the real configuration so this exercises the actual
@@ -3226,6 +3376,84 @@ Second line." );
 				$checks[] = array(
 					'label' => __( 'The chat panel can actually be closed (the stylesheet honours “hidden”)', 'newtide-public-agent' ),
 					'pass'  => false !== strpos( $css, '.newtide-public-agent__panel[hidden]' ),
+				);
+
+				/*
+				 * Auto-grow is the script's to do, but it only runs if the mount
+				 * says so, and the stylesheet must lift the height ceiling for it.
+				 *
+				 * It also replaced the header's expand button (0.10–0.15), which
+				 * must not come back alongside it: two controls fighting over the
+				 * same size, one of them silently switching the other off.
+				 */
+				$js_path = NPA_PLUGIN_DIR . 'assets/js/newtide-public-agent-public.js';
+				$js      = is_readable( $js_path ) ? (string) file_get_contents( $js_path ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled asset, not a remote resource.
+
+				$checks[] = array(
+					'label' => __( 'The chat panel grows with the conversation by default, with no separate expand button', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $html, 'data-auto-grow="1"' )
+						&& false !== strpos( $css, '.newtide-public-agent--autogrow {' )
+						&& '' !== $js
+						&& false === strpos( $js, 'newtide-public-agent__expand' ),
+				);
+
+				/*
+				 * Copy is on by default, and both forms must reach the clipboard:
+				 * HTML so an email or document keeps the agent's formatting, and
+				 * plain text for anywhere that takes only text. A copy that drops
+				 * either pastes as a wall of markup or as a lost table.
+				 */
+				/*
+				 * Charts: drawn by their own script, which must load wherever
+				 * the widget does (it is a dependency), and switched on by
+				 * default. The chart format reaches the agent as a system
+				 * message only when the owner opts in — an agent without
+				 * "Accept instructions" must never be sent one unasked.
+				 */
+				// Registration normally happens on a front-end request; do it here.
+				( new NPA_Public( $this ) )->register_assets();
+				$charts_js  = wp_scripts()->query( NPA_Public::CHARTS_HANDLE, 'registered' );
+				$widget_js  = wp_scripts()->query( NPA_Public::HANDLE, 'registered' );
+				$chart_base = array( 'messages' => array( array( 'role' => 'user', 'content' => 'hi' ) ) );
+
+				NPA_Settings::begin_test_override( array_merge( NPA_Settings::defaults(), array( 'charts' => true, 'chart_instructions' => false ) ) );
+				$chart_off = apply_filters( 'npa_agent_api_body', $chart_base, '' );
+				NPA_Settings::begin_test_override( array_merge( NPA_Settings::defaults(), array( 'charts' => true, 'chart_instructions' => true ) ) );
+				$chart_on = apply_filters( 'npa_agent_api_body', $chart_base, '' );
+				NPA_Settings::begin_test_override( array_merge( NPA_Settings::defaults(), is_array( $live ) ? $live : array(), array( 'enabled' => true, 'mode' => 'proxy' ) ) );
+
+				$checks[] = array(
+					'label' => __( 'Charts in replies are drawn, and the agent is only sent chart instructions when you switch that on', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $html, 'data-charts="1"' )
+						&& $charts_js
+						&& $widget_js
+						&& in_array( NPA_Public::CHARTS_HANDLE, (array) $widget_js->deps, true )
+						&& is_readable( NPA_PLUGIN_DIR . 'assets/js/newtide-public-agent-charts.js' )
+						&& $chart_base === $chart_off
+						&& isset( $chart_on['messages'][0]['role'], $chart_on['messages'][1]['content'] )
+						&& 'system' === $chart_on['messages'][0]['role']
+						&& NPA_Charts::instructions() === $chart_on['messages'][0]['content']
+						&& 'hi' === $chart_on['messages'][1]['content'],
+				);
+
+				/*
+				 * Conversation starters: at most three reach the page, even
+				 * from a list saved before the cap came down from six.
+				 */
+				NPA_Settings::begin_test_override( array_merge( NPA_Settings::defaults(), is_array( $live ) ? $live : array(), array( 'enabled' => true, 'mode' => 'proxy', 'suggested_prompts' => "One\nTwo\nThree\nFour\nFive" ) ) );
+				$starters_html = do_shortcode( '[newtide_agent]' );
+
+				$checks[] = array(
+					'label' => __( 'At most three conversation starters are shown, even from an older, longer list', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $starters_html, 'data-prompts="One' . "\n" . 'Two' . "\n" . 'Three"' ),
+				);
+
+				$checks[] = array(
+					'label' => __( 'Visitors can copy a reply or the whole conversation, with its formatting', 'newtide-public-agent' ),
+					'pass'  => false !== strpos( $html, 'data-copy="1"' )
+						&& false !== strpos( $js, "'text/html'" )
+						&& false !== strpos( $js, "'text/plain'" )
+						&& false !== strpos( $css, '.newtide-public-agent__copyall[hidden]' ),
 				);
 
 				// The mount must carry a valid signature for its agent, or the

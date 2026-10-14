@@ -53,7 +53,9 @@ class NPA_Markdown {
 			'br'         => array(),
 			'strong'     => array(),
 			'em'         => array(),
-			'code'       => array(),
+			// Class carries only "language-chart" (see to_html). Agent text is
+			// escaped before parsing, so no other class can arrive here.
+			'code'       => array( 'class' => true ),
 			'pre'        => array(),
 			'blockquote' => array(),
 			'ul'         => array(),
@@ -98,10 +100,18 @@ class NPA_Markdown {
 		// contents are never treated as Markdown.
 		$fences = array();
 		$text   = preg_replace_callback(
-			'/```[a-z0-9_+-]*\n(.*?)```/is',
+			'/```([a-z0-9_+-]*)\n(.*?)```/is',
 			static function ( $m ) use ( &$fences ) {
-				$token            = "\0FENCE" . count( $fences ) . "\0";
-				$fences[ $token ] = '<pre><code>' . rtrim( $m[1] ) . '</code></pre>';
+				$token = "\0FENCE" . count( $fences ) . "\0";
+
+				/*
+				 * A `chart` fence keeps its language, the one class this renderer
+				 * ever writes, so the widget can find it and draw the chart. The
+				 * body is the same escaped text as any fence; a widget that does
+				 * not draw it shows the JSON. Every other language is dropped.
+				 */
+				$class            = ( 'chart' === strtolower( $m[1] ) ) ? ' class="language-chart"' : '';
+				$fences[ $token ] = '<pre><code' . $class . '>' . rtrim( $m[2] ) . '</code></pre>';
 				return "\n" . $token . "\n";
 			},
 			$text
@@ -133,7 +143,13 @@ class NPA_Markdown {
 		};
 
 		foreach ( $lines as $line ) {
-			$trimmed = trim( $line );
+			/*
+			 * Whitespace only. trim()'s default list includes "\0", which is
+			 * what brackets a code-fence placeholder, so the default stripped
+			 * it, the lookup below never matched, and from 0.9.0 to 0.15.0
+			 * every code block reached visitors as the word "FENCE0".
+			 */
+			$trimmed = trim( $line, " \t\n\r\x0B" );
 
 			// A pulled-out code fence stands alone.
 			if ( isset( $fences[ $trimmed ] ) ) {

@@ -73,6 +73,70 @@ class NPA_Admin {
 		add_action( 'admin_post_npa_rotate_mcp_key', array( $this, 'handle_rotate_mcp_key' ) );
 		add_action( 'admin_post_npa_download_mcp_guide', array( $this, 'handle_download_mcp_guide' ) );
 		add_action( 'admin_post_npa_print_mcp_guide', array( $this, 'handle_print_mcp_guide' ) );
+		add_action( 'admin_post_npa_dismiss_whats_new', array( $this, 'handle_dismiss_whats_new' ) );
+		add_action( 'admin_notices', array( $this, 'whats_new_notice' ) );
+	}
+
+	/**
+	 * After an update, point each administrator to the release notes once.
+	 *
+	 * Only where someone managing the plugin would look — the Dashboard, the
+	 * Plugins screen and the plugin's own pages — never on every admin screen.
+	 * Gone once they open What's new or dismiss it, until the next version.
+	 *
+	 * @return void
+	 */
+	public function whats_new_notice() {
+		if ( ! current_user_can( 'manage_options' ) || ! NPA_Release_Notes::is_unseen( get_current_user_id() ) ) {
+			return;
+		}
+
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$here   = $screen ? (string) $screen->id : '';
+		$ours   = false !== strpos( $here, self::SLUG );
+
+		if ( ! $ours && ! in_array( $here, array( 'dashboard', 'plugins' ), true ) ) {
+			return;
+		}
+
+		// The tab marks the notes seen itself; no notice on the page showing them.
+		if ( $ours && 'whatsnew' === $this->current_tab() ) {
+			return;
+		}
+
+		$dismiss = wp_nonce_url( admin_url( 'admin-post.php?action=npa_dismiss_whats_new' ), 'npa_dismiss_whats_new' );
+
+		printf(
+			'<div class="notice notice-info"><p>%1$s <a href="%2$s">%3$s</a> &middot; <a href="%4$s">%5$s</a></p></div>',
+			esc_html(
+				sprintf(
+					/* translators: %s: plugin version, e.g. 0.16.0. */
+					__( 'NewTide Public Agent has been updated to %s.', 'newtide-public-agent' ),
+					NPA_VERSION
+				)
+			),
+			esc_url( $this->tab_url( 'whatsnew' ) ),
+			esc_html__( 'See what’s new', 'newtide-public-agent' ),
+			esc_url( $dismiss ),
+			esc_html__( 'Dismiss', 'newtide-public-agent' )
+		);
+	}
+
+	/**
+	 * Dismiss the "updated" notice for this person, for this version.
+	 *
+	 * @return void
+	 */
+	public function handle_dismiss_whats_new() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do that.', 'newtide-public-agent' ) );
+		}
+		check_admin_referer( 'npa_dismiss_whats_new' );
+
+		NPA_Release_Notes::mark_seen( get_current_user_id() );
+
+		wp_safe_redirect( wp_get_referer() ? wp_get_referer() : admin_url() );
+		exit;
 	}
 
 	/**
@@ -867,6 +931,7 @@ class NPA_Admin {
 			'publishing' => __( 'Publishing', 'newtide-public-agent' ),
 			'status'     => __( 'Service Status', 'newtide-public-agent' ),
 			'tests'      => __( 'Tests', 'newtide-public-agent' ),
+			'whatsnew'   => __( 'What’s new', 'newtide-public-agent' ),
 		);
 	}
 

@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.15.0
+Stable tag: 0.16.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,43 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.16.0 =
+**A roomier chat that grows with the conversation, answers with charts, and
+can be copied out.** The panel used to open small and stop growing almost at
+once, so visitors read it as a box locked at one size.
+
+* **Grows with the conversation** — the chat opens 50% larger (530 x 314 px at
+  the Standard size, from 354 x 208), gets taller as messages arrive up to the
+  height of the screen, then widens a step at a time (33, 40 and 48rem) when an
+  answer needs room. It never shrinks mid-conversation; New chat starts it
+  compact again. Appearance → Grow with the conversation.
+* **Conversation starters** — up to three questions, shown as cards under
+  "Try asking" when the chat opens. Pick ones only this site can answer, such as
+  "How have US crude inventories changed over the last few months?". They
+  replace Suggested prompts; an older list keeps its first three.
+* **Charts in answers** — the agent can include a line chart (change over time)
+  or a bar chart (comparing items), drawn in the chat with a hover readout and a
+  Show data table. The agent has to know the format: Appearance → Charts → Copy
+  instructions, then paste them into the agent on My Agents.
+* **Copy** — a copy button under each answer copies that question and answer;
+  Copy in the header copies the whole conversation. Pasted into an email or a
+  document, lists, bold text and tables keep their formatting, and a chart
+  arrives as a table of its data.
+* **Powered by NewTide** now shows the NewTide logo, in a light or dark version
+  to match the panel.
+* **What's new** — this tab. After an update, a notice links here once.
+* The **expand button** has gone from the chat header: growing replaces it.
+  Dragging the corner still sets a visitor's own size; a plain click on it no
+  longer does.
+* The message box grows as a visitor types. Shift+Enter starts a new line.
+
+Fixed: since 0.9.0, every code block in an answer showed as the word "FENCE0"
+instead of the code.
+
+Upgrading: the panel size presets are larger (Standard 33rem, Large 40rem,
+Extra large 48rem), and sizes visitors saved in earlier versions are ignored
+once, so they get the growing panel.
 
 = 0.15.0 =
 **A Site knowledge tab, so the agent can actually be connected.** 0.14.0 gave

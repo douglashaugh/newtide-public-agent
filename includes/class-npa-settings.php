@@ -96,11 +96,19 @@ class NPA_Settings {
 	/**
 	 * Panel sizes a site can start the chat at. The default matches every
 	 * release before 0.10.0; the larger two exist because a long answer in a
-	 * 22rem column is hard to read, which is the whole reason for this setting.
+	 * narrow column is hard to read, which is the whole reason for this setting.
+	 * Standard is 33rem wide since 0.16.0 (22rem before).
 	 *
 	 * @var string[]
 	 */
 	const PANEL_SIZES = array( 'standard', 'large', 'xlarge' );
+
+	/**
+	 * Most conversation starters shown. Six before 0.16.0.
+	 *
+	 * @var int
+	 */
+	const MAX_STARTERS = 3;
 
 	/**
 	 * Embed-mode placement: floating site-wide bubble, or inline via the
@@ -187,6 +195,10 @@ class NPA_Settings {
 			'powered_by'                => true,
 			'panel_size'                => 'standard',
 			'allow_resize'              => true,
+			'auto_grow'                 => true,  // Panel grows with the conversation (0.16.0).
+			'copy_buttons'              => true,  // Copy a reply or the whole chat (0.16.0).
+			'charts'                    => true,  // Draw ```chart blocks in replies (0.16.0).
+			'chart_instructions'        => false, // Send the chart format as a system message.
 			// Behaviour.
 			'auto_open_delay'           => 0, // Seconds; 0 = do not auto-open.
 			'hide_on_mobile'            => false,
@@ -319,6 +331,10 @@ class NPA_Settings {
 		$clean['mcp_enabled']       = $has( 'mcp_enabled' ) ? ! empty( $input['mcp_enabled'] ) : (bool) $existing['mcp_enabled'];
 		$clean['powered_by']        = $has( 'powered_by' ) ? ! empty( $input['powered_by'] ) : (bool) $existing['powered_by'];
 		$clean['allow_resize']      = $has( 'allow_resize' ) ? ! empty( $input['allow_resize'] ) : (bool) $existing['allow_resize'];
+		$clean['auto_grow']         = $has( 'auto_grow' ) ? ! empty( $input['auto_grow'] ) : (bool) $existing['auto_grow'];
+		$clean['copy_buttons']      = $has( 'copy_buttons' ) ? ! empty( $input['copy_buttons'] ) : (bool) $existing['copy_buttons'];
+		$clean['charts']            = $has( 'charts' ) ? ! empty( $input['charts'] ) : (bool) $existing['charts'];
+		$clean['chart_instructions'] = $has( 'chart_instructions' ) ? ! empty( $input['chart_instructions'] ) : (bool) $existing['chart_instructions'];
 		$clean['hide_on_mobile']    = $has( 'hide_on_mobile' ) ? ! empty( $input['hide_on_mobile'] ) : (bool) $existing['hide_on_mobile'];
 		$clean['remember_state']    = $has( 'remember_state' ) ? ! empty( $input['remember_state'] ) : (bool) $existing['remember_state'];
 		$clean['log_enabled']       = $has( 'log_enabled' ) ? ! empty( $input['log_enabled'] ) : (bool) $existing['log_enabled'];
@@ -336,11 +352,19 @@ class NPA_Settings {
 		$clean['public_key']        = $has( 'public_key' ) ? sanitize_text_field( $input['public_key'] ) : $existing['public_key'];
 		$clean['platform_url']      = $has( 'platform_url' ) ? esc_url_raw( trim( (string) $input['platform_url'] ) ) : $existing['platform_url'];
 
-		// Suggested prompts: newline-separated, sanitized per line, blanks dropped.
+		/*
+		 * Conversation starters (0.16.0; "suggested prompts" before). Stored as
+		 * newline-separated text, as they always were, so an existing list
+		 * carries over. The Appearance tab submits three fields; anything else
+		 * (an import, the old textarea) may still send one string. Capped at
+		 * three — a starter is a demonstration, and three is what fits the
+		 * opening panel without pushing the greeting out of view.
+		 */
 		if ( $has( 'suggested_prompts' ) ) {
-			$lines                      = preg_split( '/\r\n|\r|\n/', (string) $input['suggested_prompts'] );
+			$raw                        = $input['suggested_prompts'];
+			$lines                      = is_array( $raw ) ? array_map( 'strval', $raw ) : preg_split( '/\r\n|\r|\n/', (string) $raw );
 			$lines                      = array_filter( array_map( 'sanitize_text_field', $lines ), 'strlen' );
-			$clean['suggested_prompts'] = implode( "\n", array_slice( array_values( $lines ), 0, 6 ) );
+			$clean['suggested_prompts'] = implode( "\n", array_slice( array_values( $lines ), 0, self::MAX_STARTERS ) );
 		} else {
 			$clean['suggested_prompts'] = $existing['suggested_prompts'];
 		}

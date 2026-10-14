@@ -7,6 +7,18 @@
 	--npa-text: #1e1e1e;
 	--npa-muted: #f0f0f1;
 	--npa-border: #dcdcde;
+	/* Chart colours (0.16.0): the first four slots of the validated categorical
+	   palette, in its fixed order, plus chart chrome. Checked against this
+	   surface: all pass colour-blind separation; aqua and yellow sit under 3:1
+	   contrast on white, which the legend and the data table make up for. */
+	--npa-viz-1: #2a78d6;
+	--npa-viz-2: #eb6834;
+	--npa-viz-3: #1baf7a;
+	--npa-viz-4: #eda100;
+	--npa-viz-grid: #e1e0d9;
+	--npa-viz-axis: #c3c2b7;
+	--npa-viz-muted: #6f6e69;
+	--npa-viz-ink2: #52514e;
 	position: fixed;
 	bottom: 1.25rem;
 	z-index: 99999;
@@ -145,6 +157,7 @@
 
 .newtide-public-agent__form {
 	display: flex;
+	align-items: flex-end;
 	gap: 0.4rem;
 	padding: 0.6rem;
 	border-top: 1px solid var( --npa-border );
@@ -156,11 +169,20 @@
 	border: 1px solid var( --npa-border );
 	border-radius: 8px;
 	font: inherit;
+	line-height: 1.4;
 	color: var( --npa-text );
 	background: var( --npa-surface );
+	/* A textarea since 0.16.0: it grows with what is typed (the script sets the
+	   height) up to about five lines, then scrolls. */
+	box-sizing: border-box;
+	min-height: 2.4rem;
+	max-height: 8rem;
+	resize: none;
+	overflow-y: auto;
 }
 
 .newtide-public-agent__send {
+	min-height: 2.4rem;
 	background: var( --npa-accent );
 	color: #fff;
 	border: 0;
@@ -211,6 +233,14 @@
 	--npa-text: #f0f0f1;
 	--npa-muted: #2f2f2f;
 	--npa-border: #3a3a3a;
+	--npa-viz-1: #3987e5;
+	--npa-viz-2: #d95926;
+	--npa-viz-3: #199e70;
+	--npa-viz-4: #c98500;
+	--npa-viz-grid: #323230;
+	--npa-viz-axis: #4a4945;
+	--npa-viz-muted: #9a988f;
+	--npa-viz-ink2: #c3c2b7;
 }
 
 /* Forced light theme (admin: Colour scheme = Light) — pins the light tokens
@@ -220,6 +250,14 @@
 	--npa-text: #1e1e1e;
 	--npa-muted: #f0f0f1;
 	--npa-border: #dcdcde;
+	--npa-viz-1: #2a78d6;
+	--npa-viz-2: #eb6834;
+	--npa-viz-3: #1baf7a;
+	--npa-viz-4: #eda100;
+	--npa-viz-grid: #e1e0d9;
+	--npa-viz-axis: #c3c2b7;
+	--npa-viz-muted: #6f6e69;
+	--npa-viz-ink2: #52514e;
 }
 
 /* Auto scheme: follow the device, but never override a forced theme. */
@@ -229,6 +267,14 @@
 		--npa-text: #f0f0f1;
 		--npa-muted: #2f2f2f;
 		--npa-border: #3a3a3a;
+		--npa-viz-1: #3987e5;
+		--npa-viz-2: #d95926;
+		--npa-viz-3: #199e70;
+		--npa-viz-4: #c98500;
+		--npa-viz-grid: #323230;
+		--npa-viz-axis: #4a4945;
+		--npa-viz-muted: #9a988f;
+		--npa-viz-ink2: #c3c2b7;
 	}
 }
 
@@ -349,26 +395,50 @@
 	font-size: 2rem;
 }
 
-/* Suggested-prompt chips shown under the greeting. */
+/* Conversation starters (0.16.0; chips before). Up to three cards under the
+   greeting, each a whole question a visitor can ask with one click. Cards
+   rather than chips because a starter is a full sentence, and it is the
+   thing that shows a visitor what this agent knows. */
 .newtide-public-agent__prompts {
 	display: flex;
-	flex-wrap: wrap;
+	flex-direction: column;
 	gap: 0.4rem;
+	margin-top: 0.25rem;
+}
+
+.newtide-public-agent__prompts-label {
+	font-size: 0.85em;
+	opacity: 0.7;
 }
 
 .newtide-public-agent__prompt {
-	background: var( --npa-muted );
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.6rem;
+	width: 100%;
+	background: var( --npa-surface );
 	color: var( --npa-text );
 	border: 1px solid var( --npa-border );
-	border-radius: 999px;
-	padding: 0.35rem 0.7rem;
+	border-radius: 10px;
+	padding: 0.55rem 0.75rem;
 	font: inherit;
-	font-size: 0.85em;
+	font-size: 0.92em;
+	line-height: 1.4;
+	text-align: left;
 	cursor: pointer;
+}
+
+.newtide-public-agent__prompt::after {
+	content: "\2192";
+	flex: none;
+	color: var( --npa-accent );
+	font-weight: 600;
 }
 
 .newtide-public-agent__prompt:hover {
 	border-color: var( --npa-accent );
+	background: var( --npa-muted );
 }
 
 .newtide-public-agent__prompt:focus-visible {
@@ -421,6 +491,104 @@
 .newtide-public-agent__newchat:focus-visible {
 	background: rgba( 255, 255, 255, .3 );
 	opacity: 1;
+}
+
+/* Copy (0.16.0). The header button copies the whole conversation and matches
+   "New chat" beside it; it appears once there is a reply to copy. */
+.newtide-public-agent__copyall {
+	display: inline-flex;
+	align-items: center;
+	gap: .3em;
+	margin-left: auto;
+	margin-right: .4rem;
+	padding: .15em .6em;
+	font: inherit;
+	font-size: .8125rem;
+	line-height: 1.6;
+	color: inherit;
+	background: rgba( 255, 255, 255, .18 );
+	border: 0;
+	border-radius: 999px;
+	cursor: pointer;
+	opacity: .9;
+}
+
+/* An author display beats the browser's [hidden] rule; see the panel's. */
+.newtide-public-agent__copyall[hidden] {
+	display: none;
+}
+
+/* Only one of the two takes the slack that pushes them right. */
+.newtide-public-agent__copyall:not( [hidden] ) + .newtide-public-agent__newchat {
+	margin-left: 0;
+}
+
+.newtide-public-agent__copyall:hover,
+.newtide-public-agent__copyall:focus-visible {
+	background: rgba( 255, 255, 255, .3 );
+	opacity: 1;
+}
+
+/* Under each reply: copy that question and answer. Quiet until pointed at,
+   so a long conversation is not a column of buttons. */
+.newtide-public-agent__msg--agent {
+	flex-direction: column;
+	align-items: flex-start;
+}
+
+.newtide-public-agent__copy {
+	display: inline-flex;
+	align-items: center;
+	margin-top: .2rem;
+	padding: .2rem;
+	color: var( --npa-text );
+	background: transparent;
+	border: 0;
+	border-radius: 6px;
+	cursor: pointer;
+	opacity: .5;
+}
+
+.newtide-public-agent__copy:hover,
+.newtide-public-agent__copy:focus-visible {
+	background: var( --npa-muted );
+	opacity: 1;
+}
+
+.newtide-public-agent__copy:focus-visible,
+.newtide-public-agent__copyall:focus-visible {
+	outline: 2px solid var( --npa-accent );
+	outline-offset: 2px;
+}
+
+.newtide-public-agent__copy.is-copied {
+	color: var( --npa-accent );
+	opacity: 1;
+}
+
+/* Announces "Copied" to screen readers only. */
+.newtide-public-agent__status {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect( 0 0 0 0 );
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Off-screen copy of the clipboard content, selected for the copy command on
+   pages without the async clipboard (plain http). Removed straight after. */
+.newtide-public-agent__clipstage {
+	position: fixed;
+	top: 0;
+	left: -10000px;
+	width: 40rem;
+	white-space: normal;
+	color: #1e1e1e;
+	background: #fff;
 }
 
 /* Rendered Markdown inside an agent bubble.
@@ -536,36 +704,103 @@
 	text-decoration: underline;
 }
 
+/* "Powered by" + logo (0.16.0). The footer's muting moves onto the words: on
+   the whole footer it would wash the logo out to a grey smudge. The logo is
+   sized to sit on the text's line, not to compete with the conversation. */
+.newtide-public-agent__powered--logo {
+	opacity: 1;
+}
+
+.newtide-public-agent__powered--logo,
+.newtide-public-agent__powered--logo .newtide-public-agent__powered-link {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.35em;
+}
+
+.newtide-public-agent__powered-label {
+	opacity: 0.6;
+}
+
+.newtide-public-agent__powered-logo {
+	display: block;
+	width: auto;
+	height: 1rem;
+	max-width: none;
+}
+
+/* One logo per scheme; show the one matching the panel. Same three cases as
+   the colour tokens above: forced dark, forced light, and auto following the
+   device. */
+.newtide-public-agent__powered-logo--dark,
+.newtide-public-agent--theme-dark .newtide-public-agent__powered-logo--light {
+	display: none;
+}
+
+.newtide-public-agent--theme-dark .newtide-public-agent__powered-logo--dark {
+	display: block;
+}
+
+@media ( prefers-color-scheme: dark ) {
+	.newtide-public-agent:not( .newtide-public-agent--theme-light ) .newtide-public-agent__powered-logo--light {
+		display: none;
+	}
+
+	.newtide-public-agent:not( .newtide-public-agent--theme-light ) .newtide-public-agent__powered-logo--dark {
+		display: block;
+	}
+}
+
 /* ---------------------------------------------------------------------------
    Panel sizing (0.10.0)
 
    The panel was a fixed 22rem x 32rem, which is a readable width for "yes, we
    open at 9" and a poor one for a price table or a six-paragraph answer. Size
    now comes from two custom properties so three things can set it: the site
-   owner's default, the visitor's expand toggle, and a drag. The viewport caps
+   owner's default, auto-grow (0.16.0), and a drag. The viewport caps
    stay on the panel rule, so none of those can push it off screen.
+
+   0.16.0 opens half as large again: Standard went from 22rem to 33rem wide,
+   because at 22rem the panel read as a small box locked at that size. Large
+   and Extra large moved up to stay larger than Standard.
    --------------------------------------------------------------------------- */
 .newtide-public-agent {
-	--npa-panel-w: 22rem;
+	--npa-panel-w: 33rem;
 	--npa-panel-h: 32rem;
 }
 
 .newtide-public-agent--panel-large {
-	--npa-panel-w: 30rem;
+	--npa-panel-w: 40rem;
 	--npa-panel-h: 38rem;
 }
 
 .newtide-public-agent--panel-xlarge {
-	--npa-panel-w: 38rem;
+	--npa-panel-w: 48rem;
 	--npa-panel-h: 44rem;
 }
 
-/* The visitor's expand toggle. Deliberately not 100vw: a chat panel spanning an
-   entire desktop monitor gives lines too long to read comfortably, which is the
-   problem this feature exists to solve. */
-.newtide-public-agent--expanded {
-	--npa-panel-w: 52rem;
+/* Auto-grow (0.16.0). The panel is already as tall as its content, so growing
+   with the conversation only means lifting the ceiling to the screen; the caps
+   on the panel rule still apply. Width is stepped through the presets by the
+   script and animated here. The class comes off when the visitor drags the
+   panel to a size of their own. */
+.newtide-public-agent--autogrow {
 	--npa-panel-h: 100vh;
+}
+
+.newtide-public-agent--autogrow .newtide-public-agent__panel {
+	/* The opening height, 50% above the greeting-only panel it replaced. The
+	   log stretches to fill it, so an empty chat looks like room to talk
+	   rather than a closed box. Never more than the screen allows. */
+	min-height: min( 19.5rem, calc( 100vh - 6rem ) );
+	transition: width 0.25s ease;
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.newtide-public-agent--autogrow .newtide-public-agent__panel {
+		transition: none;
+	}
 }
 
 .newtide-public-agent__resize {
@@ -618,18 +853,148 @@
 	user-select: none;
 }
 
-/* A drag grip is a pointer affordance. Touch users get the expand button, which
-   on a phone is the only control that matters. */
+/* A drag grip is a pointer affordance. Touch users rely on auto-grow, which
+   on a phone fills the screen as the conversation needs it. */
 @media ( pointer: coarse ) {
 	.newtide-public-agent__resize {
 		display: none;
 	}
 }
 
-/* On a phone the panel is already viewport-width, so expanding means filling
-   the height rather than widening. */
-@media ( max-width: 600px ) {
-	.newtide-public-agent--expanded {
-		--npa-panel-w: 100vw;
-	}
+/* ---------------------------------------------------------------------------
+   Charts in replies (0.16.0) — drawn by newtide-public-agent-charts.js from a
+   ```chart block. A card on the panel surface inside the reply bubble, which
+   takes the full width when it holds one.
+   --------------------------------------------------------------------------- */
+.newtide-public-agent__bubble--chart {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.newtide-public-agent__chart {
+	margin: 0.4em 0 0.6em;
+	padding: 0.6rem 0.7rem 0.5rem;
+	background: var( --npa-surface );
+	border: 1px solid var( --npa-border );
+	border-radius: 8px;
+	white-space: normal;
+}
+
+.newtide-public-agent__chart-head {
+	margin-bottom: 0.4rem;
+}
+
+.newtide-public-agent__chart-title {
+	font-weight: 600;
+	color: var( --npa-text );
+}
+
+.newtide-public-agent__chart-sub {
+	font-size: 0.85em;
+	color: var( --npa-viz-ink2 );
+}
+
+.newtide-public-agent__chart-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem 0.9rem;
+	margin-bottom: 0.4rem;
+	font-size: 0.85em;
+	color: var( --npa-viz-ink2 );
+}
+
+.newtide-public-agent__chart-legend-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+
+/* Identity keys: a short stroke for lines (and in every readout), a small
+   rounded square for bars. The key carries the colour; text never does. */
+.newtide-public-agent__chart-key {
+	display: inline-block;
+	flex: none;
+}
+
+.newtide-public-agent__chart-key--line {
+	width: 0.9rem;
+	height: 2px;
+	border-radius: 1px;
+}
+
+.newtide-public-agent__chart-key--bar {
+	width: 0.65rem;
+	height: 0.65rem;
+	border-radius: 2px;
+}
+
+.newtide-public-agent__chart-plot {
+	position: relative;
+	width: 100%;
+	border-radius: 4px;
+}
+
+.newtide-public-agent__chart-plot svg {
+	display: block;
+	overflow: visible;
+}
+
+.newtide-public-agent__chart-plot:focus-visible {
+	outline: 2px solid var( --npa-accent );
+	outline-offset: 3px;
+}
+
+.newtide-public-agent__chart-tip {
+	position: absolute;
+	z-index: 2;
+	min-width: 6rem;
+	padding: 0.35rem 0.55rem;
+	font-size: 0.85em;
+	line-height: 1.4;
+	color: var( --npa-text );
+	background: var( --npa-surface );
+	border: 1px solid var( --npa-border );
+	border-radius: 6px;
+	box-shadow: 0 4px 14px rgba( 0, 0, 0, 0.18 );
+	pointer-events: none;
+	white-space: nowrap;
+}
+
+.newtide-public-agent__chart-tip[hidden] {
+	display: none;
+}
+
+.newtide-public-agent__chart-tip-head {
+	color: var( --npa-viz-ink2 );
+}
+
+.newtide-public-agent__chart-tip-row {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+.newtide-public-agent__chart-tip-name {
+	color: var( --npa-viz-ink2 );
+}
+
+.newtide-public-agent__chart-data {
+	margin-top: 0.35rem;
+	font-size: 0.85em;
+}
+
+.newtide-public-agent__chart-data summary,
+.newtide-public-agent__chart-failed summary {
+	cursor: pointer;
+	color: var( --npa-viz-ink2 );
+}
+
+.newtide-public-agent__chart-table {
+	margin-top: 0.35rem;
+}
+
+.newtide-public-agent__chart-table td {
+	font-variant-numeric: tabular-nums;
+	text-align: right;
 }

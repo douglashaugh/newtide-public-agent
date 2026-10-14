@@ -27,11 +27,51 @@ class NPA_Public {
 	const POWERED_BY_URL = 'https://www.newtide.ai';
 
 	/**
+	 * The NewTide logo in the credit, relative to the plugin root. Two files
+	 * because the panel has two colour schemes: the brand navy on light, white
+	 * lettering on dark, where navy would all but vanish. Both keep the blue.
+	 *
+	 * @var string[]
+	 */
+	const POWERED_BY_LOGOS = array(
+		'light' => 'assets/images/newtide-logo.png',
+		'dark'  => 'assets/images/newtide-logo-dark.png',
+	);
+
+	/**
+	 * Footer credit markup, shared by the Appearance preview so the two
+	 * cannot drift. The widget builds the same structure in JavaScript.
+	 *
+	 * @return string Escaped HTML.
+	 */
+	public static function powered_by_inner_html() {
+		$html = '<span class="newtide-public-agent__powered-label">' . esc_html__( 'Powered by', 'newtide-public-agent' ) . '</span>';
+
+		foreach ( self::POWERED_BY_LOGOS as $scheme => $path ) {
+			$html .= sprintf(
+				'<img class="newtide-public-agent__powered-logo newtide-public-agent__powered-logo--%1$s" src="%2$s" alt="%3$s" width="367" height="64" />',
+				esc_attr( $scheme ),
+				esc_url( NPA_PLUGIN_URL . $path ),
+				esc_attr__( 'NewTide', 'newtide-public-agent' )
+			);
+		}
+
+		return $html;
+	}
+
+	/**
 	 * Widget script/style handle.
 	 *
 	 * @var string
 	 */
 	const HANDLE = 'npa-widget';
+
+	/**
+	 * Chart renderer handle; a dependency of the widget script.
+	 *
+	 * @var string
+	 */
+	const CHARTS_HANDLE = 'npa-widget-charts';
 
 	/**
 	 * Handle for RisingTide's injected embed loader (agent-embed.js).
@@ -132,10 +172,20 @@ class NPA_Public {
 			NPA_VERSION
 		);
 
+		// Draws ```chart blocks in replies (0.16.0). A dependency of the widget,
+		// so it is only ever loaded where the widget is.
+		wp_register_script(
+			self::CHARTS_HANDLE,
+			NPA_PLUGIN_URL . 'assets/js/newtide-public-agent-charts.js',
+			array(),
+			NPA_VERSION,
+			true
+		);
+
 		wp_register_script(
 			self::HANDLE,
 			NPA_PLUGIN_URL . 'assets/js/newtide-public-agent-public.js',
-			array(),
+			array( self::CHARTS_HANDLE ),
 			NPA_VERSION,
 			true
 		);
@@ -160,6 +210,10 @@ class NPA_Public {
 				 * @param string $url Destination.
 				 */
 				'poweredUrl' => apply_filters( 'npa_powered_by_url', NPA_Public::POWERED_BY_URL ),
+				'poweredLogos' => array(
+					'light' => NPA_PLUGIN_URL . NPA_Public::POWERED_BY_LOGOS['light'],
+					'dark'  => NPA_PLUGIN_URL . NPA_Public::POWERED_BY_LOGOS['dark'],
+				),
 				'i18n'    => array(
 					'send'      => __( 'Send', 'newtide-public-agent' ),
 					'close'     => __( 'Close chat', 'newtide-public-agent' ),
@@ -170,9 +224,24 @@ class NPA_Public {
 					'sent'      => __( 'You said', 'newtide-public-agent' ),
 					'received'  => __( 'Assistant replied', 'newtide-public-agent' ),
 					'poweredBy' => __( 'Powered by NewTide', 'newtide-public-agent' ),
+					'poweredByLabel' => __( 'Powered by', 'newtide-public-agent' ),
+					'poweredByLogo'  => __( 'NewTide', 'newtide-public-agent' ),
+					'tryAsking'  => __( 'Try asking', 'newtide-public-agent' ),
+					'chartData'   => __( 'Show data', 'newtide-public-agent' ),
+					'chartFailed' => __( 'Chart data (could not be drawn)', 'newtide-public-agent' ),
+					'chartLine'   => __( 'Line chart', 'newtide-public-agent' ),
+					'chartBar'    => __( 'Bar chart', 'newtide-public-agent' ),
+					'chartSeries' => __( 'Series', 'newtide-public-agent' ),
+					'chartKeys'   => __( 'Use the arrow keys to read each value, or open Show data for the table.', 'newtide-public-agent' ),
+					'copy'       => __( 'Copy', 'newtide-public-agent' ),
+					'copyAll'    => __( 'Copy the whole conversation', 'newtide-public-agent' ),
+					'copyTurn'   => __( 'Copy this question and answer', 'newtide-public-agent' ),
+					'copied'     => __( 'Copied', 'newtide-public-agent' ),
+					'copyFailed' => __( 'Could not copy. Try selecting the text instead.', 'newtide-public-agent' ),
+					'you'        => __( 'You', 'newtide-public-agent' ),
+					'assistant'  => __( 'Assistant', 'newtide-public-agent' ),
+					'transcript' => __( 'Chat transcript', 'newtide-public-agent' ),
 					'newChat'   => __( 'New chat', 'newtide-public-agent' ),
-					'expand'    => __( 'Expand chat', 'newtide-public-agent' ),
-					'shrink'    => __( 'Shrink chat', 'newtide-public-agent' ),
 					'resize'    => __( 'Resize chat. Use the arrow keys to adjust, or drag.', 'newtide-public-agent' ),
 				),
 			)
@@ -540,6 +609,8 @@ class NPA_Public {
 		$panel_size = in_array( $panel_size, NPA_Settings::PANEL_SIZES, true ) ? $panel_size : 'standard';
 
 		$prompts = array_filter( array_map( 'trim', preg_split( '/\r\n|\r|\n/', (string) $s->get( 'suggested_prompts', '' ) ) ), 'strlen' );
+		// A list saved before 0.16.0 may hold up to six; show the first three.
+		$prompts = array_slice( array_values( $prompts ), 0, NPA_Settings::MAX_STARTERS );
 
 		return array(
 			'agent'        => sanitize_text_field( $merged['agent'] ),
@@ -558,6 +629,9 @@ class NPA_Public {
 			'powered'      => (bool) $s->get( 'powered_by' ),
 			'panel_size'   => $panel_size,
 			'allow_resize' => (bool) $s->get( 'allow_resize' ),
+			'auto_grow'    => (bool) $s->get( 'auto_grow' ),
+			'copy'         => (bool) $s->get( 'copy_buttons' ),
+			'charts'       => (bool) $s->get( 'charts' ),
 			'auto_open'    => (int) $s->get( 'auto_open_delay', 0 ),
 			'hide_mobile'  => (bool) $s->get( 'hide_on_mobile' ),
 			'remember'     => (bool) $s->get( 'remember_state' ),
@@ -610,6 +684,9 @@ class NPA_Public {
 			'data-remember'    => $config['remember'] ? '1' : '0',
 			'data-powered'     => $config['powered'] ? '1' : '0',
 			'data-allow-resize' => $config['allow_resize'] ? '1' : '0',
+			'data-auto-grow'   => $config['auto_grow'] ? '1' : '0',
+			'data-copy'        => $config['copy'] ? '1' : '0',
+			'data-charts'      => $config['charts'] ? '1' : '0',
 			'style'            => '--npa-accent:' . $config['accent'],
 		);
 

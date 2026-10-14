@@ -25,6 +25,10 @@ $cur_label    = (string) $settings->get( 'launcher_label' );
 $cur_powered  = (bool) $settings->get( 'powered_by' );
 $cur_panel    = (string) $settings->get( 'panel_size', 'standard' );
 $cur_resize   = (bool) $settings->get( 'allow_resize' );
+$cur_grow     = (bool) $settings->get( 'auto_grow' );
+$cur_copy     = (bool) $settings->get( 'copy_buttons' );
+$cur_charts   = (bool) $settings->get( 'charts' );
+$cur_chart_in = (bool) $settings->get( 'chart_instructions' );
 
 $icon_type    = (string) $settings->get( 'launcher_icon_type' );
 $icon_id      = (int) $settings->get( 'launcher_icon_id' );
@@ -82,6 +86,10 @@ if ( 'auto' !== $cur_theme ) {
 			'powered_by',
 			'panel_size',
 			'allow_resize',
+			'auto_grow',
+			'copy_buttons',
+			'charts',
+			'chart_instructions',
 		)
 	);
 	?>
@@ -89,7 +97,7 @@ if ( 'auto' !== $cur_theme ) {
 	<div class="npa-appearance">
 		<div class="npa-appearance__controls">
 
-			<?php $npa_admin->card_open( __( 'Messaging', 'newtide-public-agent' ), __( 'The words the widget says — greeting, prompts, and what a visitor sees if something fails.', 'newtide-public-agent' ) ); ?>
+			<?php $npa_admin->card_open( __( 'Messaging', 'newtide-public-agent' ), __( 'The words the widget says — greeting, conversation starters, and what a visitor sees if something fails.', 'newtide-public-agent' ) ); ?>
 			<table class="form-table" role="presentation">
 				<tr>
 					<th scope="row"><label for="npa-greeting"><?php esc_html_e( 'Greeting', 'newtide-public-agent' ); ?></label></th>
@@ -105,11 +113,36 @@ if ( 'auto' !== $cur_theme ) {
 						<p class="description"><?php esc_html_e( 'Hint text shown in the empty message box.', 'newtide-public-agent' ); ?></p>
 					</td>
 				</tr>
+<?php
+				$npa_starters = array_values( array_filter( array_map( 'trim', preg_split( '/\r\n|\r|\n/', (string) $settings->get( 'suggested_prompts' ) ) ), 'strlen' ) );
+				$npa_dropped  = array_slice( $npa_starters, NPA_Settings::MAX_STARTERS );
+				?>
 				<tr>
-					<th scope="row"><label for="npa-suggested-prompts"><?php esc_html_e( 'Suggested prompts', 'newtide-public-agent' ); ?></label></th>
+					<th scope="row"><?php esc_html_e( 'Conversation starters', 'newtide-public-agent' ); ?></th>
 					<td>
-						<textarea id="npa-suggested-prompts" class="large-text" rows="4" name="<?php echo esc_attr( $option ); ?>[suggested_prompts]"><?php echo esc_textarea( $settings->get( 'suggested_prompts' ) ); ?></textarea>
-						<p class="description"><?php esc_html_e( 'One per line. Shown as clickable chips when the chat opens — the first 6 are used and extra lines are ignored.', 'newtide-public-agent' ); ?></p>
+						<fieldset class="npa-starters">
+							<legend class="screen-reader-text"><?php esc_html_e( 'Conversation starters', 'newtide-public-agent' ); ?></legend>
+							<?php for ( $npa_i = 0; $npa_i < NPA_Settings::MAX_STARTERS; $npa_i++ ) : ?>
+								<label class="npa-starters__row">
+									<span class="npa-starters__num"><?php echo esc_html( (string) ( $npa_i + 1 ) ); ?></span>
+									<input type="text" class="large-text" maxlength="140" name="<?php echo esc_attr( $option ); ?>[suggested_prompts][]" value="<?php echo esc_attr( isset( $npa_starters[ $npa_i ] ) ? $npa_starters[ $npa_i ] : '' ); ?>" aria-label="<?php /* translators: %d: starter number, 1 to 3. */ echo esc_attr( sprintf( __( 'Conversation starter %d', 'newtide-public-agent' ), $npa_i + 1 ) ); ?>" />
+								</label>
+							<?php endfor; ?>
+						</fieldset>
+						<p class="description"><?php esc_html_e( 'Up to three questions shown as cards when the chat opens; a visitor clicks one to ask it. Pick questions that show off what this site in particular can answer — its own data, products, research or services — rather than anything a general chatbot could. For example: “Which of your plans suits a team of ten?” or “How have diesel prices moved this year?”', 'newtide-public-agent' ); ?></p>
+						<?php if ( $npa_dropped ) : ?>
+							<p class="description npa-starters__dropped">
+								<?php
+								echo esc_html(
+									sprintf(
+										/* translators: %s: the prompts that will no longer be shown, separated by semicolons. */
+										__( 'Your earlier list had more than three. These are no longer shown and will be removed when you save: %s', 'newtide-public-agent' ),
+										implode( '; ', $npa_dropped )
+									)
+								);
+								?>
+							</p>
+						<?php endif; ?>
 					</td>
 				</tr>
 				<tr>
@@ -270,13 +303,53 @@ if ( 'auto' !== $cur_theme ) {
 					</td>
 				</tr>
 				<tr>
+					<th scope="row"><?php esc_html_e( 'Grow with the conversation', 'newtide-public-agent' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="<?php echo esc_attr( $option ); ?>[auto_grow]" value="1" <?php checked( $cur_grow ); ?> />
+							<?php esc_html_e( 'Let the chat panel grow as the conversation does.', 'newtide-public-agent' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'The panel opens at the size above, gets taller as messages arrive (up to the height of the visitor’s screen), and widens when a reply holds a table or is too long to read comfortably. It never shrinks mid-conversation. A visitor who drags the panel to a size of their own keeps it.', 'newtide-public-agent' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Copy buttons', 'newtide-public-agent' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="<?php echo esc_attr( $option ); ?>[copy_buttons]" value="1" <?php checked( $cur_copy ); ?> />
+							<?php esc_html_e( 'Let visitors copy a question and answer, or the whole conversation.', 'newtide-public-agent' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'Adds a copy button under each reply and a Copy button to the chat header. What is copied keeps its formatting — lists, bold and tables — when pasted into an email or a document. The greeting and error messages are left out.', 'newtide-public-agent' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Charts', 'newtide-public-agent' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="<?php echo esc_attr( $option ); ?>[charts]" value="1" <?php checked( $cur_charts ); ?> />
+							<?php esc_html_e( 'Draw charts the agent includes in its replies.', 'newtide-public-agent' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'Line charts for trends and bar charts for comparisons, each with a Show data table. Switched off, the same data appears as a table instead.', 'newtide-public-agent' ); ?></p>
+
+						<p class="description"><strong><?php esc_html_e( 'The agent has to know the format.', 'newtide-public-agent' ); ?></strong> <?php esc_html_e( 'Paste these instructions into your agent on My Agents (its instructions or system prompt):', 'newtide-public-agent' ); ?></p>
+						<textarea id="npa-chart-instructions" class="large-text code" rows="8" readonly><?php echo esc_textarea( NPA_Charts::instructions() ); ?></textarea>
+						<p><button type="button" class="button" data-npa-copy="npa-chart-instructions"><?php esc_html_e( 'Copy instructions', 'newtide-public-agent' ); ?></button></p>
+
+						<label>
+							<input type="checkbox" name="<?php echo esc_attr( $option ); ?>[chart_instructions]" value="1" <?php checked( $cur_chart_in ); ?> />
+							<?php esc_html_e( 'Or send these instructions with every message.', 'newtide-public-agent' ); ?>
+						</label>
+						<p class="description"><?php esc_html_e( 'Only for the Agent API connection, and only if “Accept instructions” is switched on for the agent in My Agents — otherwise leave this off and paste the instructions instead. Adds a few hundred tokens to each message.', 'newtide-public-agent' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><?php esc_html_e( 'Resizing', 'newtide-public-agent' ); ?></th>
 					<td>
 						<label>
 							<input type="checkbox" name="<?php echo esc_attr( $option ); ?>[allow_resize]" value="1" <?php checked( $cur_resize ); ?> />
-							<?php esc_html_e( 'Let visitors expand and resize the chat panel.', 'newtide-public-agent' ); ?>
+							<?php esc_html_e( 'Let visitors resize the chat panel.', 'newtide-public-agent' ); ?>
 						</label>
-						<p class="description"><?php esc_html_e( 'Adds an expand button to the chat header and a drag handle on its corner. A visitor’s chosen size is remembered on their own device only. Their choice overrides the size above.', 'newtide-public-agent' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Adds a drag handle on the panel’s corner (not shown on touch screens, where the panel grows on its own). A visitor’s chosen size is remembered on their own device only, and overrides both the size above and growing with the conversation.', 'newtide-public-agent' ); ?></p>
 					</td>
 				</tr>
 				<tr>
@@ -316,7 +389,7 @@ if ( 'auto' !== $cur_theme ) {
 								<input class="newtide-public-agent__input" type="text" placeholder="<?php echo esc_attr( (string) $settings->get( 'input_placeholder' ) ); ?>" tabindex="-1" aria-hidden="true" />
 								<button type="button" class="newtide-public-agent__send" tabindex="-1" aria-hidden="true"><?php esc_html_e( 'Send', 'newtide-public-agent' ); ?></button>
 							</div>
-							<div class="newtide-public-agent__powered" data-npa-preview="powered" <?php echo $cur_powered ? '' : 'hidden'; ?>><a class="newtide-public-agent__powered-link" href="<?php echo esc_url( apply_filters( 'npa_powered_by_url', NPA_Public::POWERED_BY_URL ) ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Powered by NewTide', 'newtide-public-agent' ); ?></a></div>
+							<div class="newtide-public-agent__powered newtide-public-agent__powered--logo" data-npa-preview="powered" <?php echo $cur_powered ? '' : 'hidden'; ?>><a class="newtide-public-agent__powered-link" href="<?php echo esc_url( apply_filters( 'npa_powered_by_url', NPA_Public::POWERED_BY_URL ) ); ?>" target="_blank" rel="noopener"><?php echo NPA_Public::powered_by_inner_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped when built. ?></a></div>
 						</div>
 						<button type="button" class="newtide-public-agent__launcher" tabindex="-1" aria-hidden="true">
 							<span class="npa-preview-icon-slot" data-npa-preview="icon"><?php echo $preview_icon; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped icon markup built above. ?></span>
