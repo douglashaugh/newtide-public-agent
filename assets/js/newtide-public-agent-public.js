@@ -99,6 +99,9 @@
 
 		this.storageKey = 'npa_open_' + this.agent;
 		this.conversationId = '';
+		// The last answered turn and how long the visitor waited for it,
+		// reported with the next message (see NPA_Diagnostics).
+		this.lastTurn = null;
 		this.open = false;
 		this.panel = null;
 		this.greeted = false;
@@ -1064,8 +1067,12 @@
 		this.setBusy( true );
 		this.showTyping();
 
+		var turnId = newTurnId();
+		var started = Date.now();
+
 		var body = {
 			message: text,
+			turn_id: turnId,
 			conversation_id: this.conversationId,
 			new_conversation: this.resetPending || false,
 			// Which agent this mount is for. The token is the server's own
@@ -1080,7 +1087,22 @@
 			}
 		};
 
+		if ( this.lastTurn && cfg.diagnostics ) {
+			body.previous_turn = this.lastTurn;
+		}
+		this.lastTurn = null;
+
 		this.resetPending = false;
+
+		/* Give up eventually rather than leave the typing dots running
+		   forever on a connection the host has silently dropped. */
+		var controller = ( 'function' === typeof window.AbortController ) ? new window.AbortController() : null;
+		var timer = controller ? window.setTimeout( function () {
+			controller.abort();
+		}, cfg.clientTimeout || 120000 ) : 0;
+
+		/* What went wrong, for the report: set at each step that can fail. */
+		var failure = { kind: 'network', status: 0 };
 
 		fetch( cfg.restUrl, {
 			method: 'POST',
@@ -1089,30 +1111,90 @@
 				'Content-Type': 'application/json',
 				'X-WP-Nonce': cfg.nonce
 			},
-			body: JSON.stringify( body )
+			body: JSON.stringify( body ),
+			signal: controller ? controller.signal : undefined
 		} ).then( function ( r ) {
-			return r.json().then( function ( data ) {
+			/* Read text first: a host's or CDN's own 502/504 page is HTML,
+			   and r.json() would throw away the status that explains it. */
+			failure = { kind: r.ok ? 'parse' : 'http', status: r.status };
+			return r.text().then( function ( raw ) {
+				var data = JSON.parse( raw );
 				return { ok: r.ok, data: data };
 			} );
 		} ).then( function ( res ) {
+			window.clearTimeout( timer );
 			this.hideTyping();
 			this.setBusy( false );
 			if ( res.ok && res.data && res.data.reply ) {
 				if ( res.data.conversation_id ) {
 					this.conversationId = res.data.conversation_id;
 				}
+				this.lastTurn = { turn_id: res.data.turn_id || turnId, client_ms: Date.now() - started };
 				this.markTurn( this.addMessage( 'agent', res.data.reply, true, res.data.reply_html ), res.data.reply );
 			} else {
 				var msg = ( res.data && res.data.error && res.data.error.message ) || this.errorText;
-				this.addMessage( 'agent', msg, true );
+				this.addMessage( 'agent', this.withReference( msg, ( res.data && res.data.turn_id ) || turnId ), true );
 			}
 			this.input.focus();
-		}.bind( this ) ).catch( function () {
+		}.bind( this ) ).catch( function ( err ) {
+			window.clearTimeout( timer );
+			if ( err && 'AbortError' === err.name ) {
+				failure = { kind: 'timeout', status: 0 };
+			}
+			this.report( turnId, failure.kind, failure.status, Date.now() - started );
 			this.hideTyping();
 			this.setBusy( false );
-			this.addMessage( 'agent', this.errorText, true );
+			this.addMessage( 'agent', this.withReference( this.errorText, turnId ), true );
 			this.input.focus();
 		}.bind( this ) );
+	};
+
+	/* A turn id: 16 hex characters, the shape the server accepts. */
+	function newTurnId() {
+		var bytes = new Uint8Array( 8 );
+		var out = '';
+		var i;
+		if ( window.crypto && window.crypto.getRandomValues ) {
+			window.crypto.getRandomValues( bytes );
+		} else {
+			for ( i = 0; i < 8; i++ ) {
+				bytes[ i ] = Math.floor( Math.random() * 256 );
+			}
+		}
+		for ( i = 0; i < 8; i++ ) {
+			out += ( '0' + bytes[ i ].toString( 16 ) ).slice( -2 );
+		}
+		return out;
+	}
+
+	/* An error message with the reference an administrator can look up. */
+	Widget.prototype.withReference = function ( msg, turnId ) {
+		if ( ! cfg.diagnostics || ! turnId ) {
+			return msg;
+		}
+		return msg + '\n\n' + t( 'reference', 'Reference: %s' ).replace( '%s', String( turnId ).slice( 0, 8 ) );
+	};
+
+	/* Tell the server what the browser saw. Best effort: a report that
+	   fails has nowhere further to go. keepalive lets it outlive the page. */
+	Widget.prototype.report = function ( turnId, kind, status, elapsed ) {
+		if ( ! cfg.diagnostics || ! cfg.reportUrl ) {
+			return;
+		}
+		try {
+			fetch( cfg.reportUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				keepalive: true,
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WP-Nonce': cfg.nonce
+				},
+				body: JSON.stringify( { turn_id: turnId, kind: kind, status: status, elapsed_ms: elapsed } )
+			} ).catch( function () {} );
+		} catch ( e ) {
+			/* fetch unavailable or blocked — nothing more to do. */
+		}
 	};
 
 	function init() {

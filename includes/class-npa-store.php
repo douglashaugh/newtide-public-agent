@@ -25,7 +25,7 @@ class NPA_Store {
 	 *
 	 * @var int
 	 */
-	const SCHEMA_VERSION = 4;
+	const SCHEMA_VERSION = 5;
 
 	/**
 	 * Roles a stored transcript row can carry.
@@ -83,6 +83,20 @@ class NPA_Store {
 	}
 
 	/**
+	 * Fully-qualified diagnostic events table name.
+	 *
+	 * What happened around a turn rather than the turn itself: a failure the
+	 * browser saw, and each call the agent made back into this site's MCP
+	 * server. Metadata only, like the usage table, and purged on a schedule.
+	 *
+	 * @return string
+	 */
+	public function events_table_name() {
+		global $wpdb;
+		return $wpdb->prefix . 'npa_events';
+	}
+
+	/**
 	 * Create or upgrade the schema when the installed version is behind.
 	 * Safe to call on every request — dbDelta only acts on differences.
 	 *
@@ -122,13 +136,40 @@ class NPA_Store {
 			is_mock tinyint(1) unsigned NOT NULL DEFAULT 0,
 			page_path varchar(190) NOT NULL DEFAULT '',
 			page_title varchar(190) NOT NULL DEFAULT '',
+			turn_id varchar(32) NOT NULL DEFAULT '',
+			upstream_id varchar(64) NOT NULL DEFAULT '',
+			server_ms int(10) unsigned NOT NULL DEFAULT 0,
+			queue_ms int(10) unsigned NOT NULL DEFAULT 0,
+			client_ms int(10) unsigned NOT NULL DEFAULT 0,
+			client_status smallint(5) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id),
 			KEY created_at (created_at),
 			KEY agent_id (agent_id),
-			KEY page_path (page_path)
+			KEY page_path (page_path),
+			KEY turn_id (turn_id)
 		) {$collate};";
 
 		dbDelta( $sql );
+
+		$events = $this->events_table_name();
+
+		$events_sql = "CREATE TABLE {$events} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			created_at datetime NOT NULL,
+			turn_id varchar(32) NOT NULL DEFAULT '',
+			kind varchar(10) NOT NULL DEFAULT '',
+			name varchar(64) NOT NULL DEFAULT '',
+			status smallint(5) unsigned NOT NULL DEFAULT 0,
+			latency_ms int(10) unsigned NOT NULL DEFAULT 0,
+			boot_ms int(10) unsigned NOT NULL DEFAULT 0,
+			queue_ms int(10) unsigned NOT NULL DEFAULT 0,
+			detail varchar(190) NOT NULL DEFAULT '',
+			PRIMARY KEY  (id),
+			KEY created_at (created_at),
+			KEY turn_id (turn_id)
+		) {$collate};";
+
+		dbDelta( $events_sql );
 
 		$transcripts = $this->transcripts_table_name();
 
@@ -162,6 +203,9 @@ class NPA_Store {
 		$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$wpdb->query( "DROP TABLE IF EXISTS {$transcripts}" );
+		$events = $this->events_table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TABLE IF EXISTS {$events}" );
 		delete_option( self::SCHEMA_OPTION );
 	}
 
@@ -628,13 +672,18 @@ class NPA_Store {
 			'is_mock'         => ! empty( $data['is_mock'] ) ? 1 : 0,
 			'page_path'       => isset( $data['page_path'] ) ? self::page_path( $data['page_path'] ) : '',
 			'page_title'      => isset( $data['page_title'] ) ? substr( sanitize_text_field( (string) $data['page_title'] ), 0, 190 ) : '',
-		);
+		) + self::diagnostic_fields( $data );
+
+		// A backdated row is how the battery fakes a turn that never finished.
+		if ( isset( $data['created_at'] ) && preg_match( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', (string) $data['created_at'] ) ) {
+			$row['created_at'] = (string) $data['created_at'];
+		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$ok = $wpdb->insert(
 			$this->table_name(),
 			$row,
-			array( '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%d', '%s', '%s' )
+			array( '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d' )
 		);
 
 		if ( false === $ok ) {
@@ -644,6 +693,278 @@ class NPA_Store {
 		set_transient( self::LAST_TRANSIENT, $row, 5 * MINUTE_IN_SECONDS );
 
 		return (int) $wpdb->insert_id;
+	}
+
+	// ── Turn diagnostics (0.16.1) ───────────────────────────────────────────
+
+	/**
+	 * Finish reason a turn's row carries while the agent is still answering.
+	 *
+	 * @var string
+	 */
+	const PENDING = 'pending';
+
+	/**
+	 * Error code given to a turn whose PHP request died without finishing it.
+	 *
+	 * @var string
+	 */
+	const ABANDONED = 'abandoned';
+
+	/**
+	 * The diagnostic columns of a usage row, from caller data.
+	 *
+	 * @param array $data Caller data.
+	 * @return array
+	 */
+	private static function diagnostic_fields( array $data ) {
+		return array(
+			'turn_id'       => isset( $data['turn_id'] ) ? substr( preg_replace( '/[^a-f0-9]/', '', (string) $data['turn_id'] ), 0, 32 ) : '',
+			'upstream_id'   => isset( $data['upstream_id'] ) ? substr( sanitize_text_field( (string) $data['upstream_id'] ), 0, 64 ) : '',
+			'server_ms'     => isset( $data['server_ms'] ) ? max( 0, (int) $data['server_ms'] ) : 0,
+			'queue_ms'      => isset( $data['queue_ms'] ) ? max( 0, (int) $data['queue_ms'] ) : 0,
+			'client_ms'     => isset( $data['client_ms'] ) ? max( 0, (int) $data['client_ms'] ) : 0,
+			'client_status' => isset( $data['client_status'] ) ? max( 0, (int) $data['client_status'] ) : 0,
+		);
+	}
+
+	/**
+	 * Fill in a row written before the outcome was known.
+	 *
+	 * The turn's row goes in as `pending` before the agent is called, so a
+	 * request the host kills partway through still leaves a trace — a row
+	 * written only at the end leaves nothing, which is exactly the turn that
+	 * most needs explaining.
+	 *
+	 * @param int   $id   Row id from record().
+	 * @param array $data Columns to set; unknown keys ignored.
+	 * @return bool
+	 */
+	public function complete( $id, array $data ) {
+		global $wpdb;
+
+		$allowed = array(
+			'conversation_id' => '%s',
+			'status'          => '%d',
+			'finish_reason'   => '%s',
+			'latency_ms'      => '%d',
+			'input_tokens'    => '%d',
+			'output_tokens'   => '%d',
+			'error_code'      => '%s',
+			'upstream_id'     => '%s',
+			'server_ms'       => '%d',
+			'queue_ms'        => '%d',
+			'client_ms'       => '%d',
+			'client_status'   => '%d',
+		);
+
+		$set     = array();
+		$formats = array();
+
+		foreach ( $allowed as $key => $format ) {
+			if ( ! array_key_exists( $key, $data ) ) {
+				continue;
+			}
+
+			$value = $data[ $key ];
+
+			if ( '%d' === $format ) {
+				$value = max( 0, (int) $value );
+			} else {
+				$limit = 'finish_reason' === $key ? 20 : ( 'error_code' === $key ? 40 : 64 );
+				$value = substr( sanitize_text_field( (string) $value ), 0, $limit );
+			}
+
+			$set[ $key ] = $value;
+			$formats[]   = $format;
+		}
+
+		if ( ! $set ) {
+			return false;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return false !== $wpdb->update( $this->table_name(), $set, array( 'id' => (int) $id ), $formats, array( '%d' ) );
+	}
+
+	/**
+	 * The usage row for a turn, or null.
+	 *
+	 * @param string $turn_id Turn id.
+	 * @return array|null
+	 */
+	public function find_by_turn( $turn_id ) {
+		global $wpdb;
+
+		if ( '' === (string) $turn_id ) {
+			return null;
+		}
+
+		$table = $this->table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE turn_id = %s ORDER BY id DESC LIMIT 1", (string) $turn_id ), ARRAY_A );
+
+		return is_array( $row ) ? $row : null;
+	}
+
+	/**
+	 * Mark turns still `pending` long after they began as abandoned.
+	 *
+	 * A row that never left `pending` belongs to a request that died between
+	 * calling the agent and answering the browser: a host's request timeout,
+	 * a killed PHP worker, memory exhaustion. Nothing in that request is left
+	 * to say so, so it is decided from outside, once the turn is too old to be
+	 * still running.
+	 *
+	 * @param int $older_than Seconds since the turn began.
+	 * @return int Rows marked.
+	 */
+	public function sweep_abandoned( $older_than ) {
+		global $wpdb;
+
+		$table  = $this->table_name();
+		$cutoff = gmdate( 'Y-m-d H:i:s', (int) current_time( 'timestamp' ) - max( 60, (int) $older_than ) ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- created_at is local time.
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$done = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET finish_reason = 'error', error_code = %s WHERE finish_reason = %s AND created_at < %s",
+				self::ABANDONED,
+				self::PENDING,
+				$cutoff
+			)
+		);
+
+		return (int) $done;
+	}
+
+	/**
+	 * Record a diagnostic event.
+	 *
+	 * @param array $data turn_id, kind, name, status, latency_ms, boot_ms, queue_ms, detail.
+	 * @return int|false Insert id.
+	 */
+	public function record_event( array $data ) {
+		global $wpdb;
+
+		$row = array(
+			'created_at' => current_time( 'mysql' ),
+			'turn_id'    => isset( $data['turn_id'] ) ? substr( preg_replace( '/[^a-f0-9]/', '', (string) $data['turn_id'] ), 0, 32 ) : '',
+			'kind'       => isset( $data['kind'] ) ? substr( sanitize_key( (string) $data['kind'] ), 0, 10 ) : '',
+			'name'       => isset( $data['name'] ) ? substr( sanitize_text_field( (string) $data['name'] ), 0, 64 ) : '',
+			'status'     => isset( $data['status'] ) ? max( 0, (int) $data['status'] ) : 0,
+			'latency_ms' => isset( $data['latency_ms'] ) ? max( 0, (int) $data['latency_ms'] ) : 0,
+			'boot_ms'    => isset( $data['boot_ms'] ) ? max( 0, (int) $data['boot_ms'] ) : 0,
+			'queue_ms'   => isset( $data['queue_ms'] ) ? max( 0, (int) $data['queue_ms'] ) : 0,
+			'detail'     => isset( $data['detail'] ) ? substr( sanitize_text_field( (string) $data['detail'] ), 0, 190 ) : '',
+		);
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$ok = $wpdb->insert( $this->events_table_name(), $row, array( '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%s' ) );
+
+		return false === $ok ? false : (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Events of one kind since a local datetime, oldest first.
+	 *
+	 * @param string $kind  Event kind.
+	 * @param string $since Local datetime.
+	 * @param int    $limit Max rows.
+	 * @return array<int,array>
+	 */
+	public function events_since( $kind, $since, $limit = 2000 ) {
+		global $wpdb;
+
+		$table = $this->events_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE kind = %s AND created_at >= %s ORDER BY id ASC LIMIT %d",
+				(string) $kind,
+				(string) $since,
+				max( 1, (int) $limit )
+			),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Usage rows carrying a turn id since a local datetime, newest first.
+	 *
+	 * @param string $since Local datetime.
+	 * @param int    $limit Max rows.
+	 * @return array<int,array>
+	 */
+	public function turns_since( $since, $limit = 5000 ) {
+		global $wpdb;
+
+		$table = $this->table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE turn_id <> '' AND created_at >= %s ORDER BY id DESC LIMIT %d",
+				(string) $since,
+				max( 1, (int) $limit )
+			),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Delete every row a turn left behind. For the battery's own clean-up.
+	 *
+	 * @param string $turn_id Turn id.
+	 * @return void
+	 */
+	public function delete_turn( $turn_id ) {
+		global $wpdb;
+
+		if ( '' === (string) $turn_id ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->delete( $this->table_name(), array( 'turn_id' => (string) $turn_id ), array( '%s' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->delete( $this->events_table_name(), array( 'turn_id' => (string) $turn_id ), array( '%s' ) );
+	}
+
+	/**
+	 * Delete events older than N days.
+	 *
+	 * @param int $days Age in days.
+	 * @return int Rows deleted.
+	 */
+	public function purge_events( $days ) {
+		global $wpdb;
+
+		$table  = $this->events_table_name();
+		$cutoff = gmdate( 'Y-m-d H:i:s', (int) current_time( 'timestamp' ) - ( max( 1, (int) $days ) * DAY_IN_SECONDS ) ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- created_at is local time.
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE created_at < %s", $cutoff ) );
+	}
+
+	/**
+	 * Delete every event. The usage rows stay: they are the site's history.
+	 *
+	 * @return int Rows deleted.
+	 */
+	public function clear_events() {
+		global $wpdb;
+
+		$table = $this->events_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->query( "DELETE FROM {$table}" );
 	}
 
 	/**
@@ -893,6 +1214,12 @@ class NPA_Store {
 				continue;
 			}
 
+			// Still being answered, or never finished: either way there is no
+			// latency to average, and 0 is not one.
+			if ( self::PENDING === (string) $row['finish_reason'] || self::ABANDONED === (string) $row['error_code'] ) {
+				continue;
+			}
+
 			++$live_count;
 			$latency += (int) $row['latency_ms'];
 		}
@@ -927,7 +1254,7 @@ class NPA_Store {
 				"SELECT DATE(created_at) AS d,
 					COUNT(*) AS c,
 					SUM( CASE WHEN status >= 400 OR error_code <> '' THEN 1 ELSE 0 END ) AS e,
-					AVG(latency_ms) AS l
+					AVG( CASE WHEN finish_reason <> 'pending' AND error_code <> 'abandoned' THEN latency_ms END ) AS l
 				FROM {$table}
 				WHERE created_at >= %s
 				GROUP BY DATE(created_at)",

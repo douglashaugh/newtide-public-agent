@@ -233,6 +233,8 @@ echo $npa_admin->status_html(); // phpcs:ignore WordPress.Security.EscapeOutput.
 	</table>
 <?php $npa_admin->card_close(); ?>
 
+<?php require __DIR__ . '/partial-diagnostics.php'; ?>
+
 <?php $npa_admin->card_open( __( 'Transcripts', 'newtide-public-agent' ), __( 'Stored message content, its retention window, and controls to delete it.', 'newtide-public-agent' ) ); ?>
 
 <?php if ( null !== $npa_purged ) : ?>

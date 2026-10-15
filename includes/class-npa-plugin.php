@@ -100,6 +100,13 @@ final class NPA_Plugin {
 	public $admin = null;
 
 	/**
+	 * Turn diagnostics: where a slow or failed turn was lost.
+	 *
+	 * @var NPA_Diagnostics
+	 */
+	public $diagnostics;
+
+	/**
 	 * REST proxy.
 	 *
 	 * @var NPA_Rest
@@ -188,8 +195,9 @@ final class NPA_Plugin {
 		$this->settings->register();
 		$this->store = new NPA_Store();
 		$this->store->maybe_upgrade();
-		$this->budget = new NPA_Budget( $this->settings, $this->store );
-		$this->rest   = new NPA_Rest( $this );
+		$this->budget      = new NPA_Budget( $this->settings, $this->store );
+		$this->diagnostics = new NPA_Diagnostics( $this );
+		$this->rest        = new NPA_Rest( $this );
 		$this->rest->register();
 		$this->charts = new NPA_Charts( $this->settings );
 		$this->charts->register();
@@ -247,6 +255,7 @@ final class NPA_Plugin {
 		$this->register_embed_tests();
 		$this->register_mcp_tests();
 		$this->register_release_notes_tests();
+		$this->register_diagnostics_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -290,6 +299,7 @@ final class NPA_Plugin {
 		// Durable substrate.
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-store.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-budget.php';
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-diagnostics.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-conversation.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-markdown.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-charts.php';
@@ -338,6 +348,9 @@ final class NPA_Plugin {
 		$days = (int) $this->settings->get( 'transcript_retention_days', 30 );
 
 		$deleted = $this->store->purge_transcripts( $days );
+
+		// Diagnostic events ride the same daily job; they are not counted here.
+		$this->diagnostics->purge();
 
 		/*
 		 * Then the ceiling, so a busy month cannot outrun the age limit. Age
@@ -417,6 +430,14 @@ final class NPA_Plugin {
 			}
 		);
 
+		$this->service_status->register(
+			'diagnostics',
+			__( 'Turn diagnostics', 'newtide-public-agent' ),
+			function () {
+				return $this->diagnostics->status();
+			}
+		);
+
 		/*
 		 * Reported as "site knowledge" rather than "MCP", because that is the
 		 * question an operator actually has. Nobody administering a site needs
@@ -492,14 +513,16 @@ final class NPA_Plugin {
 				$default = new NPA_Gateway_Client_Agent_Api(
 					$this->settings->get_agent_api_base_url(),
 					$this->settings->get_agent_api_key(),
-					$this->settings->get_agent_api_origin()
+					$this->settings->get_agent_api_origin(),
+					$this->settings->agent_timeout()
 				);
 			} elseif ( $this->settings->is_configured() ) {
 				// A dedicated gateway with its own secret credential, if a site
 				// has been given one.
 				$default = new NPA_Gateway_Client_Http(
 					$this->settings->get_gateway_base_url(),
-					$this->settings->get_gateway_key()
+					$this->settings->get_gateway_key(),
+					$this->settings->agent_timeout()
 				);
 			} elseif ( $this->settings->public_api_available() ) {
 				// The public agent API — the service the embedded widget uses.
@@ -507,7 +530,9 @@ final class NPA_Plugin {
 				// the way the iframe claims its parent page's.
 				$default = new NPA_Gateway_Client_Public(
 					$this->settings->get_public_api_base_url(),
-					$this->settings->get_public_key()
+					$this->settings->get_public_key(),
+					null,
+					$this->settings->agent_timeout()
 				);
 			} else {
 				$default = new NPA_Gateway_Client_Mock();
@@ -2793,6 +2818,11 @@ Second line." );
 				$thread = '';
 				$ids    = array();
 
+				// These are real messages through the real route, so they write
+				// usage rows; note where the table ends and remove them after.
+				$seen_rows = $this->store->recent( 1 );
+				$rows_from = isset( $seen_rows[0]['id'] ) ? (int) $seen_rows[0]['id'] : 0;
+
 				for ( $i = 0; $i < 3; $i++ ) {
 					$req = new WP_REST_Request( 'POST', '/npa/v1/message' );
 					$req->set_header( 'content-type', 'application/json' );
@@ -2814,6 +2844,11 @@ Second line." );
 				foreach ( $ids as $id ) {
 					NPA_Conversation::forget( $id );
 				}
+
+				global $wpdb;
+				$usage = $this->store->table_name();
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->query( $wpdb->prepare( "DELETE FROM {$usage} WHERE id > %d", $rows_from ) );
 
 				$checks[] = array(
 					'label' => __( 'Asking a follow-up through the widget carries the earlier turns to the agent', 'newtide-public-agent' ),
@@ -3212,7 +3247,15 @@ Second line." );
 					'pass'  => 0 === $tagged,
 				);
 
-				// Retention: an aged row goes, a fresh one stays.
+				/*
+				 * Retention: an aged row goes, a fresh one stays.
+				 *
+				 * Purge with the site's own window, never a shorter one: this
+				 * runs against the live table, and a fixed 30 days deleted real
+				 * transcripts on any site keeping them longer. The test row is
+				 * aged past whichever window applies.
+				 */
+				$window = max( 30, (int) $this->settings->get( 'transcript_retention_days', 30 ) );
 				$old_id = $store->record_transcript(
 					array(
 						'agent_id'        => '__npa_t_test__',
@@ -3224,13 +3267,13 @@ Second line." );
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->update(
 					$table,
-					array( 'created_at' => gmdate( 'Y-m-d H:i:s', strtotime( current_time( 'mysql' ) . ' -40 days' ) ) ),
+					array( 'created_at' => gmdate( 'Y-m-d H:i:s', strtotime( current_time( 'mysql' ) . ' -' . ( $window + 10 ) . ' days' ) ) ),
 					array( 'id' => $old_id ),
 					array( '%s' ),
 					array( '%d' )
 				);
 
-				$store->purge_transcripts( 30 );
+				$store->purge_transcripts( $window );
 
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$old_left = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE id = %d", $old_id ) );
@@ -3819,6 +3862,396 @@ Second line." );
 					'pass'  => false === strpos( $guard_tag, $sentinel ),
 				);
 
+
+				return $checks;
+			},
+			'user'
+		);
+	}
+
+	/**
+	 * Register the Turn diagnostics suite (0.16.1).
+	 *
+	 * @return void
+	 */
+	private function register_diagnostics_tests() {
+		$this->test_runner->register_suite(
+			'diagnostics',
+			__( 'Turn diagnostics', 'newtide-public-agent' ),
+			__( 'Confirms that every message can be traced from the visitor’s browser to the agent and back: a turn is on record before the agent is called, a request that dies part-way is named rather than lost, what the browser saw is reported back, and each failure is put down to the hop that caused it.', 'newtide-public-agent' ),
+			function () {
+				global $wpdb;
+
+				$checks = array();
+				$diag   = $this->diagnostics;
+				$store  = $this->store;
+				$used   = array();
+
+				NPA_Settings::begin_test_override(
+					array(
+						'diagnostics'   => true,
+						'agent_timeout' => 30,
+					)
+				);
+
+				$events_table = $store->events_table_name();
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$events_since = (int) $wpdb->get_var( "SELECT COALESCE( MAX( id ), 0 ) FROM {$events_table}" );
+
+				// Turn ids: the browser mints them, so only the exact shape is accepted.
+				$fresh    = NPA_Diagnostics::new_turn_id();
+				$checks[] = array(
+					'label' => __( 'Turn ids are 16 hex characters, and anything else is refused', 'newtide-public-agent' ),
+					'pass'  => NPA_Diagnostics::is_valid_turn_id( $fresh )
+						&& NPA_Diagnostics::new_turn_id() !== $fresh
+						&& ! NPA_Diagnostics::is_valid_turn_id( 'ABCDEF0123456789' )
+						&& ! NPA_Diagnostics::is_valid_turn_id( '0123456789abcdef"' )
+						&& ! NPA_Diagnostics::is_valid_turn_id( '0123456789abcde' )
+						&& ! NPA_Diagnostics::is_valid_turn_id( array() ),
+				);
+
+				// Host queue time, in each unit hosts use.
+				$now      = 1700000000.5;
+				$checks[] = array(
+					'label' => __( 'Time waiting for a PHP worker is read from X-Request-Start in seconds, ms or µs', 'newtide-public-agent' ),
+					'pass'  => 500 === NPA_Diagnostics::queue_ms( 't=1700000000.0', $now )
+						&& 500 === NPA_Diagnostics::queue_ms( 't=1700000000000', $now )
+						&& 500 === NPA_Diagnostics::queue_ms( '1700000000000000', $now )
+						&& 0 === NPA_Diagnostics::queue_ms( 'garbage', $now )
+						&& 0 === NPA_Diagnostics::queue_ms( 't=1800000000', $now ),
+				);
+
+				// A turn is on record before the agent is called.
+				$turn   = NPA_Diagnostics::new_turn_id();
+				$used[] = $turn;
+				$row_id = $diag->begin(
+					$turn,
+					array(
+						'agent_id'  => '__npa_diag_test__',
+						'page_path' => 'https://example.test/pricing/?email=someone@example.test',
+					)
+				);
+				$open   = $store->find_by_turn( $turn );
+				$tagged = apply_filters( 'http_request_args', array( 'headers' => array() ), 'https://myagents-api.newtide.ai/v1/chat/completions' );
+
+				$checks[] = array(
+					'label' => __( 'A turn’s row is written as pending before the agent is called', 'newtide-public-agent' ),
+					'pass'  => $row_id > 0 && $open && NPA_Store::PENDING === $open['finish_reason'] && '/pricing/' === $open['page_path'],
+				);
+				$checks[] = array(
+					'label' => __( 'The call to the agent carries the turn id as X-Request-Id', 'newtide-public-agent' ),
+					'pass'  => isset( $tagged['headers'][ NPA_Diagnostics::REQUEST_HEADER ] ) && $turn === $tagged['headers'][ NPA_Diagnostics::REQUEST_HEADER ],
+				);
+
+				// The upstream's own request id is kept for cross-referencing.
+				$diag->capture_response(
+					array(
+						'headers'  => array( 'X-Request-Id' => 'req_upstream_42' ),
+						'body'     => '',
+						'response' => array( 'code' => 200 ),
+					)
+				);
+				$diag->end(
+					array(
+						'status'        => 200,
+						'finish_reason' => 'stop',
+						'latency_ms'    => 1234,
+					)
+				);
+				$done     = $store->find_by_turn( $turn );
+				$after    = apply_filters( 'http_request_args', array( 'headers' => array() ), 'https://example.test/' );
+				$checks[] = array(
+					'label' => __( 'Finishing the turn fills in the same row, with the agent API’s own request id', 'newtide-public-agent' ),
+					'pass'  => $done && (int) $done['id'] === $row_id && 200 === (int) $done['status'] && 1234 === (int) $done['latency_ms']
+						&& 'req_upstream_42' === $done['upstream_id'] && null === $diag->current(),
+				);
+				$checks[] = array(
+					'label' => __( 'Requests made after the turn are not tagged', 'newtide-public-agent' ),
+					'pass'  => empty( $after['headers'] ),
+				);
+				$checks[] = array(
+					'label' => __( 'Upstream ids are found whatever case the header arrives in', 'newtide-public-agent' ),
+					'pass'  => 'abc' === NPA_Diagnostics::upstream_id( array( 'REQUEST-ID' => 'abc' ) )
+						&& '8a1b-LHR' === NPA_Diagnostics::upstream_id( array( 'cf-ray' => array( '8a1b-LHR' ) ) )
+						&& '' === NPA_Diagnostics::upstream_id( array( 'content-type' => 'application/json' ) ),
+				);
+
+				// A request PHP stops mid-turn says why.
+				$killed = NPA_Diagnostics::new_turn_id();
+				$used[] = $killed;
+				$diag->begin( $killed, array( 'agent_id' => '__npa_diag_test__' ) );
+				$code     = $diag->on_shutdown(
+					array(
+						'type'    => E_ERROR,
+						'message' => 'Maximum execution time of 30 seconds exceeded',
+					)
+				);
+				$row      = $store->find_by_turn( $killed );
+				$checks[] = array(
+					'label' => __( 'A turn cut off by PHP’s time limit is recorded as php_timeout, not lost', 'newtide-public-agent' ),
+					'pass'  => 'php_timeout' === $code && $row && 'php_timeout' === $row['error_code'] && '' === $diag->on_shutdown( null ),
+				);
+
+				// A worker killed outright leaves a pending row; the sweep names it.
+				$stale  = NPA_Diagnostics::new_turn_id();
+				$live   = NPA_Diagnostics::new_turn_id();
+				$used[] = $stale;
+				$used[] = $live;
+				$store->record(
+					array(
+						'turn_id'       => $stale,
+						'agent_id'      => '__npa_diag_test__',
+						'finish_reason' => NPA_Store::PENDING,
+						'created_at'    => gmdate( 'Y-m-d H:i:s', (int) current_time( 'timestamp' ) - 2 * HOUR_IN_SECONDS ), // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- created_at is local time.
+					)
+				);
+				$store->record(
+					array(
+						'turn_id'       => $live,
+						'agent_id'      => '__npa_diag_test__',
+						'finish_reason' => NPA_Store::PENDING,
+					)
+				);
+				$diag->sweep();
+				$stale_row = $store->find_by_turn( $stale );
+				$live_row  = $store->find_by_turn( $live );
+				$checks[]  = array(
+					'label' => __( 'A turn left pending long after it began is marked abandoned; one still running is not', 'newtide-public-agent' ),
+					'pass'  => $stale_row && NPA_Store::ABANDONED === $stale_row['error_code']
+						&& $live_row && NPA_Store::PENDING === $live_row['finish_reason'],
+				);
+
+				// What the browser saw.
+				$refused = '' === $diag->record_client(
+					array(
+						'turn_id' => $turn,
+						'kind'    => 'meltdown',
+					)
+				) && '' === $diag->record_client(
+					array(
+						'turn_id' => 'not-a-turn',
+						'kind'    => 'network',
+					)
+				);
+				$before  = $store->count_today();
+				$known   = $diag->record_client(
+					array(
+						'turn_id'    => $turn,
+						'kind'       => 'parse',
+						'status'     => 504,
+						'elapsed_ms' => 60000,
+					)
+				);
+				$ghost   = NPA_Diagnostics::new_turn_id();
+				$used[]  = $ghost;
+				$orphan  = $diag->record_client(
+					array(
+						'turn_id'    => $ghost,
+						'kind'       => 'network',
+						'elapsed_ms' => 900,
+					)
+				);
+				$cut      = $store->find_by_turn( $turn );
+				$checks[] = array(
+					'label' => __( 'Browser reports with an unknown kind or a malformed turn id are refused', 'newtide-public-agent' ),
+					'pass'  => $refused,
+				);
+				$checks[] = array(
+					'label' => __( 'A browser report annotates its turn, and one for a turn the server never saw is kept apart without adding a message', 'newtide-public-agent' ),
+					'pass'  => 'turn' === $known && 'orphan' === $orphan && $cut && 504 === (int) $cut['client_status'] && 60000 === (int) $cut['client_ms']
+						&& null === $store->find_by_turn( $ghost ) && $before === $store->count_today(),
+				);
+
+				$listed   = array_filter(
+					$diag->recent_turns( 200 ),
+					static function ( $t ) use ( $ghost ) {
+						return $ghost === $t['turn_id'] && 'orphaned' === $t['class']['code'];
+					}
+				);
+				$checks[] = array(
+					'label' => __( 'A turn that never reached WordPress is still listed, so the reference a visitor was shown can be looked up', 'newtide-public-agent' ),
+					'pass'  => 1 === count( $listed ),
+				);
+
+				// Each failure is put down to the hop that caused it.
+				$base = array(
+					'status'        => 200,
+					'finish_reason' => 'stop',
+					'error_code'    => '',
+					'latency_ms'    => 3000,
+					'server_ms'     => 3400,
+					'client_ms'     => 0,
+					'client_status' => 0,
+				);
+				$hop  = static function ( array $over, array $mcp = array() ) use ( $base ) {
+					$class = NPA_Diagnostics::classify( array_merge( $base, $over ), 30, $mcp );
+					return $class['code'] . '/' . $class['hop'];
+				};
+
+				$timed_out = array(
+					'status'     => 0,
+					'error_code' => 'transport',
+					'latency_ms' => 30010,
+				);
+				$mcp_heavy = array(
+					array(
+						'latency_ms' => 18000,
+						'boot_ms'    => 2000,
+						'queue_ms'   => 0,
+					),
+				);
+
+				$checks[] = array(
+					'label' => __( 'Failures are put down to the right hop: host, PHP, network, agent or site knowledge', 'newtide-public-agent' ),
+					'pass'  => 'ok/' === $hop( array() )
+						&& 'preview/' === $hop( array( 'is_mock' => 1 ) )
+						&& 'host_cut/host' === $hop(
+							array(
+								'client_status' => 504,
+								'client_ms'     => 60000,
+							)
+						)
+						&& 'abandoned/wordpress' === $hop(
+							array(
+								'status'        => 0,
+								'finish_reason' => 'error',
+								'error_code'    => 'abandoned',
+							)
+						)
+						&& 'php_timeout/wordpress' === $hop(
+							array(
+								'status'     => 500,
+								'error_code' => 'php_timeout',
+							)
+						)
+						&& 'agent_timeout/agent' === $hop( $timed_out )
+						&& 'agent_timeout/mcp' === $hop( $timed_out, $mcp_heavy )
+						&& 'network/network' === $hop( array_merge( $timed_out, array( 'latency_ms' => 120 ) ) )
+						&& 'agent_error/agent' === $hop(
+							array(
+								'status'     => 401,
+								'error_code' => 'unauthorized',
+							)
+						)
+						&& 'slow/agent' === $hop(
+							array(
+								'latency_ms' => 20000,
+								'server_ms'  => 20400,
+							)
+						)
+						&& 'slow/wordpress' === $hop( array( 'server_ms' => 9000 ) )
+						&& 'in_flight/wordpress' === $hop(
+							array(
+								'status'        => 0,
+								'finish_reason' => 'pending',
+							)
+						),
+				);
+
+				// MCP calls are timed and matched to the turn they fell inside.
+				$diag->record_mcp( 'search_content', true, 850 );
+				$mcp      = $store->events_since( 'mcp', gmdate( 'Y-m-d H:i:s', (int) current_time( 'timestamp' ) - 60 ) ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- created_at is local time.
+				$mine     = array_filter(
+					$mcp,
+					static function ( $event ) {
+						return 'search_content' === $event['name'] && 850 === (int) $event['latency_ms'];
+					}
+				);
+				$window   = array(
+					'created_at' => '2026-01-01 10:00:00',
+					'latency_ms' => 4000,
+					'server_ms'  => 4200,
+				);
+				$inside   = array( 'created_at' => '2026-01-01 10:00:03' );
+				$outside  = array( 'created_at' => '2026-01-01 10:00:09' );
+				$checks[] = array(
+					'label' => __( 'Site-knowledge (MCP) calls are timed and matched to the turn they happened during', 'newtide-public-agent' ),
+					'pass'  => count( $mine ) >= 1 && 1 === count( NPA_Diagnostics::mcp_for_turn( $window, array( $inside, $outside ) ) ),
+				);
+
+				$p        = NPA_Diagnostics::percentiles( array( 5, 1, 4, 2, 3, 6, 7, 8, 9, 100 ) );
+				$checks[] = array(
+					'label' => __( 'Typical and slowest-5% timings are computed correctly', 'newtide-public-agent' ),
+					'pass'  => 5 === $p['p50'] && 100 === $p['p95'] && 100 === $p['max'] && 10 === $p['count'],
+				);
+
+				$checks[] = array(
+					'label' => __( 'The agent timeout is held between 10 and 120 seconds', 'newtide-public-agent' ),
+					'pass'  => 10 === NPA_Settings::clamp_timeout( 2 ) && 120 === NPA_Settings::clamp_timeout( 900 ) && 45 === NPA_Settings::clamp_timeout( 45 )
+						&& ( defined( 'NPA_HTTP_TIMEOUT' ) || 30 === $this->settings->agent_timeout() ),
+				);
+
+				// End to end through the real route.
+				$routes   = rest_get_server()->get_routes();
+				$checks[] = array(
+					'label' => __( 'POST /npa/v1/report route is registered', 'newtide-public-agent' ),
+					'pass'  => isset( $routes['/npa/v1/report'] ),
+				);
+
+				$grant_admin = static function ( $caps ) {
+					$caps['manage_options'] = true;
+					return $caps;
+				};
+				add_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+				delete_transient( 'npa_rl_' . md5( isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown' ) );
+
+				// The mock, whatever this site is connected to: no live HTTP.
+				$use_mock = static function () {
+					return new NPA_Gateway_Client_Mock();
+				};
+				add_filter( 'npa_gateway_client', $use_mock );
+				$this->reset_gateway_client();
+
+				$routed  = NPA_Diagnostics::new_turn_id();
+				$used[]  = $routed;
+				$request = new WP_REST_Request( 'POST', '/npa/v1/message' );
+				$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$request->set_param( 'message', 'hello from the diagnostics suite' );
+				$request->set_param( 'turn_id', $routed );
+				$response = rest_get_server()->dispatch( $request );
+				$data     = $response->get_data();
+				$row      = $store->find_by_turn( $routed );
+
+				$checks[] = array(
+					'label' => __( 'A real message is traced: the reply names its turn, and its row is complete', 'newtide-public-agent' ),
+					'pass'  => 200 === $response->get_status() && isset( $data['turn_id'] ) && $routed === $data['turn_id']
+						&& $row && 200 === (int) $row['status'] && NPA_Store::PENDING !== $row['finish_reason'] && (int) $row['server_ms'] > 0,
+				);
+
+				// Switched off, a turn is recorded the way it was before 0.16.1.
+				NPA_Settings::begin_test_override(
+					array(
+						'diagnostics'   => false,
+						'agent_timeout' => 30,
+					)
+				);
+				$quiet    = NPA_Diagnostics::new_turn_id();
+				$used[]   = $quiet;
+				$off      = $diag->begin( $quiet, array( 'agent_id' => '__npa_diag_test__' ) );
+				$checks[] = array(
+					'label' => __( 'With diagnostics off, no turn is opened and nothing is reported', 'newtide-public-agent' ),
+					'pass'  => 0 === $off && null === $store->find_by_turn( $quiet ) && null === $diag->current()
+						&& '' === $diag->record_client(
+							array(
+								'turn_id' => $quiet,
+								'kind'    => 'network',
+							)
+						),
+				);
+
+				remove_filter( 'npa_gateway_client', $use_mock );
+				$this->reset_gateway_client();
+				remove_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+				NPA_Settings::end_test_override();
+
+				// Clean-up: every row this suite wrote, and nothing else.
+				foreach ( $used as $id ) {
+					$store->delete_turn( $id );
+				}
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->query( $wpdb->prepare( "DELETE FROM {$events_table} WHERE id > %d AND turn_id = ''", $events_since ) );
 
 				return $checks;
 			},

@@ -351,6 +351,63 @@ body.toplevel_page_newtide-public-agent .npa-wrap {
 	background: #bb2124;
 }
 
+/* Answered, but slowly: not a failure, still worth a look. */
+.npa-pill--slow {
+	background: #8a5a00;
+}
+
+/* Turn diagnostics (Service Status). */
+.npa-diag__verdict {
+	max-width: 46rem;
+	padding: 0.75rem 1rem;
+	border-left: 4px solid #1a7f37;
+	background: #f6f7f7;
+	font-size: 0.875rem;
+}
+
+.npa-diag__verdict.is-problem {
+	border-left-color: #bb2124;
+}
+
+.npa-diag__grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+	gap: 1.5rem;
+	max-width: 72rem;
+}
+
+.npa-diag__grid .npa-status {
+	max-width: none;
+}
+
+@media (max-width: 960px) {
+	.npa-diag__grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.npa-diag__n {
+	display: block;
+	font-weight: 400;
+	color: #646970;
+}
+
+.npa-diag__scroll {
+	overflow-x: auto;
+	margin-bottom: 1rem;
+}
+
+.npa-diag__turns td,
+.npa-diag__turns th {
+	white-space: nowrap;
+	vertical-align: top;
+}
+
+.npa-diag__turns td:nth-child(3) {
+	white-space: normal;
+	min-width: 18rem;
+}
+
 .npa-test-result {
 	font-weight: 600;
 }

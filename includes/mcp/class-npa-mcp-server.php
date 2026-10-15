@@ -242,12 +242,49 @@ class NPA_MCP_Server {
 	// ── Dispatch ────────────────────────────────────────────────────────────
 
 	/**
-	 * Handle one JSON-RPC message.
+	 * Handle one JSON-RPC message, timed for Turn diagnostics.
+	 *
+	 * Every one of these arrives while a visitor's chat is waiting on the
+	 * agent that sent it, so how long they take — and how long WordPress took
+	 * to start before handling them — is part of how long the visitor waits.
 	 *
 	 * @param WP_REST_Request $request Incoming request.
 	 * @return WP_REST_Response
 	 */
 	public function handle( WP_REST_Request $request ) {
+		$start    = microtime( true );
+		$response = $this->dispatch( $request );
+
+		$message = json_decode( $request->get_body(), true );
+		$method  = is_array( $message ) && isset( $message['method'] ) ? (string) $message['method'] : '';
+
+		// Notifications are fire-and-forget; nothing waits on them.
+		if ( '' !== $method && 202 !== $response->get_status() && isset( $this->plugin->diagnostics ) ) {
+			$name = $method;
+
+			if ( 'tools/call' === $method && isset( $message['params']['name'] ) && is_string( $message['params']['name'] ) ) {
+				$name = $message['params']['name'];
+			}
+
+			$data = $response->get_data();
+
+			$this->plugin->diagnostics->record_mcp(
+				$name,
+				$response->get_status() < 400 && ! ( is_array( $data ) && ( isset( $data['error'] ) || ( isset( $data['result'] ) && is_array( $data['result'] ) && ! empty( $data['result']['isError'] ) ) ) ),
+				(int) round( ( microtime( true ) - $start ) * 1000 )
+			);
+		}
+
+		return $response;
+	}
+
+	/**
+	 * Handle one JSON-RPC message.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return WP_REST_Response
+	 */
+	private function dispatch( WP_REST_Request $request ) {
 		$message = json_decode( $request->get_body(), true );
 
 		if ( null === $message && JSON_ERROR_NONE !== json_last_error() ) {

@@ -197,7 +197,12 @@ class NPA_Public {
 			'NPA_WIDGET',
 			array(
 				'restUrl' => esc_url_raw( rest_url( 'npa/v1/message' ) ),
+				'reportUrl' => esc_url_raw( rest_url( 'npa/v1/report' ) ),
 				'nonce'   => wp_create_nonce( 'wp_rest' ),
+				// Turn diagnostics (0.16.1). The widget waits a little longer
+				// than the server does, so the server's own error wins a race.
+				'diagnostics'   => (bool) NPA_Plugin::instance()->settings->get( 'diagnostics', true ),
+				'clientTimeout' => ( NPA_Plugin::instance()->settings->agent_timeout() + 45 ) * 1000,
 				'locale'  => get_locale(),
 				/**
 				 * Filter the address the "Powered by NewTide" credit links to.
@@ -238,6 +243,8 @@ class NPA_Public {
 					'copyTurn'   => __( 'Copy this question and answer', 'newtide-public-agent' ),
 					'copied'     => __( 'Copied', 'newtide-public-agent' ),
 					'copyFailed' => __( 'Could not copy. Try selecting the text instead.', 'newtide-public-agent' ),
+					/* translators: %s: short reference code for a failed message. */
+					'reference'  => __( 'Reference: %s', 'newtide-public-agent' ),
 					'you'        => __( 'You', 'newtide-public-agent' ),
 					'assistant'  => __( 'Assistant', 'newtide-public-agent' ),
 					'transcript' => __( 'Chat transcript', 'newtide-public-agent' ),

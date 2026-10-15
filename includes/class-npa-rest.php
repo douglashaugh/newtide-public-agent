@@ -105,9 +105,92 @@ class NPA_Rest {
 					'new_conversation' => array(
 						'type' => 'boolean',
 					),
+					'turn_id'         => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'previous_turn'   => array(
+						'type' => 'object',
+					),
 				),
 			)
 		);
+
+		/*
+		 * What the browser saw of a turn. Same nonce as /message, and it can
+		 * only describe a turn, never create one — see
+		 * NPA_Diagnostics::record_client().
+		 */
+		register_rest_route(
+			self::NS,
+			'/report',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'handle_report' ),
+				'permission_callback' => array( $this, 'check_permission' ),
+				'args'                => array(
+					'turn_id'    => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'kind'       => array(
+						'required' => true,
+						'type'     => 'string',
+						'enum'     => NPA_Diagnostics::CLIENT_KINDS,
+					),
+					'status'     => array(
+						'type' => 'integer',
+					),
+					'elapsed_ms' => array(
+						'type' => 'integer',
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Record a failure the browser saw.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public function handle_report( $request ) {
+		if ( ! $this->throttle_ok() ) {
+			return $this->error_response( 'rate_limited', self::friendly_message( 'rate_limited' ), 429 );
+		}
+
+		$result = $this->plugin->diagnostics->record_client(
+			array(
+				'turn_id'    => (string) $request->get_param( 'turn_id' ),
+				'kind'       => (string) $request->get_param( 'kind' ),
+				'status'     => (int) $request->get_param( 'status' ),
+				'elapsed_ms' => (int) $request->get_param( 'elapsed_ms' ),
+			)
+		);
+
+		return new WP_REST_Response( array( 'recorded' => '' !== $result ), '' !== $result ? 200 : 400 );
+	}
+
+	/**
+	 * Write a turn's outcome: into the row opened for it, or as a new row
+	 * when diagnostics are off and none was opened.
+	 *
+	 * @param int   $row_id Row from NPA_Diagnostics::begin(), or 0.
+	 * @param array $fields Usage fields.
+	 * @return void
+	 */
+	private function finish_turn( $row_id, array $fields ) {
+		$diagnostics = $this->plugin->diagnostics;
+
+		if ( $row_id > 0 ) {
+			$diagnostics->end( $fields );
+			return;
+		}
+
+		$diagnostics->end( array() );
+		$this->plugin->store->record( $fields );
 	}
 
 	/**
@@ -201,7 +284,7 @@ class NPA_Rest {
 		 */
 		$client = null;
 		if ( $settings->public_api_available() && $agent['key'] !== $settings->get_public_key() ) {
-			$client = new NPA_Gateway_Client_Public( $settings->get_public_api_base_url(), $agent['key'] );
+			$client = new NPA_Gateway_Client_Public( $settings->get_public_api_base_url(), $agent['key'], null, $settings->agent_timeout() );
 		}
 
 		return array(
@@ -237,6 +320,28 @@ class NPA_Rest {
 		}
 
 		$conversation_id = sanitize_text_field( (string) $request->get_param( 'conversation_id' ) );
+
+		/*
+		 * The browser names the turn, so it can still refer to it if this
+		 * request never answers. Anything not in the expected shape is
+		 * replaced rather than trusted.
+		 */
+		$turn_id = (string) $request->get_param( 'turn_id' );
+		if ( ! NPA_Diagnostics::is_valid_turn_id( $turn_id ) ) {
+			$turn_id = NPA_Diagnostics::new_turn_id();
+		}
+
+		// How long the visitor actually waited for the last reply.
+		$previous = $request->get_param( 'previous_turn' );
+		if ( is_array( $previous ) && isset( $previous['turn_id'], $previous['client_ms'] ) ) {
+			$this->plugin->diagnostics->record_client(
+				array(
+					'turn_id'    => (string) $previous['turn_id'],
+					'ok'         => true,
+					'elapsed_ms' => (int) $previous['client_ms'],
+				)
+			);
+		}
 
 		/*
 		 * Conversation memory.
@@ -318,6 +423,21 @@ class NPA_Rest {
 			);
 		}
 
+		/*
+		 * The row goes in before the agent is called, so a request the host
+		 * kills mid-wait still leaves a trace. 0 when diagnostics are off.
+		 */
+		$row_id = $this->plugin->diagnostics->begin(
+			$turn_id,
+			array(
+				'agent_id'        => $agent_id,
+				'conversation_id' => $conversation_id,
+				'is_mock'         => $is_mock,
+				'page_path'       => $context['page_url'],
+				'page_title'      => $context['page_title'],
+			)
+		);
+
 		$start = microtime( true );
 
 		try {
@@ -331,8 +451,10 @@ class NPA_Rest {
 			 */
 			$thread_id = ( '' !== (string) $result->conversation_id ) ? (string) $result->conversation_id : $conversation_id;
 
-			$this->plugin->store->record(
+			$this->finish_turn(
+				$row_id,
 				array(
+					'turn_id'         => $turn_id,
 					'agent_id'        => $agent_id,
 					'conversation_id' => $thread_id,
 					'status'          => 200,
@@ -373,14 +495,17 @@ class NPA_Rest {
 					'reply_html'      => NPA_Markdown::to_html( $result->reply_text ),
 					'conversation_id' => $thread_id,
 					'finish_reason'   => $result->finish_reason,
+					'turn_id'         => $turn_id,
 				),
 				200
 			);
 		} catch ( NPA_Gateway_Exception $e ) {
 			$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
 
-			$this->plugin->store->record(
+			$this->finish_turn(
+				$row_id,
 				array(
+					'turn_id'         => $turn_id,
 					'agent_id'        => $agent_id,
 					'conversation_id' => $conversation_id,
 					'status'          => $e->get_http_status(),
@@ -419,12 +544,16 @@ class NPA_Rest {
 
 			$http     = ( 429 === $e->get_http_status() ) ? 429 : 502;
 			$response = $this->error_response( $e->get_error_code(), self::friendly_message( $e->get_error_code() ), $http );
+			$data     = $response->get_data();
+
+			// The reference a visitor can quote, and an admin can look up.
+			$data['turn_id'] = $turn_id;
 
 			if ( current_user_can( 'manage_options' ) ) {
-				$data                    = $response->get_data();
 				$data['error']['detail'] = $e->getMessage();
-				$response->set_data( $data );
 			}
+
+			$response->set_data( $data );
 
 			return $response;
 		}

@@ -74,6 +74,7 @@ class NPA_Admin {
 		add_action( 'admin_post_npa_download_mcp_guide', array( $this, 'handle_download_mcp_guide' ) );
 		add_action( 'admin_post_npa_print_mcp_guide', array( $this, 'handle_print_mcp_guide' ) );
 		add_action( 'admin_post_npa_dismiss_whats_new', array( $this, 'handle_dismiss_whats_new' ) );
+		add_action( 'admin_post_npa_clear_diagnostics', array( $this, 'handle_clear_diagnostics' ) );
 		add_action( 'admin_notices', array( $this, 'whats_new_notice' ) );
 	}
 
@@ -695,6 +696,33 @@ class NPA_Admin {
 		nocache_headers();
 		header( 'Content-Type: text/html; charset=utf-8' );
 		echo $this->plugin->mcp_guide->to_document(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped block by block in NPA_MCP_Guide.
+		exit;
+	}
+
+	/**
+	 * Clear the diagnostic events (browser reports and MCP timings). The usage
+	 * rows stay — they are the site's history, not diagnostics.
+	 *
+	 * @return void
+	 */
+	public function handle_clear_diagnostics() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'newtide-public-agent' ) );
+		}
+		check_admin_referer( 'npa_clear_diagnostics' );
+
+		$deleted = $this->plugin->store->clear_events();
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'          => self::SLUG,
+					'tab'           => 'status',
+					'npa_diag_cleared' => (int) $deleted,
+				),
+				admin_url( 'admin.php' )
+			) . '#npa-diagnostics'
+		);
 		exit;
 	}
 

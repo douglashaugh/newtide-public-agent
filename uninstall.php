@@ -29,6 +29,7 @@ global $wpdb;
 $npa_tables = array(
 	$wpdb->prefix . 'npa_usage',
 	$wpdb->prefix . 'npa_transcripts',
+	$wpdb->prefix . 'npa_events',
 );
 
 foreach ( $npa_tables as $npa_table ) {

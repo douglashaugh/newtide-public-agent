@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 <?php $npa_admin->mode_scope_notice( 'behavior' ); ?>
 <form method="post" action="options.php" class="npa-form">
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
-	<?php $npa_admin->present_fields( array( 'auto_open_delay', 'hide_on_mobile', 'remember_state', 'audience', 'daily_message_cap', 'conversation_memory', 'log_enabled', 'store_transcripts', 'transcript_retention_days', 'transcript_max_conversations' ) ); ?>
+	<?php $npa_admin->present_fields( array( 'auto_open_delay', 'hide_on_mobile', 'remember_state', 'audience', 'daily_message_cap', 'conversation_memory', 'log_enabled', 'diagnostics', 'agent_timeout', 'store_transcripts', 'transcript_retention_days', 'transcript_max_conversations' ) ); ?>
 
 	<div class="npa-columns">
 		<?php $npa_admin->card_open( __( 'Timing', 'newtide-public-agent' ), __( 'When the panel opens on its own.', 'newtide-public-agent' ) ); ?>
@@ -125,6 +125,37 @@ defined( 'ABSPATH' ) || exit;
 					<?php esc_html_e( 'Keep a diagnostic log of the last 50 calls (metadata only — never message content).', 'newtide-public-agent' ); ?>
 				</label>
 				<p class="description"><?php esc_html_e( 'For troubleshooting. Service Status draws on the usage table and reports whether this is on or off.', 'newtide-public-agent' ); ?></p>
+			</td>
+		</tr>
+
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Turn diagnostics', 'newtide-public-agent' ); ?></th>
+			<td>
+				<label>
+					<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[diagnostics]" value="1" <?php checked( (bool) $settings->get( 'diagnostics' ) ); ?> />
+					<?php esc_html_e( 'Trace each message from the visitor’s browser to the agent and back, to find where slow or failed turns are lost.', 'newtide-public-agent' ); ?>
+				</label>
+				<p class="description"><?php esc_html_e( 'Timings and outcomes only — never message content. Failed messages show visitors a short reference code you can look up under Service Status → Turn diagnostics. The agent API receives the same id as an X-Request-Id header.', 'newtide-public-agent' ); ?></p>
+			</td>
+		</tr>
+
+		<tr>
+			<th scope="row"><label for="npa-agent-timeout"><?php esc_html_e( 'Agent timeout', 'newtide-public-agent' ); ?></label></th>
+			<td>
+				<input type="number" id="npa-agent-timeout" min="<?php echo esc_attr( (string) NPA_Settings::TIMEOUT_RANGE[0] ); ?>" max="<?php echo esc_attr( (string) NPA_Settings::TIMEOUT_RANGE[1] ); ?>" class="small-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[agent_timeout]" value="<?php echo esc_attr( (string) $settings->get( 'agent_timeout' ) ); ?>" <?php disabled( defined( 'NPA_HTTP_TIMEOUT' ) ); ?> />
+				<?php esc_html_e( 'seconds', 'newtide-public-agent' ); ?>
+				<p class="description">
+					<?php esc_html_e( 'How long this site waits for the agent to answer before giving up. An agent that searches the site through Site knowledge can need more than the default 30. Keep it below your host’s own request timeout (often 60 seconds; 100 on Cloudflare), or the host cuts the visitor off first.', 'newtide-public-agent' ); ?>
+					<?php if ( defined( 'NPA_HTTP_TIMEOUT' ) ) : ?>
+						<?php
+						printf(
+							/* translators: %d: seconds. */
+							esc_html__( 'Set to %d seconds by NPA_HTTP_TIMEOUT in wp-config.php, which overrides this field.', 'newtide-public-agent' ),
+							(int) NPA_HTTP_TIMEOUT
+						);
+						?>
+					<?php endif; ?>
+				</p>
 			</td>
 		</tr>
 

@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.16.0
+Stable tag: 0.16.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,42 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.16.1 =
+**Turn diagnostics: find where a slow or failed message is being lost.** A
+message crosses four hops — the visitor's browser to this site, this site to
+the agent, the agent to its model, and the agent back into this site for site
+knowledge. Until now a failure at any of them looked the same: the visitor saw
+"Sorry, something went wrong" and, if the host cut the connection, the plugin
+recorded nothing at all.
+
+* **Service Status → Turn diagnostics** says in one line where turns are
+  failing and what to do about it, counts failures by hop, and shows how long
+  each hop takes (typical, slowest 5%, worst) over the last 7 days.
+* **Recent turns** lists each message with its outcome, agent time, WordPress
+  time, how long the visitor actually waited, and the site-knowledge calls made
+  during it.
+* **A reference on every error** — a visitor who sees an error also sees a short
+  code, such as "Reference: 3f9a1c2e", that finds that exact message in Recent
+  turns.
+* **Traceable on the agent platform** — each call to the agent carries the same
+  id as an X-Request-Id header, and the agent API's own request id is recorded
+  beside it, so a slow turn here can be found in the platform's logs.
+* **Nothing is lost silently** — a message is on record before the agent is
+  called, so one the host kills mid-wait shows as "Dropped" instead of
+  vanishing. When the browser gets a host's 502/504 page or gives up, it
+  reports that back.
+* **Agent timeout** is now a setting (Behavior), 10–120 seconds, default 30 as
+  before. NPA_HTTP_TIMEOUT in wp-config.php still overrides it.
+* The chat gives up after the agent timeout plus 45 seconds instead of waiting
+  indefinitely.
+
+Diagnostics record timings and outcomes only, never message content, and can be
+switched off under Behavior → Turn diagnostics. Browser reports and site
+knowledge timings are deleted after 30 days.
+
+Fixed: running the Tests tab purged stored transcripts older than 30 days even
+when the retention window was set longer. It now uses the site's own window.
 
 = 0.16.0 =
 **A roomier chat that grows with the conversation, answers with charts, and

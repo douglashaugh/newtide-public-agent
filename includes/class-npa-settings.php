@@ -214,6 +214,9 @@ class NPA_Settings {
 			'error_message'             => __( 'Sorry, something went wrong. Please try again.', 'newtide-public-agent' ),
 			// Privacy / limits.
 			'log_enabled'               => false,
+			// Turn diagnostics (0.16.1): where a slow or failed turn was lost.
+			'diagnostics'               => true,
+			'agent_timeout'             => 30, // Seconds to wait for the agent.
 			'store_transcripts'         => false,
 			// Reconstructs multi-turn context because the agent API is single-turn.
 			// On by default: a chat that cannot follow up is the worse failure.
@@ -338,6 +341,7 @@ class NPA_Settings {
 		$clean['hide_on_mobile']    = $has( 'hide_on_mobile' ) ? ! empty( $input['hide_on_mobile'] ) : (bool) $existing['hide_on_mobile'];
 		$clean['remember_state']    = $has( 'remember_state' ) ? ! empty( $input['remember_state'] ) : (bool) $existing['remember_state'];
 		$clean['log_enabled']       = $has( 'log_enabled' ) ? ! empty( $input['log_enabled'] ) : (bool) $existing['log_enabled'];
+		$clean['diagnostics']       = $has( 'diagnostics' ) ? ! empty( $input['diagnostics'] ) : (bool) $existing['diagnostics'];
 		$clean['store_transcripts'] = $has( 'store_transcripts' ) ? ! empty( $input['store_transcripts'] ) : (bool) $existing['store_transcripts'];
 		$clean['conversation_memory'] = $has( 'conversation_memory' ) ? ! empty( $input['conversation_memory'] ) : (bool) $existing['conversation_memory'];
 
@@ -456,6 +460,7 @@ class NPA_Settings {
 		$max_conversations                     = $has( 'transcript_max_conversations' ) ? absint( $input['transcript_max_conversations'] ) : (int) $existing['transcript_max_conversations'];
 		$clean['transcript_max_conversations'] = min( 100000, $max_conversations );
 		$clean['daily_message_cap']         = $has( 'daily_message_cap' ) ? absint( $input['daily_message_cap'] ) : (int) $existing['daily_message_cap'];
+		$clean['agent_timeout']             = self::clamp_timeout( $has( 'agent_timeout' ) ? absint( $input['agent_timeout'] ) : (int) $existing['agent_timeout'] );
 
 		// Agent API base URL — same scheme whitelist as any other stored URL.
 		if ( $has( 'api_origin' ) ) {
@@ -931,6 +936,40 @@ class NPA_Settings {
 	 */
 	public function agent_api_key_is_set() {
 		return '' !== trim( (string) $this->get_agent_api_key() );
+	}
+
+	/**
+	 * Shortest and longest wait for an agent's reply, seconds.
+	 *
+	 * @var int[]
+	 */
+	const TIMEOUT_RANGE = array( 10, 120 );
+
+	/**
+	 * Hold a timeout inside TIMEOUT_RANGE.
+	 *
+	 * @param int $seconds Requested seconds.
+	 * @return int
+	 */
+	public static function clamp_timeout( $seconds ) {
+		return max( self::TIMEOUT_RANGE[0], min( self::TIMEOUT_RANGE[1], (int) $seconds ) );
+	}
+
+	/**
+	 * How long to wait for the agent, seconds.
+	 *
+	 * NPA_HTTP_TIMEOUT in wp-config.php still wins, as it always has; the
+	 * setting exists so that raising it no longer needs file access. A reply
+	 * that has to search the site through MCP can outlast the old fixed 30.
+	 *
+	 * @return int
+	 */
+	public function agent_timeout() {
+		if ( defined( 'NPA_HTTP_TIMEOUT' ) ) {
+			return max( 1, (int) NPA_HTTP_TIMEOUT );
+		}
+
+		return self::clamp_timeout( (int) $this->get( 'agent_timeout', 30 ) );
 	}
 
 	/**
