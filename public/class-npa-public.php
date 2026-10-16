@@ -203,6 +203,10 @@ class NPA_Public {
 				// than the server does, so the server's own error wins a race.
 				'diagnostics'   => (bool) NPA_Plugin::instance()->settings->get( 'diagnostics', true ),
 				'clientTimeout' => ( NPA_Plugin::instance()->settings->agent_timeout() + 45 ) * 1000,
+				// Streaming (0.17.0). A streamed reply may run to its total
+				// limit, so the widget's own deadline sits past that.
+				'stream'        => (bool) NPA_Plugin::instance()->settings->get( 'streaming', true ),
+				'streamTimeout' => ( NPA_Gateway_Client_Agent_Api::stream_limit( NPA_Plugin::instance()->settings->agent_timeout() ) + 30 ) * 1000,
 				'locale'  => get_locale(),
 				/**
 				 * Filter the address the "Powered by NewTide" credit links to.
@@ -245,6 +249,8 @@ class NPA_Public {
 					'copyFailed' => __( 'Could not copy. Try selecting the text instead.', 'newtide-public-agent' ),
 					/* translators: %s: short reference code for a failed message. */
 					'reference'  => __( 'Reference: %s', 'newtide-public-agent' ),
+					'waitWorking' => __( 'Working on it…', 'newtide-public-agent' ),
+					'waitLong'   => __( 'Still working. Questions that need data can take up to a minute.', 'newtide-public-agent' ),
 					'you'        => __( 'You', 'newtide-public-agent' ),
 					'assistant'  => __( 'Assistant', 'newtide-public-agent' ),
 					'transcript' => __( 'Chat transcript', 'newtide-public-agent' ),

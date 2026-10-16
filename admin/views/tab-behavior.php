@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 <?php $npa_admin->mode_scope_notice( 'behavior' ); ?>
 <form method="post" action="options.php" class="npa-form">
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
-	<?php $npa_admin->present_fields( array( 'auto_open_delay', 'hide_on_mobile', 'remember_state', 'audience', 'daily_message_cap', 'conversation_memory', 'log_enabled', 'diagnostics', 'agent_timeout', 'store_transcripts', 'transcript_retention_days', 'transcript_max_conversations' ) ); ?>
+	<?php $npa_admin->present_fields( array( 'auto_open_delay', 'hide_on_mobile', 'remember_state', 'audience', 'daily_message_cap', 'conversation_memory', 'log_enabled', 'diagnostics', 'streaming', 'agent_timeout', 'store_transcripts', 'transcript_retention_days', 'transcript_max_conversations' ) ); ?>
 
 	<div class="npa-columns">
 		<?php $npa_admin->card_open( __( 'Timing', 'newtide-public-agent' ), __( 'When the panel opens on its own.', 'newtide-public-agent' ) ); ?>
@@ -140,12 +140,23 @@ defined( 'ABSPATH' ) || exit;
 		</tr>
 
 		<tr>
+			<th scope="row"><?php esc_html_e( 'Stream replies', 'newtide-public-agent' ); ?></th>
+			<td>
+				<label>
+					<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[streaming]" value="1" <?php checked( (bool) $settings->get( 'streaming' ) ); ?> />
+					<?php esc_html_e( 'Show the reply as the agent writes it, instead of all at once when it is finished.', 'newtide-public-agent' ); ?>
+				</label>
+				<p class="description"><?php esc_html_e( 'Visitors see the first words as soon as the agent starts answering, and a long answer is no longer cut off by the agent timeout as long as it keeps arriving. Works with the Agent API connection; other connections answer all at once as before. If replies still arrive all at once with this on, something in front of the site (a cache or proxy) is holding the stream back — ask your host to allow streaming (text/event-stream) for /wp-json/npa/v1/message.', 'newtide-public-agent' ); ?></p>
+			</td>
+		</tr>
+
+		<tr>
 			<th scope="row"><label for="npa-agent-timeout"><?php esc_html_e( 'Agent timeout', 'newtide-public-agent' ); ?></label></th>
 			<td>
 				<input type="number" id="npa-agent-timeout" min="<?php echo esc_attr( (string) NPA_Settings::TIMEOUT_RANGE[0] ); ?>" max="<?php echo esc_attr( (string) NPA_Settings::TIMEOUT_RANGE[1] ); ?>" class="small-text" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[agent_timeout]" value="<?php echo esc_attr( (string) $settings->get( 'agent_timeout' ) ); ?>" <?php disabled( defined( 'NPA_HTTP_TIMEOUT' ) ); ?> />
 				<?php esc_html_e( 'seconds', 'newtide-public-agent' ); ?>
 				<p class="description">
-					<?php esc_html_e( 'How long this site waits for the agent to answer before giving up. An agent that searches the site through Site knowledge can need more than the default 30. Keep it below your host’s own request timeout (often 60 seconds; 100 on Cloudflare), or the host cuts the visitor off first.', 'newtide-public-agent' ); ?>
+					<?php esc_html_e( 'How long this site waits for the agent before giving up. With streaming on, this is how long the agent may go silent — typically while it looks up data, before it starts writing — and a reply that keeps arriving can run longer. Without streaming it is the limit for the whole answer: keep it below your host’s own request timeout (often 60 seconds; 100 on Cloudflare), or the host cuts the visitor off first.', 'newtide-public-agent' ); ?>
 					<?php if ( defined( 'NPA_HTTP_TIMEOUT' ) ) : ?>
 						<?php
 						printf(

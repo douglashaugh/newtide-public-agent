@@ -17,6 +17,7 @@ $npa_options = array(
 	'npa_service_counters',
 	'npa_test_snapshot',
 	'npa_schema_version',
+	'npa_settings_migration',
 );
 
 foreach ( $npa_options as $npa_option ) {

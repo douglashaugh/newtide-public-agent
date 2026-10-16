@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.16.1
+Stable tag: 0.17.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,39 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.17.0 =
+**Replies appear as the agent writes them.** Turn diagnostics showed every
+answer taking 16–28 seconds at the agent, with the visitor looking at typing
+dots the whole time, and one in five cut off at the 30-second timeout just
+before it would have finished.
+
+* **Streaming** — with the Agent API connection, the reply now shows up word by
+  word as soon as the agent starts writing, instead of all at once at the end.
+  Charts appear once their data is complete. On by default; switch it off under
+  Behavior → Stream replies. Other connections answer all at once, as before.
+* **No more cut-offs for long answers** — while streaming, the agent timeout
+  limits how long the agent may go *silent*, not how long the whole answer may
+  take, so a long reply that keeps arriving is never cut short. The total is
+  capped at three times the timeout (at least two minutes).
+* **Kept alive behind proxies** — while the agent is looking things up, the
+  site sends a small keep-alive every few seconds, so a host or CDN idle
+  timeout does not close the connection mid-wait.
+* **Agent timeout now defaults to 60 seconds.** A site still on the old default
+  of 30 is moved to 60 on update; a value you chose yourself is left alone.
+* **"Working on it…"** — after 8 seconds of waiting the chat says it is still
+  working, and after 25 that questions needing data can take up to a minute,
+  so a slow answer no longer looks like a stuck one. Screen readers hear it too.
+* **Turn diagnostics** now shows how long the agent took to start writing
+  ("First words") beside its total time — the split between the agent looking
+  data up and the agent writing.
+
+**Fixed**
+
+* A message that failed with an error now records how long the visitor waited,
+  instead of showing "—" under Visitor waited.
+* If a streamed reply stops part-way, the part that arrived stays on screen
+  above the error rather than disappearing.
 
 = 0.16.1 =
 **Turn diagnostics: find where a slow or failed message is being lost.** A

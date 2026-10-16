@@ -34,7 +34,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Class NPA_Gateway_Client_Agent_Api
  */
-class NPA_Gateway_Client_Agent_Api implements NPA_Gateway_Client {
+class NPA_Gateway_Client_Agent_Api implements NPA_Gateway_Client, NPA_Gateway_Streaming {
 
 	/**
 	 * Default production base URL.
@@ -222,8 +222,191 @@ class NPA_Gateway_Client_Agent_Api implements NPA_Gateway_Client {
 			throw new NPA_Gateway_Exception( $response->get_error_message(), 'transport', 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		}
 
-		$code    = (int) wp_remote_retrieve_response_code( $response );
-		$raw     = (string) wp_remote_retrieve_body( $response );
+		return self::result_from_body(
+			(int) wp_remote_retrieve_response_code( $response ),
+			(string) wp_remote_retrieve_body( $response ),
+			$conversation_id
+		);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return bool
+	 */
+	public function supports_streaming(): bool {
+		return true;
+	}
+
+	/**
+	 * Longest a streamed reply may take in all, seconds.
+	 *
+	 * While streaming, the agent timeout is how long the agent may go silent,
+	 * not how long the whole answer may take — a reply that keeps arriving is
+	 * not stuck. This caps the total.
+	 *
+	 * @param int $timeout The agent timeout, seconds.
+	 * @return int
+	 */
+	public static function stream_limit( $timeout ) {
+		return max( 120, 3 * (int) $timeout );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * Still a wp_remote_post(), so every filter and the diagnostics hooks see it
+	 * as they do any other call. The pieces are read off WordPress's
+	 * `requests-request.progress` action as they arrive, and `http_api_curl`
+	 * adjusts the cURL handle: an idle limit in place of a total one, and a
+	 * progress callback that fires about once a second while nothing arrives.
+	 *
+	 * A transport that buffers the whole body (no progress events, or a host
+	 * that is not cURL) still works: the body is read once it is complete, as a
+	 * stream if it is one and as an ordinary completion if the API chose not to
+	 * stream.
+	 *
+	 * @param string        $agent_id        Ignored — the key selects the agent.
+	 * @param string        $message         User message.
+	 * @param string        $conversation_id Echoed back.
+	 * @param array         $context         Unused by this API.
+	 * @param array         $history         Prior exchanges, sent as real turns.
+	 * @param callable      $on_text         Called with each new piece of reply text.
+	 * @param callable|null $on_tick         Called while waiting.
+	 * @return NPA_Gateway_Result
+	 * @throws NPA_Gateway_Exception On transport or API error.
+	 */
+	public function stream_message( string $agent_id, string $message, string $conversation_id, array $context, array $history, callable $on_text, ?callable $on_tick = null ): NPA_Gateway_Result {
+		unset( $context );
+
+		$body = array(
+			'messages' => self::build_messages( $message, $history ),
+			'stream'   => true,
+		);
+
+		/** This filter is documented in send_message(). */
+		$body = apply_filters( 'npa_agent_api_body', $body, $agent_id );
+
+		$url    = $this->base_url . '/v1/chat/completions';
+		$reader = new NPA_Sse_Reader( $on_text );
+		$idle   = max( 1, $this->timeout );
+
+		$progress = static function ( $data ) use ( $reader ) {
+			$reader->feed( (string) $data );
+		};
+
+		$curl = static function ( $handle, $args = array(), $target = '' ) use ( $url, $idle, $on_tick ) {
+			unset( $args );
+
+			if ( $target !== $url ) {
+				return;
+			}
+
+			// Give up only when the agent has said nothing for $idle seconds.
+			curl_setopt( $handle, CURLOPT_LOW_SPEED_LIMIT, 1 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+			curl_setopt( $handle, CURLOPT_LOW_SPEED_TIME, $idle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+
+			if ( null !== $on_tick && defined( 'CURLOPT_XFERINFOFUNCTION' ) ) {
+				curl_setopt( $handle, CURLOPT_NOPROGRESS, false ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+				curl_setopt( // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
+					$handle,
+					CURLOPT_XFERINFOFUNCTION,
+					static function () use ( $on_tick ) {
+						call_user_func( $on_tick );
+						return 0;
+					}
+				);
+			}
+		};
+
+		$headers             = $this->headers();
+		$headers['Accept']   = 'text/event-stream';
+		$headers['X-Stream'] = 'true';
+
+		add_action( 'requests-request.progress', $progress, 10, 1 );
+		add_action( 'http_api_curl', $curl, 10, 3 );
+
+		try {
+			$response = wp_remote_post(
+				$url,
+				array(
+					'timeout' => self::stream_limit( $this->timeout ),
+					'headers' => $headers,
+					'body'    => wp_json_encode( $body ),
+				)
+			);
+		} finally {
+			remove_action( 'requests-request.progress', $progress, 10 );
+			remove_action( 'http_api_curl', $curl, 10 );
+		}
+
+		if ( is_wp_error( $response ) ) {
+			// Internal, log-facing message — not browser output.
+			throw new NPA_Gateway_Exception( $response->get_error_message(), 'transport', 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		$raw  = (string) wp_remote_retrieve_body( $response );
+
+		if ( $code < 200 || $code >= 300 ) {
+			throw new NPA_Gateway_Exception( // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+				self::error_text( json_decode( $raw, true ), $code ),
+				NPA_Gateway_Client_Http::code_for_status( $code ),
+				$code
+			);
+		}
+
+		// Nothing came through the progress hook: read the body whole.
+		if ( 0 === $reader->frames && '' === $reader->text ) {
+			$reader->feed( $raw );
+		}
+		$reader->finish();
+
+		if ( '' !== $reader->error ) {
+			throw new NPA_Gateway_Exception( $reader->error, 'server_error', 502 ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+		}
+
+		// Not a stream at all: the API answered with an ordinary completion.
+		if ( 0 === $reader->frames ) {
+			$result = self::result_from_body( $code, $raw, $conversation_id );
+			call_user_func( $on_text, $result->reply_text );
+			return $result;
+		}
+
+		if ( '' === trim( $reader->text ) ) {
+			throw new NPA_Gateway_Exception( // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+				'tool_calls' === $reader->finish
+					? 'The agent asked to call a tool, which this plugin does not provide. Turn off caller-provided tools for this agent.'
+					: 'The stream ended without any reply text.',
+				'server_error',
+				502
+			);
+		}
+
+		return new NPA_Gateway_Result(
+			$reader->text,
+			$conversation_id,
+			'' !== $reader->finish ? $reader->finish : 'stop',
+			isset( $reader->usage['prompt_tokens'] ) ? (int) $reader->usage['prompt_tokens'] : 0,
+			isset( $reader->usage['completion_tokens'] ) ? (int) $reader->usage['completion_tokens'] : 0,
+			array(
+				'streamed' => true,
+				'frames'   => $reader->frames,
+				'done'     => $reader->done,
+			)
+		);
+	}
+
+	/**
+	 * A result from a complete, non-streamed response body.
+	 *
+	 * @param int    $code            HTTP status.
+	 * @param string $raw             Body.
+	 * @param string $conversation_id Echoed back.
+	 * @return NPA_Gateway_Result
+	 * @throws NPA_Gateway_Exception On an error status or an empty reply.
+	 */
+	private static function result_from_body( $code, $raw, $conversation_id ) {
 		$decoded = json_decode( $raw, true );
 
 		if ( $code < 200 || $code >= 300 ) {

@@ -92,6 +92,7 @@ $npa_secs = static function ( $ms ) {
 			<?php
 			$npa_rows = array(
 				array( __( 'Agent API (the agent and its model)', 'newtide-public-agent' ), $npa_summary['agent'] ),
+				array( __( 'Until its first words (streamed replies)', 'newtide-public-agent' ), $npa_summary['first'] ),
 				array( __( 'WordPress around it', 'newtide-public-agent' ), $npa_summary['wordpress'] ),
 				array( __( 'What the visitor waited', 'newtide-public-agent' ), $npa_summary['browser'] ),
 				array( __( 'Each site-knowledge (MCP) call', 'newtide-public-agent' ), $npa_summary['mcp'] ),
@@ -178,6 +179,7 @@ $npa_secs = static function ( $ms ) {
 				<th scope="col"><?php esc_html_e( 'Ref.', 'newtide-public-agent' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Outcome', 'newtide-public-agent' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Agent API', 'newtide-public-agent' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'First words', 'newtide-public-agent' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'WordPress', 'newtide-public-agent' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Visitor waited', 'newtide-public-agent' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'MCP calls', 'newtide-public-agent' ); ?></th>
@@ -212,6 +214,7 @@ $npa_secs = static function ( $ms ) {
 					<?php echo esc_html( $npa_class['label'] ); ?>
 				</td>
 				<td><?php echo esc_html( $npa_secs( $npa_turn['latency_ms'] ) ); ?></td>
+				<td><?php echo esc_html( $npa_secs( isset( $npa_turn['first_ms'] ) ? $npa_turn['first_ms'] : 0 ) ); ?></td>
 				<td><?php echo esc_html( $npa_secs( max( 0, (int) $npa_turn['server_ms'] - (int) $npa_turn['latency_ms'] ) ) ); ?></td>
 				<td><?php echo esc_html( $npa_client ); ?></td>
 				<td>

@@ -54,6 +54,26 @@ class NPA_Rest {
 	private $plugin;
 
 	/**
+	 * Where a streamed reply goes; replaced by the test battery.
+	 *
+	 * @var NPA_Stream|null
+	 */
+	private $stream_to = null;
+
+	/**
+	 * Send the next streamed reply here instead of to the browser.
+	 *
+	 * For the test battery: a capture-mode NPA_Stream collects the frames and
+	 * does not exit. Null restores normal behaviour.
+	 *
+	 * @param NPA_Stream|null $stream Stream.
+	 * @return void
+	 */
+	public function stream_to( $stream ) {
+		$this->stream_to = $stream;
+	}
+
+	/**
 	 * Constructor.
 	 *
 	 * @param NPA_Plugin $plugin Plugin instance.
@@ -111,6 +131,9 @@ class NPA_Rest {
 					),
 					'previous_turn'   => array(
 						'type' => 'object',
+					),
+					'stream'          => array(
+						'type' => 'boolean',
 					),
 				),
 			)
@@ -297,8 +320,11 @@ class NPA_Rest {
 	 * Handle a chat message: throttle, budget-check, relay to the gateway,
 	 * dual-write usage, and return a clean envelope.
 	 *
+	 * A streamed reply (`stream: true`) is written straight to the browser as
+	 * Server-Sent Events and the request ends there; see NPA_Stream.
+	 *
 	 * @param WP_REST_Request $request Request.
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|null Null only after a captured stream.
 	 */
 	public function handle_message( $request ) {
 		$message = trim( (string) $request->get_param( 'message' ) );
@@ -438,10 +464,34 @@ class NPA_Rest {
 			)
 		);
 
+		/*
+		 * Stream when the widget asked, the site allows it and the transport
+		 * can. Everything above has already answered with plain JSON where it
+		 * had to refuse, so the widget only ever sees a stream that carries a
+		 * reply or the agent's own error.
+		 */
+		$stream = null;
+		if ( $request->get_param( 'stream' ) && $this->plugin->settings->get( 'streaming' ) && $client instanceof NPA_Gateway_Streaming && $client->supports_streaming() ) {
+			$stream = ( null !== $this->stream_to ) ? $this->stream_to : new NPA_Stream();
+			$stream->open( NPA_Gateway_Client_Agent_Api::stream_limit( $this->plugin->settings->agent_timeout() ) );
+		}
+
 		$start = microtime( true );
 
 		try {
-			$result  = $client->send_message( $agent_id, $outbound, $conversation_id, $context, $send_history );
+			if ( null !== $stream ) {
+				$result = $client->stream_message(
+					$agent_id,
+					$outbound,
+					$conversation_id,
+					$context,
+					$send_history,
+					array( $stream, 'text' ),
+					array( $stream, 'tick' )
+				);
+			} else {
+				$result = $client->send_message( $agent_id, $outbound, $conversation_id, $context, $send_history );
+			}
 			$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
 
 			/*
@@ -460,6 +510,7 @@ class NPA_Rest {
 					'status'          => 200,
 					'finish_reason'   => $result->finish_reason,
 					'latency_ms'      => $latency,
+					'first_ms'        => null !== $stream ? $stream->first_ms() : 0,
 					'input_tokens'    => $result->input_tokens,
 					'output_tokens'   => $result->output_tokens,
 					'is_mock'         => $is_mock,
@@ -486,19 +537,24 @@ class NPA_Rest {
 				)
 			);
 
-			return new WP_REST_Response(
-				array(
-					'reply'           => $result->reply_text,
-					// Rendered here rather than in the widget: turning model
-					// output into markup is the one place a mistake is an XSS
-					// hole, and in PHP it is covered by the test battery.
-					'reply_html'      => NPA_Markdown::to_html( $result->reply_text ),
-					'conversation_id' => $thread_id,
-					'finish_reason'   => $result->finish_reason,
-					'turn_id'         => $turn_id,
-				),
-				200
+			$payload = array(
+				'reply'           => $result->reply_text,
+				// Rendered here rather than in the widget: turning model
+				// output into markup is the one place a mistake is an XSS
+				// hole, and in PHP it is covered by the test battery.
+				'reply_html'      => NPA_Markdown::to_html( $result->reply_text ),
+				'conversation_id' => $thread_id,
+				'finish_reason'   => $result->finish_reason,
+				'turn_id'         => $turn_id,
 			);
+
+			if ( null !== $stream ) {
+				$stream->send( 'done', $payload );
+				$stream->close();
+				return null;
+			}
+
+			return new WP_REST_Response( $payload, 200 );
 		} catch ( NPA_Gateway_Exception $e ) {
 			$latency = (int) round( ( microtime( true ) - $start ) * 1000 );
 
@@ -511,6 +567,7 @@ class NPA_Rest {
 					'status'          => $e->get_http_status(),
 					'finish_reason'   => 'error',
 					'latency_ms'      => $latency,
+					'first_ms'        => null !== $stream ? $stream->first_ms() : 0,
 					'error_code'      => $e->get_error_code(),
 					'is_mock'         => $is_mock,
 					// The failing page matters more than the successful one:
@@ -551,6 +608,13 @@ class NPA_Rest {
 
 			if ( current_user_can( 'manage_options' ) ) {
 				$data['error']['detail'] = $e->getMessage();
+			}
+
+			if ( null !== $stream ) {
+				$data['status'] = $http;
+				$stream->send( 'error', $data );
+				$stream->close();
+				return null;
 			}
 
 			$response->set_data( $data );

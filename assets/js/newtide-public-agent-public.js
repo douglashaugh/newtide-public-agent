@@ -1010,13 +1010,160 @@
 		this.typing.appendChild( bubble );
 		this.log.appendChild( this.typing );
 		this.log.scrollTop = this.log.scrollHeight;
+
+		/* An agent that looks data up can be quiet for a while before it
+		   starts writing. Say so, rather than leave the dots to look stuck. */
+		var self = this;
+		this.typingTimers = [
+			window.setTimeout( function () {
+				self.typingNote( t( 'waitWorking', 'Working on it…' ) );
+			}, 8000 ),
+			window.setTimeout( function () {
+				self.typingNote( t( 'waitLong', 'Still working. Questions that need data can take up to a minute.' ) );
+			}, 25000 )
+		];
+	};
+
+	Widget.prototype.typingNote = function ( text ) {
+		if ( ! this.typing ) {
+			return;
+		}
+		var note = this.typing.querySelector( '.newtide-public-agent__typing-note' );
+		if ( ! note ) {
+			note = el( 'div', 'newtide-public-agent__typing-note' );
+			this.typing.appendChild( note );
+		}
+		note.textContent = text;
+		if ( this.status ) {
+			this.status.textContent = text;
+		}
+		this.log.scrollTop = this.log.scrollHeight;
 	};
 
 	Widget.prototype.hideTyping = function () {
+		( this.typingTimers || [] ).forEach( function ( id ) {
+			window.clearTimeout( id );
+		} );
+		this.typingTimers = [];
 		if ( this.typing && this.typing.parentNode ) {
 			this.typing.parentNode.removeChild( this.typing );
 		}
 		this.typing = null;
+	};
+
+	/* ---------------------------------------------------------------------
+	   Streaming.
+
+	   With streaming on, /message answers as Server-Sent Events: `html`
+	   events carry the reply so far, already rendered by the server, and a
+	   final `done` or `error` carries the same envelope a plain JSON reply
+	   would. The reply grows in a "live" bubble that screen readers skip;
+	   when it is finished it is replaced by an ordinary message, which is
+	   announced once, whole, and gets its charts and copy button.
+	   --------------------------------------------------------------------- */
+
+	Widget.prototype.showLive = function ( html ) {
+		if ( ! this.live ) {
+			this.hideTyping();
+			this.live = el( 'div', 'newtide-public-agent__msg newtide-public-agent__msg--agent newtide-public-agent__msg--live', { 'aria-hidden': 'true' } );
+			this.liveBubble = el( 'div', 'newtide-public-agent__bubble newtide-public-agent__bubble--rich' );
+			this.live.appendChild( this.liveBubble );
+			this.log.appendChild( this.live );
+		}
+
+		// Follow the reply down, unless the visitor has scrolled up to read.
+		var log = this.log;
+		var atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+		// Rendered and sanitized on the server, like reply_html.
+		this.liveBubble.innerHTML = html;
+		if ( atEnd ) {
+			log.scrollTop = log.scrollHeight;
+		}
+	};
+
+	/* The finished reply takes the live bubble's place. */
+	Widget.prototype.dropLive = function () {
+		if ( this.live && this.live.parentNode ) {
+			this.live.parentNode.removeChild( this.live );
+		}
+		this.live = null;
+		this.liveBubble = null;
+	};
+
+	/* The reply stopped part-way: keep what arrived, as an ordinary message,
+	   so the visitor does not lose it to the error that follows. */
+	Widget.prototype.keepLive = function () {
+		if ( this.live ) {
+			this.live.removeAttribute( 'aria-hidden' );
+			this.live.classList.remove( 'newtide-public-agent__msg--live' );
+		}
+		this.live = null;
+		this.liveBubble = null;
+	};
+
+	/* Read the event stream to its end. Resolves with { ok, data } from the
+	   `done` or `error` event; rejects if the connection closes before
+	   either arrives. */
+	Widget.prototype.readStream = function ( response ) {
+		var self = this;
+		var reader = response.body.getReader();
+		var decoder = new window.TextDecoder();
+		var buffer = '';
+		var outcome = null;
+
+		function handle( block ) {
+			var event = 'message';
+			var data = [];
+			block.split( '\n' ).forEach( function ( line ) {
+				if ( 0 === line.indexOf( 'event:' ) ) {
+					event = line.slice( 6 ).trim();
+				} else if ( 0 === line.indexOf( 'data:' ) ) {
+					data.push( line.slice( 5 ).replace( /^ /, '' ) );
+				}
+			} );
+			if ( ! data.length ) {
+				return;
+			}
+			var payload;
+			try {
+				payload = JSON.parse( data.join( '\n' ) );
+			} catch ( e ) {
+				return;
+			}
+			if ( 'html' === event ) {
+				self.showLive( payload.html || '' );
+			} else if ( 'done' === event ) {
+				outcome = { ok: true, data: payload };
+			} else if ( 'error' === event ) {
+				outcome = { ok: false, data: payload };
+			}
+		}
+
+		function pump() {
+			return reader.read().then( function ( step ) {
+				if ( step.value ) {
+					buffer += decoder.decode( step.value, { stream: true } );
+				}
+				if ( step.done ) {
+					buffer += decoder.decode() + '\n\n';
+				}
+				var at = buffer.indexOf( '\n\n' );
+				while ( -1 !== at ) {
+					handle( buffer.slice( 0, at ) );
+					buffer = buffer.slice( at + 2 );
+					at = buffer.indexOf( '\n\n' );
+				}
+				if ( outcome ) {
+					return outcome;
+				}
+				if ( step.done ) {
+					throw new Error( 'The reply stopped before it finished.' );
+				}
+				return pump();
+			} );
+		}
+
+		return pump();
 	};
 
 	Widget.prototype.setBusy = function ( busy ) {
@@ -1087,6 +1234,13 @@
 			}
 		};
 
+		/* Ask for the reply as it is written, where this browser can read a
+		   response in pieces. The server decides whether it actually streams. */
+		var streaming = !! cfg.stream && !! window.TextDecoder && !! window.ReadableStream;
+		if ( streaming ) {
+			body.stream = true;
+		}
+
 		if ( this.lastTurn && cfg.diagnostics ) {
 			body.previous_turn = this.lastTurn;
 		}
@@ -1099,7 +1253,7 @@
 		var controller = ( 'function' === typeof window.AbortController ) ? new window.AbortController() : null;
 		var timer = controller ? window.setTimeout( function () {
 			controller.abort();
-		}, cfg.clientTimeout || 120000 ) : 0;
+		}, ( streaming ? cfg.streamTimeout : cfg.clientTimeout ) || 120000 ) : 0;
 
 		/* What went wrong, for the report: set at each step that can fail. */
 		var failure = { kind: 'network', status: 0 };
@@ -1117,11 +1271,17 @@
 			/* Read text first: a host's or CDN's own 502/504 page is HTML,
 			   and r.json() would throw away the status that explains it. */
 			failure = { kind: r.ok ? 'parse' : 'http', status: r.status };
+			var type = ( r.headers && r.headers.get( 'Content-Type' ) ) || '';
+			if ( r.ok && r.body && -1 !== type.indexOf( 'text/event-stream' ) ) {
+				// Cut off part-way is a network failure, not a bad reply.
+				failure = { kind: 'network', status: 0 };
+				return this.readStream( r );
+			}
 			return r.text().then( function ( raw ) {
 				var data = JSON.parse( raw );
 				return { ok: r.ok, data: data };
 			} );
-		} ).then( function ( res ) {
+		}.bind( this ) ).then( function ( res ) {
 			window.clearTimeout( timer );
 			this.hideTyping();
 			this.setBusy( false );
@@ -1130,8 +1290,15 @@
 					this.conversationId = res.data.conversation_id;
 				}
 				this.lastTurn = { turn_id: res.data.turn_id || turnId, client_ms: Date.now() - started };
+				this.dropLive();
 				this.markTurn( this.addMessage( 'agent', res.data.reply, true, res.data.reply_html ), res.data.reply );
 			} else {
+				/* The server answered, so the wait is known even though the
+				   agent failed: report it with the next message like any other. */
+				if ( res.data && res.data.turn_id ) {
+					this.lastTurn = { turn_id: res.data.turn_id, client_ms: Date.now() - started };
+				}
+				this.keepLive();
 				var msg = ( res.data && res.data.error && res.data.error.message ) || this.errorText;
 				this.addMessage( 'agent', this.withReference( msg, ( res.data && res.data.turn_id ) || turnId ), true );
 			}
@@ -1142,6 +1309,7 @@
 				failure = { kind: 'timeout', status: 0 };
 			}
 			this.report( turnId, failure.kind, failure.status, Date.now() - started );
+			this.keepLive();
 			this.hideTyping();
 			this.setBusy( false );
 			this.addMessage( 'agent', this.withReference( this.errorText, turnId ), true );

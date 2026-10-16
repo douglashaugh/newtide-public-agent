@@ -25,7 +25,7 @@ class NPA_Store {
 	 *
 	 * @var int
 	 */
-	const SCHEMA_VERSION = 5;
+	const SCHEMA_VERSION = 6;
 
 	/**
 	 * Roles a stored transcript row can carry.
@@ -142,6 +142,7 @@ class NPA_Store {
 			queue_ms int(10) unsigned NOT NULL DEFAULT 0,
 			client_ms int(10) unsigned NOT NULL DEFAULT 0,
 			client_status smallint(5) unsigned NOT NULL DEFAULT 0,
+			first_ms int(10) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id),
 			KEY created_at (created_at),
 			KEY agent_id (agent_id),
@@ -683,7 +684,7 @@ class NPA_Store {
 		$ok = $wpdb->insert(
 			$this->table_name(),
 			$row,
-			array( '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d' )
+			array( '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%d' )
 		);
 
 		if ( false === $ok ) {
@@ -725,6 +726,7 @@ class NPA_Store {
 			'queue_ms'      => isset( $data['queue_ms'] ) ? max( 0, (int) $data['queue_ms'] ) : 0,
 			'client_ms'     => isset( $data['client_ms'] ) ? max( 0, (int) $data['client_ms'] ) : 0,
 			'client_status' => isset( $data['client_status'] ) ? max( 0, (int) $data['client_status'] ) : 0,
+			'first_ms'      => isset( $data['first_ms'] ) ? max( 0, (int) $data['first_ms'] ) : 0,
 		);
 	}
 
@@ -756,6 +758,7 @@ class NPA_Store {
 			'queue_ms'        => '%d',
 			'client_ms'       => '%d',
 			'client_status'   => '%d',
+			'first_ms'        => '%d',
 		);
 
 		$set     = array();

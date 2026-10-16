@@ -222,6 +222,13 @@
 	animation-delay: 0.4s;
 }
 
+/* "Working on it…" under the dots once the wait gets long. */
+.newtide-public-agent__typing-note {
+	margin-top: 0.35rem;
+	font-size: 0.85em;
+	opacity: 0.75;
+}
+
 @keyframes npa-blink {
 	0%, 80%, 100% { opacity: 0.2; }
 	40% { opacity: 0.9; }

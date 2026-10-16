@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Class NPA_Gateway_Client_Mock
  */
-class NPA_Gateway_Client_Mock implements NPA_Gateway_Client {
+class NPA_Gateway_Client_Mock implements NPA_Gateway_Client, NPA_Gateway_Streaming {
 
 	/**
 	 * The real target agent, used as the canned agent so mock and production
@@ -109,6 +109,46 @@ class NPA_Gateway_Client_Mock implements NPA_Gateway_Client {
 				'context'  => $context,
 			)
 		);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return bool
+	 */
+	public function supports_streaming(): bool {
+		return true;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * The canned reply, a few words at a time. Nothing sleeps: the battery
+	 * stays fast, and an admin previewing the widget sees it arrive in pieces
+	 * only as fast as PHP can send them.
+	 *
+	 * @param string        $agent_id        Agent id.
+	 * @param string        $message         User message.
+	 * @param string        $conversation_id Conversation token.
+	 * @param array         $context         Page context.
+	 * @param array         $history         Ignored.
+	 * @param callable      $on_text         Called with each piece.
+	 * @param callable|null $on_tick         Called once, before the first piece.
+	 * @return NPA_Gateway_Result
+	 * @throws NPA_Gateway_Exception When the active scenario simulates an error.
+	 */
+	public function stream_message( string $agent_id, string $message, string $conversation_id, array $context, array $history, callable $on_text, ?callable $on_tick = null ): NPA_Gateway_Result {
+		$result = $this->send_message( $agent_id, $message, $conversation_id, $context, $history );
+
+		if ( null !== $on_tick ) {
+			call_user_func( $on_tick );
+		}
+
+		foreach ( array_chunk( preg_split( '/(?<=\s)/', $result->reply_text ), 3 ) as $words ) {
+			call_user_func( $on_text, implode( '', $words ) );
+		}
+
+		return $result;
 	}
 
 	/**

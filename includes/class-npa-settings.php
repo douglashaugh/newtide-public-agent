@@ -216,7 +216,10 @@ class NPA_Settings {
 			'log_enabled'               => false,
 			// Turn diagnostics (0.16.1): where a slow or failed turn was lost.
 			'diagnostics'               => true,
-			'agent_timeout'             => 30, // Seconds to wait for the agent.
+			// Seconds to wait for the agent; while streaming, how long it may go silent.
+			'agent_timeout'             => 60,
+			// Streaming (0.17.0): the reply appears as it is written.
+			'streaming'                 => true,
 			'store_transcripts'         => false,
 			// Reconstructs multi-turn context because the agent API is single-turn.
 			// On by default: a chat that cannot follow up is the worse failure.
@@ -342,6 +345,7 @@ class NPA_Settings {
 		$clean['remember_state']    = $has( 'remember_state' ) ? ! empty( $input['remember_state'] ) : (bool) $existing['remember_state'];
 		$clean['log_enabled']       = $has( 'log_enabled' ) ? ! empty( $input['log_enabled'] ) : (bool) $existing['log_enabled'];
 		$clean['diagnostics']       = $has( 'diagnostics' ) ? ! empty( $input['diagnostics'] ) : (bool) $existing['diagnostics'];
+		$clean['streaming']         = $has( 'streaming' ) ? ! empty( $input['streaming'] ) : (bool) $existing['streaming'];
 		$clean['store_transcripts'] = $has( 'store_transcripts' ) ? ! empty( $input['store_transcripts'] ) : (bool) $existing['store_transcripts'];
 		$clean['conversation_memory'] = $has( 'conversation_memory' ) ? ! empty( $input['conversation_memory'] ) : (bool) $existing['conversation_memory'];
 
@@ -969,7 +973,56 @@ class NPA_Settings {
 			return max( 1, (int) NPA_HTTP_TIMEOUT );
 		}
 
-		return self::clamp_timeout( (int) $this->get( 'agent_timeout', 30 ) );
+		return self::clamp_timeout( (int) $this->get( 'agent_timeout', 60 ) );
+	}
+
+	/**
+	 * Stored-settings migrations, run once each.
+	 *
+	 * @var string
+	 */
+	const MIGRATION_OPTION = 'npa_settings_migration';
+
+	/**
+	 * Bring stored settings forward. Runs at boot, before the sanitize
+	 * callback is registered, so the stored array is written as-is.
+	 *
+	 * 1 (0.17.0): an agent timeout still at the old default of 30 becomes 60.
+	 * Turn diagnostics showed real agents answering in 16–28 seconds and being
+	 * cut off at 30. A value an administrator chose is left alone.
+	 *
+	 * @return void
+	 */
+	public function maybe_migrate() {
+		$done = (int) get_option( self::MIGRATION_OPTION, 0 );
+
+		if ( $done >= 1 ) {
+			return;
+		}
+
+		$stored   = get_option( self::OPTION, null );
+		$migrated = self::migrated( $stored );
+
+		if ( $migrated !== $stored ) {
+			update_option( self::OPTION, $migrated );
+		}
+
+		update_option( self::MIGRATION_OPTION, 1, false );
+	}
+
+	/**
+	 * Stored settings with the migrations applied. Pure, so the battery can
+	 * check it without touching the site's real settings.
+	 *
+	 * @param mixed $stored The stored option.
+	 * @return mixed
+	 */
+	public static function migrated( $stored ) {
+		if ( is_array( $stored ) && isset( $stored['agent_timeout'] ) && 30 === (int) $stored['agent_timeout'] ) {
+			$stored['agent_timeout'] = 60;
+		}
+
+		return $stored;
 	}
 
 	/**

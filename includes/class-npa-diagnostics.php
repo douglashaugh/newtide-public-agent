@@ -403,12 +403,15 @@ class NPA_Diagnostics {
 	 * Seconds after which a turn still pending is taken to be dead.
 	 *
 	 * Comfortably past the longest the request could legitimately run: the
-	 * agent timeout, plus PHP's own work either side.
+	 * agent timeout — or a streamed reply's longer total limit — plus PHP's own
+	 * work either side.
 	 *
 	 * @return int
 	 */
 	public function abandon_after() {
-		return max( 300, ( 2 * $this->plugin->settings->agent_timeout() ) + 60 );
+		$timeout = $this->plugin->settings->agent_timeout();
+
+		return max( 300, ( 2 * $timeout ) + 60, NPA_Gateway_Client_Agent_Api::stream_limit( $timeout ) + 60 );
 	}
 
 	/**
@@ -751,6 +754,7 @@ class NPA_Diagnostics {
 		$agent_ms  = array();
 		$server_ms = array();
 		$browser   = array();
+		$first_ms  = array();
 		$near      = 0;
 		$known     = array();
 
@@ -777,9 +781,19 @@ class NPA_Diagnostics {
 				$agent_ms[]  = (int) $row['latency_ms'];
 				$server_ms[] = max( 0, (int) $row['server_ms'] - (int) $row['latency_ms'] );
 
-				if ( (int) $row['latency_ms'] >= $timeout * 800 ) {
+				/*
+				 * Streamed, the timeout bounds the silence before the first
+				 * words rather than the whole reply, so that is what is
+				 * measured against it.
+				 */
+				$waited = (int) $row['first_ms'] > 0 ? (int) $row['first_ms'] : (int) $row['latency_ms'];
+				if ( $waited >= $timeout * 800 ) {
 					++$near;
 				}
+			}
+
+			if ( (int) $row['first_ms'] > 0 ) {
+				$first_ms[] = (int) $row['first_ms'];
 			}
 
 			if ( (int) $row['client_ms'] > 0 && (int) $row['client_status'] < 400 ) {
@@ -824,6 +838,7 @@ class NPA_Diagnostics {
 			'by_code'   => $by_code,
 			'near'      => $near,
 			'agent'     => self::percentiles( $agent_ms ),
+			'first'     => self::percentiles( $first_ms ),
 			'wordpress' => self::percentiles( $server_ms ),
 			'browser'   => self::percentiles( $browser ),
 			'mcp'       => array_merge( self::percentiles( $mcp_ms ), array( 'errors' => $mcp_err ) ),

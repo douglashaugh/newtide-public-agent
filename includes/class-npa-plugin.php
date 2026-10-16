@@ -193,6 +193,7 @@ final class NPA_Plugin {
 		$this->test_runner    = new NPA_Test_Runner();
 		$this->settings       = new NPA_Settings();
 		$this->settings->register();
+		$this->settings->maybe_migrate();
 		$this->store = new NPA_Store();
 		$this->store->maybe_upgrade();
 		$this->budget      = new NPA_Budget( $this->settings, $this->store );
@@ -256,6 +257,7 @@ final class NPA_Plugin {
 		$this->register_mcp_tests();
 		$this->register_release_notes_tests();
 		$this->register_diagnostics_tests();
+		$this->register_streaming_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -280,6 +282,8 @@ final class NPA_Plugin {
 
 		// Gateway contract + implementations (plan P2).
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/interface-npa-gateway-client.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/interface-npa-gateway-streaming.php';
+		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-sse-reader.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-result.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-agent.php';
 		require_once NPA_PLUGIN_DIR . 'includes/gateway/class-npa-gateway-health.php';
@@ -302,6 +306,7 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-diagnostics.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-conversation.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-markdown.php';
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-stream.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-charts.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-release-notes.php';
 
@@ -4252,6 +4257,287 @@ Second line." );
 				}
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$wpdb->query( $wpdb->prepare( "DELETE FROM {$events_table} WHERE id > %d AND turn_id = ''", $events_since ) );
+
+				return $checks;
+			},
+			'user'
+		);
+	}
+
+	/**
+	 * Register the Streaming suite (0.17.0).
+	 *
+	 * @return void
+	 */
+	private function register_streaming_tests() {
+		$this->test_runner->register_suite(
+			'streaming',
+			__( 'Streaming', 'newtide-public-agent' ),
+			__( 'Confirms replies can be shown as the agent writes them: the agent’s stream is read correctly however the network splits it, a reply still being written renders safely, the widget is sent the same finished reply and errors it would get without streaming, and an agent that does not stream still answers.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+
+				// ── Reading the agent's stream ────────────────────────────────
+				$stream = ": keep-alive\r\n\r\n"
+					. "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\r\n\r\n"
+					. "data: {\"choices\":[{\"delta\":{\"content\":\"Crude stocks \"}}]}\n\n"
+					. "event: progress\ndata: {\"tool\":\"get_inventory_status\"}\n\n"
+					. "data: {\"choices\":[{\"delta\":{\"content\":\"fell — café\"},\"finish_reason\":null}]}\n\n"
+					. "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":5}}\n\n"
+					. "data: [DONE]\n\n";
+
+				// Every way of cutting it in two, including inside a multibyte character.
+				$split_ok = true;
+				$len      = strlen( $stream );
+				for ( $at = 0; $at <= $len; $at++ ) {
+					$pieces = array();
+					$reader = new NPA_Sse_Reader(
+						static function ( $piece ) use ( &$pieces ) {
+							$pieces[] = $piece;
+						}
+					);
+					$reader->feed( substr( $stream, 0, $at ) );
+					$reader->feed( substr( $stream, $at ) );
+					$reader->finish();
+
+					if ( 'Crude stocks fell — café' !== $reader->text || array( 'Crude stocks ', 'fell — café' ) !== $pieces
+						|| 'stop' !== $reader->finish || ! $reader->done || 12 !== (int) $reader->usage['prompt_tokens'] || '' !== $reader->error ) {
+						$split_ok = false;
+						break;
+					}
+				}
+				$checks[] = array(
+					'label' => __( 'The agent’s stream is read the same however the network splits it, and keep-alives and unknown events are skipped', 'newtide-public-agent' ),
+					'pass'  => $split_ok,
+				);
+
+				$failed = new NPA_Sse_Reader();
+				$failed->feed( "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"}}]}\n\ndata: {\"error\":{\"message\":\"upstream overloaded\"}}\n\n" );
+				$failed->finish();
+				$plain = new NPA_Sse_Reader();
+				$plain->feed( '{"choices":[{"message":{"content":"Not streamed"}}]}' );
+				$plain->finish();
+				$checks[] = array(
+					'label' => __( 'An error inside the stream is caught, and a reply that is not a stream is recognised as one', 'newtide-public-agent' ),
+					'pass'  => 'upstream overloaded' === $failed->error && 'Partial' === $failed->text && 0 === $plain->frames,
+				);
+
+				// ── Rendering a reply that is still being written ─────────────
+				$open_fence   = NPA_Stream::partial_html( "Here it is:\n\n```chart\n{\"type\":\"bar\"," );
+				$closed_fence = NPA_Stream::partial_html( "Here it is:\n\n```chart\n{\"type\":\"bar\"}\n```" );
+				$hostile      = NPA_Stream::partial_html( "Hi <script>alert(1)</script> <img src=x onerror=alert(1)>" );
+				$checks[] = array(
+					'label' => __( 'A chart still being written is held back until it is complete, and partial replies are escaped like finished ones', 'newtide-public-agent' ),
+					'pass'  => false === strpos( $open_fence, 'type' ) && false !== strpos( $open_fence, 'Here it is' )
+						&& false !== strpos( $closed_fence, 'language-chart' )
+						&& false === stripos( $hostile, '<script' ) && false === stripos( $hostile, '<img' ),
+				);
+
+				$emitter = new NPA_Stream( true );
+				$emitter->open();
+				$emitter->text( 'Hello ' );
+				$emitter->text( 'there' );
+				$emitter->send(
+					'done',
+					array(
+						'reply' => 'Hello there',
+					)
+				);
+				$events   = NPA_Stream::decode( $emitter->frames );
+				$checks[] = array(
+					'label' => __( 'The reply goes to the browser as rendered HTML events, at most a few a second, then one final event', 'newtide-public-agent' ),
+					'pass'  => 2 === count( $events ) && 'html' === $events[0]['event'] && false !== strpos( $events[0]['data']['html'], 'Hello' )
+						&& 'done' === $events[1]['event'] && $emitter->first_ms() > 0,
+				);
+
+				// ── The Agent API client ──────────────────────────────────────
+				$sent      = array();
+				$body_next = $stream;
+				$status    = 200;
+				$fake      = static function ( $pre, $args, $url ) use ( &$sent, &$body_next, &$status ) {
+					unset( $pre );
+					$sent = array(
+						'url'  => $url,
+						'args' => $args,
+					);
+
+					return array(
+						'headers'  => array(),
+						'body'     => $body_next,
+						'response' => array(
+							'code'    => $status,
+							'message' => '',
+						),
+						'cookies'  => array(),
+						'filename' => null,
+					);
+				};
+				add_filter( 'pre_http_request', $fake, 10, 3 );
+
+				$client = new NPA_Gateway_Client_Agent_Api( 'https://api.example.test', 'wbk_test', 'https://site.example.test', 40 );
+				$pieces = array();
+				$on     = static function ( $piece ) use ( &$pieces ) {
+					$pieces[] = $piece;
+				};
+
+				$result = $client->stream_message( '', 'How are crude stocks?', 'conv-1', array(), array(), $on );
+				$asked  = json_decode( (string) $sent['args']['body'], true );
+				$checks[] = array(
+					'label' => __( 'The Agent API is asked to stream, and its streamed reply is assembled with its finish reason and token counts', 'newtide-public-agent' ),
+					'pass'  => ! empty( $asked['stream'] ) && 'text/event-stream' === $sent['args']['headers']['Accept']
+						&& 'Crude stocks fell — café' === $result->reply_text && 'stop' === $result->finish_reason
+						&& 12 === $result->input_tokens && 5 === $result->output_tokens && 'conv-1' === $result->conversation_id
+						&& 'Crude stocks fell — café' === implode( '', $pieces ),
+				);
+				$checks[] = array(
+					'label' => __( 'While streaming, the agent timeout limits silence and a longer limit caps the whole reply', 'newtide-public-agent' ),
+					'pass'  => (int) $sent['args']['timeout'] === NPA_Gateway_Client_Agent_Api::stream_limit( 40 )
+						&& 120 === NPA_Gateway_Client_Agent_Api::stream_limit( 30 ) && 180 === NPA_Gateway_Client_Agent_Api::stream_limit( 60 ),
+				);
+
+				$pieces    = array();
+				$body_next = '{"choices":[{"message":{"content":"Answered whole"},"finish_reason":"stop"}]}';
+				$whole     = $client->stream_message( '', 'Hi', 'conv-2', array(), array(), $on );
+				$checks[] = array(
+					'label' => __( 'An agent that answers without streaming is still understood', 'newtide-public-agent' ),
+					'pass'  => 'Answered whole' === $whole->reply_text && array( 'Answered whole' ) === $pieces,
+				);
+
+				$codes = array();
+				foreach (
+					array(
+						array( 200, "data: {\"error\":\"agent crashed\"}\n\n" ),
+						array( 401, '{"error":"Unauthorized"}' ),
+						array( 200, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n" ),
+					) as $case
+				) {
+					$status    = $case[0];
+					$body_next = $case[1];
+					try {
+						$client->stream_message( '', 'Hi', '', array(), array(), $on );
+						$codes[] = 'none';
+					} catch ( NPA_Gateway_Exception $e ) {
+						$codes[] = $e->get_error_code();
+					}
+				}
+				$status   = 200;
+				$checks[] = array(
+					'label' => __( 'An error in the stream, a rejected key and an empty reply each fail the way they do without streaming', 'newtide-public-agent' ),
+					'pass'  => array( 'server_error', 'unauthorized', 'server_error' ) === $codes,
+				);
+
+				remove_filter( 'pre_http_request', $fake, 10 );
+
+				// ── Through the proxy, as the widget sees it ──────────────────
+				// The failure below must not count against the real connection.
+				$saved_counters = get_option( NPA_Service_Status::COUNTERS_OPTION, array() );
+
+				$grant_admin = static function ( $caps ) {
+					$caps['manage_options'] = true;
+					return $caps;
+				};
+				add_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+				delete_transient( 'npa_rl_' . md5( isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown' ) );
+
+				$mock     = new NPA_Gateway_Client_Mock();
+				$use_mock = static function () use ( $mock ) {
+					return $mock;
+				};
+				add_filter( 'npa_gateway_client', $use_mock );
+				$this->reset_gateway_client();
+
+				NPA_Settings::begin_test_override(
+					array(
+						'diagnostics' => true,
+						'streaming'   => true,
+					)
+				);
+
+				$used = array();
+				$ask  = function ( $stream, $message ) use ( &$used ) {
+					$turn    = NPA_Diagnostics::new_turn_id();
+					$used[]  = $turn;
+					$capture = new NPA_Stream( true );
+					$this->rest->stream_to( $capture );
+
+					$request = new WP_REST_Request( 'POST', '/npa/v1/message' );
+					$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+					$request->set_param( 'message', $message );
+					$request->set_param( 'turn_id', $turn );
+					$request->set_param( 'stream', $stream );
+					$response = rest_get_server()->dispatch( $request );
+					$this->rest->stream_to( null );
+
+					return array(
+						'turn'     => $turn,
+						'events'   => NPA_Stream::decode( $capture->frames ),
+						'response' => $response,
+					);
+				};
+
+				$streamed = $ask( true, 'stream this please' );
+				$last     = end( $streamed['events'] );
+				$row      = $this->store->find_by_turn( $streamed['turn'] );
+				$checks[] = array(
+					'label' => __( 'A streamed message sends the reply as it is written, then the same finished reply a plain request gets', 'newtide-public-agent' ),
+					'pass'  => count( $streamed['events'] ) >= 2 && 'html' === $streamed['events'][0]['event']
+						&& $last && 'done' === $last['event'] && $streamed['turn'] === $last['data']['turn_id']
+						&& ! empty( $last['data']['reply'] ) && ! empty( $last['data']['reply_html'] ) && ! empty( $last['data']['conversation_id'] ),
+				);
+				$checks[] = array(
+					'label' => __( 'A streamed turn is recorded in full, with how long the agent took to start writing', 'newtide-public-agent' ),
+					'pass'  => $row && 200 === (int) $row['status'] && 'stop' === $row['finish_reason'] && (int) $row['first_ms'] > 0,
+				);
+
+				$mock->set_scenario( 'server_error' );
+				$broken = $ask( true, 'this one fails' );
+				$mock->set_scenario( 'ok' );
+				$err    = end( $broken['events'] );
+				$checks[] = array(
+					'label' => __( 'A streamed failure ends with the same friendly error and reference a plain request gets', 'newtide-public-agent' ),
+					'pass'  => $err && 'error' === $err['event'] && $broken['turn'] === $err['data']['turn_id']
+						&& 'server_error' === $err['data']['error']['code'] && NPA_Rest::friendly_message( 'server_error' ) === $err['data']['error']['message'],
+				);
+
+				$plain_ask = $ask( false, 'no streaming here' );
+				NPA_Settings::begin_test_override(
+					array(
+						'diagnostics' => true,
+						'streaming'   => false,
+					)
+				);
+				$switched_off = $ask( true, 'streaming is switched off' );
+				$checks[]     = array(
+					'label' => __( 'Without the widget asking, or with streaming switched off, the reply comes back as before', 'newtide-public-agent' ),
+					'pass'  => array() === $plain_ask['events'] && 200 === $plain_ask['response']->get_status() && ! empty( $plain_ask['response']->get_data()['reply'] )
+						&& array() === $switched_off['events'] && ! empty( $switched_off['response']->get_data()['reply'] ),
+				);
+
+				remove_filter( 'npa_gateway_client', $use_mock );
+				$this->reset_gateway_client();
+				remove_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+				NPA_Settings::end_test_override();
+				update_option( NPA_Service_Status::COUNTERS_OPTION, $saved_counters, false );
+
+				// ── Settings ──────────────────────────────────────────────────
+				$defaults = NPA_Settings::defaults();
+				$checks[] = array(
+					'label' => __( 'Streaming is on by default, the agent timeout defaults to 60 seconds, and a timeout left at the old 30 is moved to 60', 'newtide-public-agent' ),
+					'pass'  => true === $defaults['streaming'] && 60 === (int) $defaults['agent_timeout']
+						&& 60 === NPA_Settings::migrated( array( 'agent_timeout' => 30 ) )['agent_timeout']
+						&& 45 === NPA_Settings::migrated( array( 'agent_timeout' => 45 ) )['agent_timeout']
+						&& null === NPA_Settings::migrated( null ),
+				);
+				$checks[] = array(
+					'label' => __( 'A streamed turn is not called abandoned while it may still legitimately be running', 'newtide-public-agent' ),
+					'pass'  => $this->diagnostics->abandon_after() >= NPA_Gateway_Client_Agent_Api::stream_limit( $this->settings->agent_timeout() ) + 60,
+				);
+
+				foreach ( $used as $id ) {
+					$this->store->delete_turn( $id );
+				}
 
 				return $checks;
 			},
