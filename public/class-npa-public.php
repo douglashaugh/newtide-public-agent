@@ -198,6 +198,9 @@ class NPA_Public {
 			array(
 				'restUrl' => esc_url_raw( rest_url( 'npa/v1/message' ) ),
 				'reportUrl' => esc_url_raw( rest_url( 'npa/v1/report' ) ),
+				// Answer feedback (0.18.0): thumbs under each reply.
+				'feedbackUrl' => esc_url_raw( rest_url( 'npa/v1/feedback' ) ),
+				'feedback'    => (bool) NPA_Plugin::instance()->settings->get( 'feedback', true ),
 				'nonce'   => wp_create_nonce( 'wp_rest' ),
 				// Turn diagnostics (0.16.1). The widget waits a little longer
 				// than the server does, so the server's own error wins a race.
@@ -247,6 +250,12 @@ class NPA_Public {
 					'copyTurn'   => __( 'Copy this question and answer', 'newtide-public-agent' ),
 					'copied'     => __( 'Copied', 'newtide-public-agent' ),
 					'copyFailed' => __( 'Could not copy. Try selecting the text instead.', 'newtide-public-agent' ),
+					'rateLabel'  => __( 'Was this helpful?', 'newtide-public-agent' ),
+					'rateUp'     => __( 'Helpful', 'newtide-public-agent' ),
+					'rateDown'   => __( 'Not helpful', 'newtide-public-agent' ),
+					'rateWhy'    => __( 'What was wrong? (optional)', 'newtide-public-agent' ),
+					'rateSend'   => __( 'Send', 'newtide-public-agent' ),
+					'rateThanks' => __( 'Thanks for the feedback.', 'newtide-public-agent' ),
 					/* translators: %s: short reference code for a failed message. */
 					'reference'  => __( 'Reference: %s', 'newtide-public-agent' ),
 					'waitWorking' => __( 'Working on it…', 'newtide-public-agent' ),

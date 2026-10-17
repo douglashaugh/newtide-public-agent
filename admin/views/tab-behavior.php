@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
 <?php $npa_admin->mode_scope_notice( 'behavior' ); ?>
 <form method="post" action="options.php" class="npa-form">
 	<?php settings_fields( NPA_Settings::GROUP ); ?>
-	<?php $npa_admin->present_fields( array( 'auto_open_delay', 'hide_on_mobile', 'remember_state', 'audience', 'daily_message_cap', 'conversation_memory', 'log_enabled', 'diagnostics', 'streaming', 'agent_timeout', 'store_transcripts', 'transcript_retention_days', 'transcript_max_conversations' ) ); ?>
+	<?php $npa_admin->present_fields( array( 'auto_open_delay', 'hide_on_mobile', 'remember_state', 'audience', 'daily_message_cap', 'conversation_memory', 'log_enabled', 'diagnostics', 'streaming', 'page_context', 'feedback', 'agent_timeout', 'store_transcripts', 'transcript_retention_days', 'transcript_max_conversations' ) ); ?>
 
 	<div class="npa-columns">
 		<?php $npa_admin->card_open( __( 'Timing', 'newtide-public-agent' ), __( 'When the panel opens on its own.', 'newtide-public-agent' ) ); ?>
@@ -147,6 +147,28 @@ defined( 'ABSPATH' ) || exit;
 					<?php esc_html_e( 'Show the reply as the agent writes it, instead of all at once when it is finished.', 'newtide-public-agent' ); ?>
 				</label>
 				<p class="description"><?php esc_html_e( 'Visitors see the first words as soon as the agent starts answering, and a long answer is no longer cut off by the agent timeout as long as it keeps arriving. Works with the Agent API connection; other connections answer all at once as before. If replies still arrive all at once with this on, something in front of the site (a cache or proxy) is holding the stream back — ask your host to allow streaming (text/event-stream) for /wp-json/npa/v1/message.', 'newtide-public-agent' ); ?></p>
+			</td>
+		</tr>
+
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Tell the agent the page', 'newtide-public-agent' ); ?></th>
+			<td>
+				<label>
+					<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[page_context]" value="1" <?php checked( (bool) $settings->get( 'page_context' ) ); ?> />
+					<?php esc_html_e( 'Send the title and address of the page the visitor is on with each message.', 'newtide-public-agent' ); ?>
+				</label>
+				<p class="description"><?php esc_html_e( 'The message the agent receives starts with a line like “[Visitor is viewing: Midland rack market (https://…)]”, so “what supplies this market?” asked on a market page is answered about that market. A page can add its own data the same way through the Ask button API (data-npa-ask and data-npa-context, or NewTideAgent.ask()). Tell the agent in its instructions that messages may begin with these bracketed lines. Transcripts store the visitor’s own words only.', 'newtide-public-agent' ); ?></p>
+			</td>
+		</tr>
+
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Answer feedback', 'newtide-public-agent' ); ?></th>
+			<td>
+				<label>
+					<input type="checkbox" name="<?php echo esc_attr( NPA_Settings::OPTION ); ?>[feedback]" value="1" <?php checked( (bool) $settings->get( 'feedback' ) ); ?> />
+					<?php esc_html_e( 'Show thumbs up and down under each reply.', 'newtide-public-agent' ); ?>
+				</label>
+				<p class="description"><?php esc_html_e( 'A thumbs-down asks, optionally, what was wrong. Ratings and comments appear beside each turn under Service Status → Turn diagnostics, keyed by the same reference the visitor sees, and are kept for 30 days. Never message content.', 'newtide-public-agent' ); ?></p>
 			</td>
 		</tr>
 

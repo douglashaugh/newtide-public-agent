@@ -258,6 +258,7 @@ final class NPA_Plugin {
 		$this->register_release_notes_tests();
 		$this->register_diagnostics_tests();
 		$this->register_streaming_tests();
+		$this->register_feedback_tests();
 
 		/**
 		 * Fires after the plugin has booted its core subsystems.
@@ -305,6 +306,7 @@ final class NPA_Plugin {
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-budget.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-diagnostics.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-conversation.php';
+		require_once NPA_PLUGIN_DIR . 'includes/class-npa-context.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-markdown.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-stream.php';
 		require_once NPA_PLUGIN_DIR . 'includes/class-npa-charts.php';
@@ -4257,6 +4259,206 @@ Second line." );
 				}
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$wpdb->query( $wpdb->prepare( "DELETE FROM {$events_table} WHERE id > %d AND turn_id = ''", $events_since ) );
+
+				return $checks;
+			},
+			'user'
+		);
+	}
+
+	/**
+	 * Register the Page context and feedback suite (0.18.0).
+	 *
+	 * @return void
+	 */
+	private function register_feedback_tests() {
+		$this->test_runner->register_suite(
+			'feedback',
+			__( 'Page context and answer feedback', 'newtide-public-agent' ),
+			__( 'Confirms the agent is told which page the visitor is on and what the page handed over, within limits and with hostile input stripped; and that a visitor’s rating of a reply is kept against its turn, once, with its words, and refused for turns this site never answered.', 'newtide-public-agent' ),
+			function () {
+				$checks = array();
+				$diag   = $this->diagnostics;
+				$store  = $this->store;
+				$used   = array();
+
+				// ── What the agent is told ────────────────────────────────────
+				$ctx  = NPA_Context::sanitize(
+					array(
+						'page_url'   => 'https://example.test/supply/market/midland/?utm=1',
+						'page_title' => 'Midland/Odessa, TX <b>rack market</b>',
+						'details'    => "<script>alert(1)</script>Terminals: 2\x07\nPipelines: 1",
+					)
+				);
+				$sent = NPA_Context::with( $ctx, 'What supplies this market?' );
+				$checks[] = array(
+					'label' => __( 'The page and its data go ahead of the question, with tags and control characters stripped', 'newtide-public-agent' ),
+					'pass'  => "[Visitor is viewing: Midland/Odessa, TX rack market (https://example.test/supply/market/midland/?utm=1)]\n[Page data: Terminals: 2\nPipelines: 1]\n\nWhat supplies this market?" === $sent,
+				);
+
+				$long = NPA_Context::sanitize( array( 'details' => str_repeat( 'x', 3000 ) ) );
+				$off  = NPA_Context::with( $ctx, 'Plain?', false );
+				$none = NPA_Context::with( NPA_Context::sanitize( array() ), 'Plain?' );
+				$checks[] = array(
+					'label' => __( 'Page data is capped at 2,000 characters; with the page line off the data still goes; an empty context leaves the question alone', 'newtide-public-agent' ),
+					'pass'  => NPA_Context::MAX_DETAILS + 1 === mb_strlen( $long['details'] )
+						&& 0 === strpos( $off, '[Page data:' ) && false === strpos( $off, '[Visitor is viewing' )
+						&& 'Plain?' === $none,
+				);
+
+				// Through the proxy: what reaches the client, with the setting on and off.
+				$grant_admin = static function ( $caps ) {
+					$caps['manage_options'] = true;
+					return $caps;
+				};
+				add_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+				delete_transient( 'npa_rl_' . md5( isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'unknown' ) );
+
+				$spy = new class() extends NPA_Gateway_Client_Mock {
+					/** @var string */
+					public $seen = '';
+					public function send_message( string $agent_id, string $message, string $conversation_id, array $context, array $history = array() ): NPA_Gateway_Result {
+						$this->seen = $message;
+						return parent::send_message( $agent_id, $message, $conversation_id, $context, $history );
+					}
+				};
+				$use_spy = static function () use ( $spy ) {
+					return $spy;
+				};
+				add_filter( 'npa_gateway_client', $use_spy );
+				$this->reset_gateway_client();
+				$server = rest_get_server();
+
+				$ask = static function ( $server, $turn ) {
+					$request = new WP_REST_Request( 'POST', '/npa/v1/message' );
+					$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+					$request->set_param( 'message', 'Which terminals?' );
+					$request->set_param( 'turn_id', $turn );
+					$request->set_param(
+						'context',
+						array(
+							'page_url'   => 'https://example.test/terminals/',
+							'page_title' => 'Terminals',
+							'details'    => 'Count: 13',
+						)
+					);
+					return $server->dispatch( $request );
+				};
+
+				NPA_Settings::begin_test_override( array( 'page_context' => true, 'diagnostics' => true, 'streaming' => false, 'store_transcripts' => false ) );
+				$turn_on  = NPA_Diagnostics::new_turn_id();
+				$used[]   = $turn_on;
+				$res_on   = $ask( $server, $turn_on );
+				$seen_on  = $spy->seen;
+				NPA_Settings::end_test_override();
+
+				NPA_Settings::begin_test_override( array( 'page_context' => false, 'diagnostics' => true, 'streaming' => false, 'store_transcripts' => false ) );
+				$turn_off = NPA_Diagnostics::new_turn_id();
+				$used[]   = $turn_off;
+				$res_off  = $ask( $server, $turn_off );
+				$seen_off = $spy->seen;
+				NPA_Settings::end_test_override();
+
+				$checks[] = array(
+					'label' => __( 'Through the proxy, the agent gets the page line and the page data before the question; with the setting off it gets the page data alone', 'newtide-public-agent' ),
+					'pass'  => 200 === $res_on->get_status() && 200 === $res_off->get_status()
+						&& "[Visitor is viewing: Terminals (https://example.test/terminals/)]\n[Page data: Count: 13]\n\nWhich terminals?" === $seen_on
+						&& "[Page data: Count: 13]\n\nWhich terminals?" === $seen_off,
+				);
+
+				// ── What the visitor thought ──────────────────────────────────
+				$ghost   = NPA_Diagnostics::new_turn_id();
+				$refused = '' === $diag->record_rating( 'not-a-turn', 'up' )
+					&& '' === $diag->record_rating( $ghost, 'up' )
+					&& '' === $diag->record_rating( $turn_on, 'meh' );
+				$first   = $diag->record_rating( $turn_on, 'up' );
+				$second  = $diag->record_rating( $turn_on, 'down', '<b>Wrong</b> terminal count ' . str_repeat( 'x', 300 ) );
+				$third   = $diag->record_rating( $turn_on, 'down' );
+				$event   = $store->find_event( $turn_on, 'rating' );
+				$since   = date( 'Y-m-d H:i:s', (int) current_time( 'timestamp' ) - HOUR_IN_SECONDS ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested,WordPress.DateTime.RestrictedFunctions.date_date -- local time, like the store.
+				$mine    = array_values(
+					array_filter(
+						$store->events_since( 'rating', $since ),
+						static function ( $e ) use ( $turn_on ) {
+							return $e['turn_id'] === $turn_on;
+						}
+					)
+				);
+				$checks[] = array(
+					'label' => __( 'A malformed id, a turn this site never answered, and a rating that is not up or down are refused', 'newtide-public-agent' ),
+					'pass'  => $refused,
+				);
+				$checks[] = array(
+					'label' => __( 'A rating is kept against its turn once: a second click replaces it, words are kept to 190 characters without markup, and a later click without words keeps them', 'newtide-public-agent' ),
+					'pass'  => 'turn' === $first && 'turn' === $second && 'turn' === $third
+						&& 1 === count( $mine ) && $event && 'down' === $event['name']
+						&& 0 === strpos( $event['detail'], 'Wrong terminal count' ) && strlen( $event['detail'] ) <= 190,
+				);
+
+				$listed = null;
+				foreach ( $diag->recent_turns( 100, 1 ) as $row ) {
+					if ( $row['turn_id'] === $turn_on ) {
+						$listed = $row;
+					}
+				}
+				$summary  = $diag->ratings_summary( 1 );
+				$quoted   = false;
+				foreach ( $summary['comments'] as $words ) {
+					if ( $words['turn_id'] === $turn_on ) {
+						$quoted = true;
+					}
+				}
+				$checks[] = array(
+					'label' => __( 'The rating and its words show on the turn in Turn diagnostics, and the summary counts it and quotes it', 'newtide-public-agent' ),
+					'pass'  => $listed && 'down' === $listed['rating'] && 0 === strpos( $listed['comment'], 'Wrong terminal count' )
+						&& $summary['down'] >= 1 && $quoted,
+				);
+
+				// The endpoint itself.
+				$req = new WP_REST_Request( 'POST', '/npa/v1/feedback' );
+				$req->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$req->set_param( 'turn_id', $turn_off );
+				$req->set_param( 'rating', 'up' );
+				$ok  = $server->dispatch( $req );
+				$bad = new WP_REST_Request( 'POST', '/npa/v1/feedback' );
+				$bad->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$bad->set_param( 'turn_id', $ghost );
+				$bad->set_param( 'rating', 'up' );
+				$no  = $server->dispatch( $bad );
+				$noauth = new WP_REST_Request( 'POST', '/npa/v1/feedback' );
+				$noauth->set_param( 'turn_id', $turn_off );
+				$noauth->set_param( 'rating', 'up' );
+				$denied = $server->dispatch( $noauth );
+				$rated  = $store->find_event( $turn_off, 'rating' );
+				$checks[] = array(
+					'label' => __( 'POST /feedback records a rating for an answered turn (HTTP 200), refuses an unknown turn (400) and a missing nonce (403)', 'newtide-public-agent' ),
+					'pass'  => 200 === $ok->get_status() && $rated && 'up' === $rated['name']
+						&& 400 === $no->get_status() && 403 === $denied->get_status(),
+				);
+
+				NPA_Settings::begin_test_override( array( 'feedback' => false ) );
+				$shut = new WP_REST_Request( 'POST', '/npa/v1/feedback' );
+				$shut->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
+				$shut->set_param( 'turn_id', $turn_off );
+				$shut->set_param( 'rating', 'down' );
+				$closed = $server->dispatch( $shut );
+				NPA_Settings::end_test_override();
+				$still = $store->find_event( $turn_off, 'rating' );
+				$checks[] = array(
+					'label' => __( 'With feedback switched off the endpoint answers 404 and records nothing', 'newtide-public-agent' ),
+					'pass'  => 404 === $closed->get_status() && $still && 'up' === $still['name'],
+				);
+
+				remove_filter( 'npa_gateway_client', $use_spy );
+				$this->reset_gateway_client();
+				remove_filter( 'user_has_cap', $grant_admin, PHP_INT_MAX );
+				delete_transient( 'npa_rl_' . md5( 'unknown' ) );
+
+				// Clean-up: every row this suite wrote, and nothing else.
+				foreach ( $used as $id ) {
+					$store->delete_turn( $id );
+				}
 
 				return $checks;
 			},

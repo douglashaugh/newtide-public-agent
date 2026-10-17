@@ -97,6 +97,8 @@ class NPA_Rest {
 	 * @return void
 	 */
 	public function register_routes() {
+		$this->register_feedback_route();
+
 		register_rest_route(
 			self::NS,
 			'/message',
@@ -194,6 +196,76 @@ class NPA_Rest {
 		);
 
 		return new WP_REST_Response( array( 'recorded' => '' !== $result ), '' !== $result ? 200 : 400 );
+	}
+
+	/**
+	 * The /feedback route: a visitor's rating of one reply (0.18.0).
+	 *
+	 * @return void
+	 */
+	private function register_feedback_route() {
+		register_rest_route(
+			self::NS,
+			'/feedback',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'handle_feedback' ),
+				'permission_callback' => array( $this, 'check_permission' ),
+				'args'                => array(
+					'turn_id' => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'rating'  => array(
+						'required'          => true,
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_key',
+					),
+					'comment' => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * POST /feedback: thumbs up or down on a reply, with optional words.
+	 *
+	 * Same nonce as /message. It can only annotate a turn this site answered
+	 * (NPA_Diagnostics::record_rating), so it writes nothing on its own.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public function handle_feedback( $request ) {
+		if ( ! $this->plugin->settings->get( 'feedback', true ) ) {
+			return $this->error_response( 'feedback_off', __( 'Feedback is switched off on this site.', 'newtide-public-agent' ), 404 );
+		}
+		if ( ! $this->throttle_ok() ) {
+			return $this->error_response( 'rate_limited', self::friendly_message( 'rate_limited' ), 429 );
+		}
+
+		$rating = strtolower( (string) $request->get_param( 'rating' ) );
+		$result = $this->plugin->diagnostics->record_rating(
+			(string) $request->get_param( 'turn_id' ),
+			$rating,
+			(string) $request->get_param( 'comment' )
+		);
+
+		if ( '' === $result ) {
+			return new WP_REST_Response( array( 'recorded' => false ), 400 );
+		}
+
+		return new WP_REST_Response(
+			array(
+				'recorded' => true,
+				'rating'   => $rating,
+			),
+			200
+		);
 	}
 
 	/**
@@ -415,7 +487,10 @@ class NPA_Rest {
 		 * Asking the client which it is keeps that decision in one place.
 		 */
 		$native   = $client->supports_history();
-		$outbound = ( $remember && ! $native ) ? NPA_Conversation::compose( $history, $message ) : $message;
+		// The page the visitor is on, and anything the page handed over, go
+		// ahead of their words (0.18.0). Transcripts keep the words alone.
+		$sent     = NPA_Context::with( $context, $message, (bool) $this->plugin->settings->get( 'page_context', true ) );
+		$outbound = ( $remember && ! $native ) ? NPA_Conversation::compose( $history, $sent ) : $sent;
 		$send_history = $native ? $history : array();
 		// Mock-served calls are flagged so their ~0 ms timings stay out of the
 		// latency average (see NPA_Store::aggregates).
@@ -776,11 +851,7 @@ class NPA_Rest {
 	 * @return array
 	 */
 	private function sanitize_context( array $ctx ) {
-		return array(
-			'page_url'   => isset( $ctx['page_url'] ) ? esc_url_raw( (string) $ctx['page_url'] ) : '',
-			'page_title' => isset( $ctx['page_title'] ) ? sanitize_text_field( (string) $ctx['page_title'] ) : '',
-			'locale'     => isset( $ctx['locale'] ) ? sanitize_text_field( (string) $ctx['locale'] ) : get_locale(),
-		);
+		return NPA_Context::sanitize( $ctx );
 	}
 
 	/**

@@ -870,6 +870,54 @@ class NPA_Store {
 	}
 
 	/**
+	 * The newest event of one kind for a turn, or null.
+	 *
+	 * @param string $turn_id Turn id.
+	 * @param string $kind    Event kind.
+	 * @return array|null
+	 */
+	public function find_event( $turn_id, $kind ) {
+		global $wpdb;
+
+		if ( '' === (string) $turn_id ) {
+			return null;
+		}
+
+		$table = $this->events_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE turn_id = %s AND kind = %s ORDER BY id DESC LIMIT 1", (string) $turn_id, (string) $kind ), ARRAY_A );
+
+		return is_array( $row ) ? $row : null;
+	}
+
+	/**
+	 * Change an event's name and detail in place.
+	 *
+	 * @param int    $id     Event row id.
+	 * @param string $name   New name.
+	 * @param string $detail New detail.
+	 * @return bool
+	 */
+	public function update_event( $id, $name, $detail ) {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$ok = $wpdb->update(
+			$this->events_table_name(),
+			array(
+				'name'   => substr( sanitize_text_field( (string) $name ), 0, 64 ),
+				'detail' => substr( sanitize_text_field( (string) $detail ), 0, 190 ),
+			),
+			array( 'id' => (int) $id ),
+			array( '%s', '%s' ),
+			array( '%d' )
+		);
+
+		return false !== $ok;
+	}
+
+	/**
 	 * Events of one kind since a local datetime, oldest first.
 	 *
 	 * @param string $kind  Event kind.

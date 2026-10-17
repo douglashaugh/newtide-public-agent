@@ -4,7 +4,7 @@ Tags: agent, chat, ai, support, embed
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.17.0
+Stable tag: 0.18.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -100,6 +100,31 @@ Those are enforced by the gateway. The plugin offers an optional courtesy daily 
 7. The chat widget on the front end.
 
 == Changelog ==
+
+= 0.18.0 =
+**The agent knows which page the visitor is on, and visitors can say whether
+the answer helped.** Until now a visitor on a market page asking "what
+supplies this market?" got a question back, because the agent was never told
+where they were — the widget sent the page, and the plugin only kept it for
+diagnostics.
+
+* **Page-aware answers** — each message now reaches the agent with a first
+  line naming the page: "[Visitor is viewing: Midland rack market
+  (https://…)]". On by default; switch it off under Behavior → Tell the agent
+  the page. Add a line to the agent's instructions saying messages may begin
+  this way. Transcripts still store the visitor's own words only.
+* **Ask buttons** — any element on the site can open the chat with a ready
+  question and hand the agent data the visitor would never type: add
+  `data-npa-ask="What supplies this market?"` and, optionally,
+  `data-npa-context="Terminals: 2 · Pipelines: Magellan · Band: sole source"`
+  (up to 2,000 characters). Scripts can call `NewTideAgent.ask( question,
+  { details: '…' } )`. The data arrives as a "[Page data: …]" line.
+* **Answer feedback** — thumbs up and down under each reply. A thumbs-down
+  asks, optionally, what was wrong. Ratings appear beside each turn under
+  Service Status → Turn diagnostics, keyed by the reference the visitor sees,
+  with a 7-day tally and the latest comments. Off under Behavior → Answer
+  feedback. Kept 30 days; never message content.
+* A new test suite, Page context and answer feedback, covers both.
 
 = 0.17.0 =
 **Replies appear as the agent writes them.** Turn diagnostics showed every

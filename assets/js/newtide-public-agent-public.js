@@ -42,6 +42,10 @@
 
 	/* Copy and done icons. Inline, like the rest, so they inherit colour. */
 	var COPY_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M16 1H6a2 2 0 0 0-2 2v12h2V3h10V1Zm3 4H10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H10V7h9v14Z"/></svg>';
+	/* Thumbs for answer feedback (0.18.0). One path, flipped for "down". */
+	var THUMB_PATH = 'M2 10h4v11H2V10Zm20 1a2 2 0 0 0-2-2h-6.3l1-4.6v-.3a1.5 1.5 0 0 0-.4-1L13.2 2 6.6 8.6A2 2 0 0 0 6 10v9a2 2 0 0 0 2 2h9a2 2 0 0 0 1.8-1.2l3-7.1c.1-.2.2-.5.2-.7v-1Z';
+	var THUMB_UP_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="' + THUMB_PATH + '"/></svg>';
+	var THUMB_DOWN_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false" style="transform:scale(-1)"><path fill="currentColor" d="' + THUMB_PATH + '"/></svg>';
 	var DONE_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg>';
 
 	function escapeHtml( str ) {
@@ -1230,9 +1234,12 @@
 			context: {
 				page_url: window.location.href,
 				page_title: document.title,
-				locale: cfg.locale || ''
+				locale: cfg.locale || '',
+				// What the page handed over with an Ask button, for this message only.
+				details: this.pendingDetails || ''
 			}
 		};
+		this.pendingDetails = '';
 
 		/* Ask for the reply as it is written, where this browser can read a
 		   response in pieces. The server decides whether it actually streams. */
@@ -1291,7 +1298,8 @@
 				}
 				this.lastTurn = { turn_id: res.data.turn_id || turnId, client_ms: Date.now() - started };
 				this.dropLive();
-				this.markTurn( this.addMessage( 'agent', res.data.reply, true, res.data.reply_html ), res.data.reply );
+				var replyMsg = this.markTurn( this.addMessage( 'agent', res.data.reply, true, res.data.reply_html ), res.data.reply );
+				this.addFeedback( replyMsg, res.data.turn_id || turnId );
 			} else {
 				/* The server answered, so the wait is known even though the
 				   agent failed: report it with the next message like any other. */
@@ -1365,12 +1373,181 @@
 		}
 	};
 
+	/* ── Answer feedback (0.18.0) ─────────────────────────────────────────── */
+
+	/* Thumbs under a reply. A click records at once; a thumbs-down then
+	   offers one line for what was wrong, sent with the same turn id. */
+	Widget.prototype.addFeedback = function ( msg, turnId ) {
+		if ( ! cfg.feedback || ! cfg.feedbackUrl || ! turnId || ! msg ) {
+			return;
+		}
+		var self = this;
+		var row = el( 'div', 'newtide-public-agent__rate', {
+			role: 'group',
+			'aria-label': t( 'rateLabel', 'Was this helpful?' )
+		} );
+		var up = el( 'button', 'newtide-public-agent__rate-btn', {
+			type: 'button',
+			'aria-label': t( 'rateUp', 'Helpful' ),
+			title: t( 'rateUp', 'Helpful' ),
+			'aria-pressed': 'false'
+		} );
+		up.innerHTML = THUMB_UP_ICON;
+		var down = el( 'button', 'newtide-public-agent__rate-btn', {
+			type: 'button',
+			'aria-label': t( 'rateDown', 'Not helpful' ),
+			title: t( 'rateDown', 'Not helpful' ),
+			'aria-pressed': 'false'
+		} );
+		down.innerHTML = THUMB_DOWN_ICON;
+		var note = el( 'span', 'newtide-public-agent__rate-note', { 'aria-live': 'polite' } );
+		var form = null;
+
+		function thanks() {
+			if ( form ) {
+				row.removeChild( form );
+				form = null;
+			}
+			note.textContent = t( 'rateThanks', 'Thanks for the feedback.' );
+		}
+
+		function askWhy() {
+			if ( form ) {
+				return;
+			}
+			note.textContent = '';
+			form = el( 'form', 'newtide-public-agent__rate-form' );
+			var input = el( 'input', 'newtide-public-agent__rate-input', {
+				type: 'text',
+				maxlength: '190',
+				placeholder: t( 'rateWhy', 'What was wrong? (optional)' ),
+				'aria-label': t( 'rateWhy', 'What was wrong? (optional)' )
+			} );
+			var send = el( 'button', 'newtide-public-agent__rate-send', { type: 'submit' } );
+			send.textContent = t( 'rateSend', 'Send' );
+			form.appendChild( input );
+			form.appendChild( send );
+			form.addEventListener( 'submit', function ( e ) {
+				e.preventDefault();
+				var words = input.value.trim();
+				if ( words ) {
+					self.rate( turnId, 'down', words );
+				}
+				thanks();
+			} );
+			row.appendChild( form );
+			input.focus();
+			self.grow( msg );
+		}
+
+		function choose( rating ) {
+			var isUp = 'up' === rating;
+			up.classList.toggle( 'is-chosen', isUp );
+			down.classList.toggle( 'is-chosen', ! isUp );
+			up.setAttribute( 'aria-pressed', isUp ? 'true' : 'false' );
+			down.setAttribute( 'aria-pressed', isUp ? 'false' : 'true' );
+			self.rate( turnId, rating, '' );
+			if ( isUp ) {
+				thanks();
+			} else {
+				askWhy();
+			}
+		}
+
+		up.addEventListener( 'click', function () { choose( 'up' ); } );
+		down.addEventListener( 'click', function () { choose( 'down' ); } );
+		row.appendChild( up );
+		row.appendChild( down );
+		row.appendChild( note );
+		msg.appendChild( row );
+	};
+
+	/* Send a rating. Best effort, like report(). */
+	Widget.prototype.rate = function ( turnId, rating, comment ) {
+		try {
+			fetch( cfg.feedbackUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				keepalive: true,
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WP-Nonce': cfg.nonce
+				},
+				body: JSON.stringify( { turn_id: turnId, rating: rating, comment: comment || '' } )
+			} ).catch( function () {} );
+		} catch ( e ) {
+			/* fetch unavailable or blocked — nothing more to do. */
+		}
+	};
+
+	/* ── Ask from anywhere on the page (0.18.0) ───────────────────────────── */
+
+	/* Open the chat with a question ready, and whatever the page wants the
+	   agent to know about what the visitor is looking at (details, up to
+	   2,000 characters). The question is sent at once unless send is false. */
+	Widget.prototype.ask = function ( question, opts ) {
+		opts = opts || {};
+		question = String( question || '' ).trim();
+		this.pendingDetails = String( opts.details || '' ).slice( 0, 2000 );
+		if ( ! this.open ) {
+			this.openPanel();
+		}
+		if ( ! question ) {
+			return;
+		}
+		if ( false === opts.send || this.input.disabled ) {
+			this.input.value = question;
+			this.fitInput();
+			this.input.focus();
+			return;
+		}
+		this.sendMessage( question );
+	};
+
+	var primary = null;
+
+	/* The first widget on the page answers for the site; a second mount
+	   (a shortcode beside the floating one) is reachable through widget(). */
+	window.NewTideAgent = {
+		ask: function ( question, opts ) {
+			if ( primary ) {
+				primary.ask( question, opts );
+			}
+		},
+		open: function () {
+			if ( primary && ! primary.open ) {
+				primary.openPanel();
+			}
+		},
+		widget: function () {
+			return primary;
+		}
+	};
+
+	/* Any element with data-npa-ask asks its question when clicked;
+	   data-npa-context carries the page's data along. */
+	document.addEventListener( 'click', function ( e ) {
+		var target = e.target;
+		var trigger = target && target.closest ? target.closest( '[data-npa-ask]' ) : null;
+		if ( ! trigger || ! primary ) {
+			return;
+		}
+		e.preventDefault();
+		primary.ask( trigger.getAttribute( 'data-npa-ask' ) || '', {
+			details: trigger.getAttribute( 'data-npa-context' ) || '',
+			send: 'false' !== trigger.getAttribute( 'data-npa-send' )
+		} );
+	} );
+
 	function init() {
 		var mounts = document.querySelectorAll( '[data-npa-widget]' );
 		Array.prototype.forEach.call( mounts, function ( m ) {
 			if ( ! m.getAttribute( 'data-npa-ready' ) ) {
 				m.setAttribute( 'data-npa-ready', '1' );
-				new Widget( m );
+				var w = new Widget( m );
+				if ( ! primary ) {
+					primary = w;
+				}
 			}
 		} );
 	}

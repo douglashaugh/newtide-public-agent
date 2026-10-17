@@ -17,6 +17,7 @@ $npa_diag    = $npa_plugin->diagnostics;
 $npa_diag_on = $npa_diag->enabled();
 $npa_summary = $npa_diag->summary( 7 );
 $npa_turns   = $npa_diag->recent_turns( 25, 7 );
+$npa_ratings = $npa_diag->ratings_summary( 7 );
 $npa_hops    = NPA_Diagnostics::hop_labels();
 $npa_php_max = (int) ini_get( 'max_execution_time' );
 $npa_mcp_on  = $npa_plugin->mcp->is_enabled();
@@ -57,6 +58,26 @@ $npa_secs = static function ( $ms ) {
 <?php endif; ?>
 
 <p class="npa-diag__verdict<?php echo $npa_summary['dropped'] > 0 ? ' is-problem' : ''; ?>"><?php echo esc_html( NPA_Diagnostics::verdict_text( $npa_summary ) ); ?></p>
+
+<?php if ( $npa_ratings['up'] + $npa_ratings['down'] > 0 ) : ?>
+<p class="npa-diag__ratings">
+	<?php
+	printf(
+		/* translators: 1: thumbs-up count, 2: thumbs-down count. */
+		esc_html__( 'Visitors rated replies %1$d times helpful and %2$d times not helpful in the last 7 days.', 'newtide-public-agent' ),
+		(int) $npa_ratings['up'],
+		(int) $npa_ratings['down']
+	);
+	?>
+</p>
+<?php if ( $npa_ratings['comments'] ) : ?>
+<ul class="npa-diag__comments">
+	<?php foreach ( $npa_ratings['comments'] as $npa_words ) : ?>
+		<li><code><?php echo esc_html( NPA_Diagnostics::reference( $npa_words['turn_id'] ) ); ?></code> <?php echo esc_html( mysql2date( 'M j, H:i', $npa_words['created_at'] ) ); ?>: <?php echo esc_html( $npa_words['comment'] ); ?></li>
+	<?php endforeach; ?>
+</ul>
+<?php endif; ?>
+<?php endif; ?>
 
 <div class="npa-diag__grid">
 	<div>
@@ -183,6 +204,7 @@ $npa_secs = static function ( $ms ) {
 				<th scope="col"><?php esc_html_e( 'WordPress', 'newtide-public-agent' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Visitor waited', 'newtide-public-agent' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'MCP calls', 'newtide-public-agent' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Rating', 'newtide-public-agent' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Page', 'newtide-public-agent' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Agent API id', 'newtide-public-agent' ); ?></th>
 			</tr>
@@ -224,6 +246,16 @@ $npa_secs = static function ( $ms ) {
 						? esc_html( sprintf( __( '%1$d (%2$s)', 'newtide-public-agent' ), count( $npa_turn['mcp'] ), $npa_secs( $npa_mcp_ms ) ) )
 						: '—';
 					?>
+				</td>
+				<td>
+					<?php if ( ! empty( $npa_turn['rating'] ) ) : ?>
+						<span class="npa-pill <?php echo 'up' === $npa_turn['rating'] ? 'npa-pill--ok' : 'npa-pill--warn'; ?>" title="<?php echo esc_attr( (string) $npa_turn['comment'] ); ?>"><?php echo 'up' === $npa_turn['rating'] ? esc_html__( 'Helpful', 'newtide-public-agent' ) : esc_html__( 'Not helpful', 'newtide-public-agent' ); ?></span>
+						<?php if ( '' !== (string) $npa_turn['comment'] ) : ?>
+							<span class="npa-diag__comment"><?php echo esc_html( (string) $npa_turn['comment'] ); ?></span>
+						<?php endif; ?>
+					<?php else : ?>
+						—
+					<?php endif; ?>
 				</td>
 				<td><?php echo esc_html( '' !== $npa_turn['page_path'] ? $npa_turn['page_path'] : '—' ); ?></td>
 				<td><?php echo '' !== $npa_turn['upstream_id'] ? '<code>' . esc_html( $npa_turn['upstream_id'] ) . '</code>' : '—'; ?></td>

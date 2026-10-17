@@ -220,6 +220,10 @@ class NPA_Settings {
 			'agent_timeout'             => 60,
 			// Streaming (0.17.0): the reply appears as it is written.
 			'streaming'                 => true,
+			// Page context (0.18.0): the agent is told which page the visitor is on.
+			'page_context'              => true,
+			// Answer feedback (0.18.0): thumbs up or down under each reply.
+			'feedback'                  => true,
 			'store_transcripts'         => false,
 			// Reconstructs multi-turn context because the agent API is single-turn.
 			// On by default: a chat that cannot follow up is the worse failure.
@@ -346,6 +350,8 @@ class NPA_Settings {
 		$clean['log_enabled']       = $has( 'log_enabled' ) ? ! empty( $input['log_enabled'] ) : (bool) $existing['log_enabled'];
 		$clean['diagnostics']       = $has( 'diagnostics' ) ? ! empty( $input['diagnostics'] ) : (bool) $existing['diagnostics'];
 		$clean['streaming']         = $has( 'streaming' ) ? ! empty( $input['streaming'] ) : (bool) $existing['streaming'];
+		$clean['page_context']      = $has( 'page_context' ) ? ! empty( $input['page_context'] ) : (bool) $existing['page_context'];
+		$clean['feedback']          = $has( 'feedback' ) ? ! empty( $input['feedback'] ) : (bool) $existing['feedback'];
 		$clean['store_transcripts'] = $has( 'store_transcripts' ) ? ! empty( $input['store_transcripts'] ) : (bool) $existing['store_transcripts'];
 		$clean['conversation_memory'] = $has( 'conversation_memory' ) ? ! empty( $input['conversation_memory'] ) : (bool) $existing['conversation_memory'];
 

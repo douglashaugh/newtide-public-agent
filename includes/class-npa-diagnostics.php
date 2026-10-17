@@ -485,6 +485,112 @@ class NPA_Diagnostics {
 		return $row ? 'turn' : 'orphan';
 	}
 
+	// ── What the visitor thought of the answer ──────────────────────────────
+
+	/** The two ratings a reply can get. */
+	const RATINGS = array( 'up', 'down' );
+
+	/**
+	 * Record a visitor's rating of a reply (0.18.0).
+	 *
+	 * One rating per turn: a second click replaces the first, and a comment
+	 * sent after a thumbs-down joins the same event. Only a turn this site
+	 * actually answered can be rated, and only for a day, so the endpoint
+	 * cannot be used to write anything the site did not first write itself.
+	 * Ratings are kept whether or not turn diagnostics are on: they are the
+	 * site owner's quality signal, not a timing.
+	 *
+	 * @param string $turn_id Turn id.
+	 * @param string $rating  'up' or 'down'.
+	 * @param string $comment Optional words, kept to 190 characters.
+	 * @return string 'turn' when recorded, '' when refused.
+	 */
+	public function record_rating( $turn_id, $rating, $comment = '' ) {
+		$turn_id = (string) $turn_id;
+		$rating  = strtolower( trim( (string) $rating ) );
+
+		if ( ! self::is_valid_turn_id( $turn_id ) || ! in_array( $rating, self::RATINGS, true ) ) {
+			return '';
+		}
+
+		$row = $this->plugin->store->find_by_turn( $turn_id );
+		if ( ! $row || strtotime( $row['created_at'] ) < (int) current_time( 'timestamp' ) - DAY_IN_SECONDS ) { // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested -- created_at is local time.
+			return '';
+		}
+
+		$comment  = sanitize_text_field( (string) $comment );
+		$existing = $this->plugin->store->find_event( $turn_id, 'rating' );
+
+		if ( $existing ) {
+			// A rating without words keeps the words already given.
+			$this->plugin->store->update_event( (int) $existing['id'], $rating, '' !== $comment ? $comment : (string) $existing['detail'] );
+			return 'turn';
+		}
+
+		$this->plugin->store->record_event(
+			array(
+				'turn_id' => $turn_id,
+				'kind'    => 'rating',
+				'name'    => $rating,
+				'detail'  => $comment,
+			)
+		);
+
+		return 'turn';
+	}
+
+	/**
+	 * Ratings over a window: counts, and the latest thumbs-down with words.
+	 *
+	 * @param int $days Window in days.
+	 * @return array{days:int,up:int,down:int,comments:array<int,array>}
+	 */
+	public function ratings_summary( $days = 7 ) {
+		$events = $this->plugin->store->events_since( 'rating', $this->since( $days ) );
+		$up     = 0;
+		$down   = 0;
+		$words  = array();
+
+		foreach ( $events as $event ) {
+			if ( 'up' === $event['name'] ) {
+				$up++;
+			} elseif ( 'down' === $event['name'] ) {
+				$down++;
+				if ( '' !== (string) $event['detail'] ) {
+					$words[] = array(
+						'created_at' => $event['created_at'],
+						'turn_id'    => $event['turn_id'],
+						'comment'    => (string) $event['detail'],
+					);
+				}
+			}
+		}
+
+		return array(
+			'days'     => (int) $days,
+			'up'       => $up,
+			'down'     => $down,
+			'comments' => array_slice( array_reverse( $words ), 0, 10 ),
+		);
+	}
+
+	/**
+	 * Ratings keyed by turn id, the newest winning.
+	 *
+	 * @param array<int,array> $events Rating events, oldest first.
+	 * @return array<string,array{rating:string,comment:string}>
+	 */
+	private static function ratings_by_turn( array $events ) {
+		$out = array();
+		foreach ( $events as $event ) {
+			$out[ $event['turn_id'] ] = array(
+				'rating'  => (string) $event['name'],
+				'comment' => (string) $event['detail'],
+			);
+		}
+		return $out;
+	}
+
 	// ── MCP calls back into this site ───────────────────────────────────────
 
 	/**
@@ -685,6 +791,7 @@ class NPA_Diagnostics {
 		$since   = $this->since( $days );
 		$timeout = $this->plugin->settings->agent_timeout();
 		$mcp     = $this->plugin->store->events_since( 'mcp', $since );
+		$rated   = self::ratings_by_turn( $this->plugin->store->events_since( 'rating', $since ) );
 		$rows    = $this->plugin->store->turns_since( $since, max( 1, (int) $limit ) );
 		$out     = array();
 
@@ -694,6 +801,8 @@ class NPA_Diagnostics {
 			$known[ $row['turn_id'] ] = true;
 			$calls                    = self::mcp_for_turn( $row, $mcp );
 			$row['mcp']               = $calls;
+			$row['rating']            = isset( $rated[ $row['turn_id'] ] ) ? $rated[ $row['turn_id'] ]['rating'] : '';
+			$row['comment']           = isset( $rated[ $row['turn_id'] ] ) ? $rated[ $row['turn_id'] ]['comment'] : '';
 			$row['class']             = self::classify( $row, $timeout, $calls );
 			$out[]                    = $row;
 		}
@@ -720,6 +829,8 @@ class NPA_Diagnostics {
 				'page_path'     => '',
 				'upstream_id'   => '',
 				'mcp'           => array(),
+				'rating'        => '',
+				'comment'       => '',
 				'class'         => self::verdict( 'orphaned', 'browser', false, __( 'Never reached WordPress — rejected or dropped in front of it', 'newtide-public-agent' ) ),
 			);
 		}
